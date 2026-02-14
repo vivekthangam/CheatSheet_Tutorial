@@ -1,0 +1,1053 @@
+JAVA CompletableFuture Practical Cheatsheet
+===========================================
+
+[
+
+![Rupesh Raut](https://miro.medium.com/v2/resize:fill:32:32/0*gzRrUt0DNSnbFdbd.jpg)
+
+](https://medium.com/@rupeshpraut?source=post_page---byline--ef5b115b29ad---------------------------------------)
+
+[Rupesh Raut](https://medium.com/@rupeshpraut?source=post_page---byline--ef5b115b29ad---------------------------------------)
+
+Follow
+
+7 min read
+
+Jul 18, 2025
+
+6
+
+[](https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fbookmark%2Fp%2Fef5b115b29ad&operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40rupeshpraut%2Fjava-completablefuture-practical-cheatsheet-ef5b115b29ad&source=---header_actions--ef5b115b29ad---------------------bookmark_footer------------------)
+
+[](https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2Fplans%3Fdimension%3Dpost_audio_button%26postId%3Def5b115b29ad&operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40rupeshpraut%2Fjava-completablefuture-practical-cheatsheet-ef5b115b29ad&source=---header_actions--ef5b115b29ad---------------------post_audio_button------------------)
+
+🎯 What is CompletableFuture?
+-----------------------------
+
+Purpose: Enable non-blocking, asynchronous programming in Java\
+Role: Bridge between synchronous and asynchronous code execution\
+Key Benefit: Compose complex async operations without callback hell
+
+🚀 Creating CompletableFutures
+------------------------------
+
+Manual Creation
+---------------
+
+CompletableFuture<String> future = new CompletableFuture<>();\
+future.complete("result");
+
+Purpose: Create futures you control manually\
+Role: Building blocks for custom async operations\
+Usage: Testing, custom async libraries, bridging legacy code\
+Important: Must call `complete()` or `completeExceptionally()` to finish
+
+Already Completed Futures
+-------------------------
+
+CompletableFuture<String> completed = CompletableFuture.completedFuture("done");\
+CompletableFuture<String> failed = CompletableFuture.failedFuture(new Exception());
+
+Purpose: Create futures with known results\
+Role: Optimize away unnecessary async operations\
+Usage: Caching, early returns, testing\
+Important: No thread overhead, executes immediately
+
+Async Task Creation
+-------------------
+
+// For operations that return values\
+CompletableFuture<String> supply = CompletableFuture.supplyAsync(() -> {\
+    return expensiveComputation();\
+});
+
+// For operations that don't return values\
+CompletableFuture<Void> run = CompletableFuture.runAsync(() -> {\
+    cleanupTempFiles();\
+});
+
+Purpose: Execute tasks asynchronously\
+Role: Entry point for async operations\
+Usage: I/O operations, CPU-intensive tasks, background jobs\
+Important: Uses ForkJoinPool.commonPool() by default
+
+With Custom Executors
+---------------------
+
+ExecutorService dbPool = Executors.newFixedThreadPool(10);\
+CompletableFuture<User> user = CompletableFuture.supplyAsync(() ->\
+    fetchUserFromDatabase(userId), dbPool);
+
+Purpose: Control thread execution context\
+Role: Separate different workload types\
+Usage: Database operations, file I/O, CPU-bound tasks\
+Important: Choose appropriate pool size for workload type
+
+🔄 Transformation Operations
+----------------------------
+
+`thenApply()` - Transform Results
+---------------------------------
+
+CompletableFuture<String> upperCase = future.thenApply(String::toUpperCase);\
+CompletableFuture<Integer> length = future.thenApply(String::length);
+
+Purpose: Transform async results without blocking\
+Role: Data transformation pipeline\
+Usage: Format data, convert types, extract fields\
+Important: Runs on same thread as previous stage (or caller thread)
+
+`thenApplyAsync()` - Transform on Different Thread
+--------------------------------------------------
+
+CompletableFuture<ProcessedData> processed = future.thenApplyAsync(data -> {\
+    return heavyProcessing(data); // CPU-intensive\
+});
+
+Purpose: Move CPU-intensive transformations off calling thread\
+Role: Prevent blocking other operations\
+Usage: Heavy computations, image processing, data analysis\
+Important: Uses ForkJoinPool unless custom executor provided
+
+`thenAccept()` - Consume Results
+--------------------------------
+
+future.thenAccept(result -> {\
+    saveToDatabase(result);\
+    sendNotification(result);\
+});
+
+Purpose: Perform side effects with results\
+Role: End-point operations that don't return values\
+Usage: Logging, saving to database, sending notifications\
+Important: Returns `CompletableFuture<Void>`
+
+`thenRun()` - Execute After Completion
+--------------------------------------
+
+future.thenRun(() -> {\
+    releaseResources();\
+    updateMetrics();\
+});
+
+Purpose: Execute cleanup or follow-up tasks\
+Role: Finalization operations\
+Usage: Resource cleanup, metrics update, cache invalidation\
+Important: Doesn't receive the result value
+
+🔗 Chaining Dependent Operations
+--------------------------------
+
+`thenCompose()` - Chain Async Operations
+----------------------------------------
+
+CompletableFuture<UserProfile> profile =\
+    CompletableFuture.supplyAsync(() -> fetchUserId(email))\
+        .thenCompose(userId -> fetchUserProfile(userId))\
+        .thenCompose(profile -> enrichProfileData(profile));
+
+Purpose: Chain operations where each depends on the previous result\
+Role: Async equivalent of nested method calls\
+Usage: Multi-step workflows, dependent API calls\
+Important: Flattens nested CompletableFutures (avoids `CompletableFuture<CompletableFuture<T>>`)
+
+🤝 Combining Independent Operations
+-----------------------------------
+
+`thenCombine()` - Merge Two Results
+-----------------------------------
+
+CompletableFuture<String> weather = fetchWeather(city);\
+CompletableFuture<String> news = fetchNews(city);\
+CompletableFuture<Dashboard> dashboard = weather.thenCombine(news, (w, n) ->\
+    new Dashboard(w, n));
+
+Purpose: Combine results from independent async operations\
+Role: Parallel execution with result merging\
+Usage: Aggregating data from multiple sources\
+Important: Both operations run concurrently
+
+`thenAcceptBoth()` - Process Two Results
+----------------------------------------
+
+userFuture.thenAcceptBoth(settingsFuture, (user, settings) -> {\
+    applyUserSettings(user, settings);\
+});
+
+Purpose: Process results from two independent operations\
+Role: Side-effect operations on combined data\
+Usage: Configuration application, data synchronization\
+Important: Both operations must complete successfully
+
+`allOf()` - Wait for Multiple Operations
+----------------------------------------
+
+CompletableFuture<String> task1 = CompletableFuture.supplyAsync(() -> "Result 1");\
+CompletableFuture<String> task2 = CompletableFuture.supplyAsync(() -> "Result 2");\
+CompletableFuture<String> task3 = CompletableFuture.supplyAsync(() -> "Result 3");\
+CompletableFuture<Void> allTasks = CompletableFuture.allOf(task1, task2, task3);
+
+Purpose: Wait for all operations to complete\
+Role: Synchronization point for parallel operations\
+Usage: Batch processing, parallel data loading\
+Important: Fails if any operation fails
+
+Collecting All Results
+----------------------
+
+CompletableFuture<List<String>> allResults = CompletableFuture.allOf(futures)\
+    .thenApply(v -> futures.stream()\
+        .map(CompletableFuture::join)\
+        .collect(Collectors.toList()));
+
+Purpose: Get all results from parallel operations\
+Role: Result aggregation\
+Usage: Loading multiple data sources, batch API calls\
+Important: Use `join()` inside `thenApply()` - it's safe here
+
+`anyOf()` - First Completed Operation
+-------------------------------------
+
+CompletableFuture<String> fastest = CompletableFuture.anyOf(\
+    fetchFromCache(key),\
+    fetchFromDatabase(key),\
+    fetchFromRemoteAPI(key)\
+).thenApply(result -> (String) result);
+
+Purpose: Get result from fastest operation\
+Role: Performance optimization through racing\
+Usage: Cache with fallbacks, load balancing, timeout alternatives\
+Important: Other operations continue running unless cancelled
+
+⚠️ Error Handling
+-----------------
+
+`handle()` - Universal Error Handler
+------------------------------------
+
+CompletableFuture<String> result = riskyOperation()\
+    .handle((value, exception) -> {\
+        if (exception != null) {\
+            log.error("Operation failed", exception);\
+            return getDefaultValue();\
+        }\
+        return processValue(value);\
+    });
+
+Purpose: Handle both success and failure cases\
+Role: Recovery and fallback logic\
+Usage: Provide defaults, transform errors, logging\
+Important: Always receives both result and exception (one will be null)
+
+`exceptionally()` - Exception-Only Handler
+------------------------------------------
+
+CompletableFuture<String> withFallback = riskyOperation()\
+    .exceptionally(throwable -> {\
+        log.warn("Using fallback due to: " + throwable.getMessage());\
+        return "fallback-value";\
+    });
+
+Purpose: Provide fallback values for failures\
+Role: Error recovery without affecting success path\
+Usage: Default values, circuit breaker fallbacks\
+Important: Only called on exceptions, success values pass through
+
+Get Rupesh Raut's stories in your inbox
+---------------------------------------
+
+Join Medium for free to get updates from this writer.
+
+Subscribe
+
+`whenComplete()` - Completion Callback
+--------------------------------------
+
+future.whenComplete((result, exception) -> {\
+    if (exception != null) {\
+        metrics.incrementFailureCount();\
+        log.error("Operation failed", exception);\
+    } else {\
+        metrics.incrementSuccessCount();\
+        log.info("Operation completed: " + result);\
+    }\
+});
+
+Purpose: Execute side effects on completion\
+Role: Monitoring, logging, metrics collection\
+Usage: Cleanup, metrics, debugging\
+Important: Doesn't modify the result, purely for side effects
+
+⏰ Timeouts & Delays (Java 9+)
+-----------------------------
+
+`orTimeout()` - Fail After Timeout
+----------------------------------
+
+CompletableFuture<String> withTimeout = longRunningOperation()\
+    .orTimeout(5, TimeUnit.SECONDS);
+
+Purpose: Prevent operations from hanging indefinitely\
+Role: System reliability and responsiveness\
+Usage: External API calls, database operations\
+Important: Throws `TimeoutException` when timeout occurs
+
+`completeOnTimeout()` - Default on Timeout
+------------------------------------------
+
+CompletableFuture<String> withDefault = longRunningOperation()\
+    .completeOnTimeout("default-response", 3, TimeUnit.SECONDS);
+
+Purpose: Provide fallback when operation takes too long\
+Role: Graceful degradation\
+Usage: Non-critical operations, user experience optimization\
+Important: Completes with default value instead of failing
+
+🎯 Getting Results
+------------------
+
+`get()` - Blocking with Exception Handling
+------------------------------------------
+
+try {\
+    String result = future.get(5, TimeUnit.SECONDS);\
+} catch (TimeoutException e) {\
+    // Handle timeout\
+} catch (ExecutionException e) {\
+    // Handle wrapped exception\
+}
+
+Purpose: Block until result is available\
+Role: Synchronization point between async and sync code\
+Usage: Main thread waiting for background tasks\
+Important: Throws checked exceptions, use with timeout
+
+`join()` - Blocking with Unchecked Exceptions
+---------------------------------------------
+
+String result = future.join();
+
+Purpose: Block until result is available (unchecked exceptions)\
+Role: Cleaner syntax when you don't want to handle checked exceptions\
+Usage: Inside other async operations, testing\
+Important: Throws unchecked exceptions, can't specify timeout
+
+`getNow()` - Non-blocking Result
+--------------------------------
+
+String result = future.getNow("default-if-not-ready");
+
+Purpose: Get result immediately or return default\
+Role: Polling for completion without blocking\
+Usage: Status checking, optimistic result retrieval\
+Important: Never blocks, returns default if not completed
+
+🏗️ Production Patterns
+-----------------------
+
+Retry with Exponential Backoff
+------------------------------
+
+public static <T> CompletableFuture<T> retryWithBackoff(\
+    Supplier<CompletableFuture<T>> supplier,\
+    int maxRetries,\
+    Duration initialDelay) {
+
+    return supplier.get().handle((result, exception) -> {\
+        if (exception == null || maxRetries <= 0) {\
+            return result != null ?\
+                CompletableFuture.completedFuture(result) :\
+                CompletableFuture.<T>failedFuture(exception);\
+        }
+
+        return CompletableFuture\
+            .delayedExecutor(initialDelay.toMillis(), TimeUnit.MILLISECONDS)\
+            .execute(() -> retryWithBackoff(supplier, maxRetries - 1, initialDelay.multipliedBy(2)));\
+    }).thenCompose(Function.identity());\
+}
+
+Purpose: Resilient operations with increasing delays\
+Role: Handle transient failures\
+Usage: Network calls, database operations, external APIs
+
+Circuit Breaker Pattern
+-----------------------
+
+public class AsyncCircuitBreaker {\
+    private volatile State state = State.CLOSED;\
+    private final AtomicInteger failureCount = new AtomicInteger(0);\
+    private volatile long lastFailureTime = 0;
+
+    public <T> CompletableFuture<T> execute(Supplier<CompletableFuture<T>> supplier) {\
+        if (state == State.OPEN && !shouldAttemptReset()) {\
+            return CompletableFuture.failedFuture(new CircuitBreakerOpenException());\
+        }
+
+        return supplier.get().handle((result, exception) -> {\
+            if (exception != null) {\
+                recordFailure();\
+                throw new RuntimeException(exception);\
+            } else {\
+                recordSuccess();\
+                return result;\
+            }\
+        });\
+    }\
+}
+
+Purpose: Prevent cascading failures\
+Role: System protection and stability\
+Usage: External service calls, resource-intensive operations
+
+🧵 Thread Pool Strategy
+-----------------------
+
+Workload-Specific Pools
+-----------------------
+
+// I/O bound operations (network, file, database)\
+ExecutorService ioPool = Executors.newCachedThreadPool();
+
+// CPU bound operations\
+ExecutorService cpuPool = Executors.newFixedThreadPool(\
+    Runtime.getRuntime().availableProcessors());\
+// Scheduled operations\
+ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+
+Purpose: Optimize resource usage for different workload types\
+Role: Performance tuning and resource isolation\
+Usage: Separate database, API, and computation operations\
+Important: Size pools appropriately for workload characteristics
+
+Pool Usage Strategy
+-------------------
+
+CompletableFuture<ProcessedData> pipeline =\
+    CompletableFuture.supplyAsync(() -> fetchFromDatabase(id), ioPool)\
+        .thenApplyAsync(data -> processData(data), cpuPool)\
+        .thenApplyAsync(result -> saveToDatabase(result), ioPool);
+
+Purpose: Route operations to appropriate thread pools\
+Role: Prevent thread pool exhaustion and optimize performance\
+Usage: Complex pipelines with mixed workload types
+
+📊 Quick Reference Table
+------------------------
+
+Press enter or click to view image in full size
+
+![](https://miro.medium.com/v2/resize:fit:700/1*wPX0WcTR4zj5trnfLp7fHA.png)
+
+🚨 Critical Notes
+-----------------
+
+Performance Considerations
+--------------------------
+
+-   Default Pool Limitation: `ForkJoinPool.commonPool()` size = CPU cores - 1
+-   I/O Operations: Use custom thread pools, not ForkJoinPool
+-   Blocking Operations: Never block inside CompletableFuture callbacks
+-   Thread Context: `thenApply()` may run on calling thread, `thenApplyAsync()` uses pool
+
+Error Handling Gotchas
+----------------------
+
+-   Silent Failures: Unhandled exceptions can disappear
+-   Exception Wrapping: `ExecutionException` wraps original exceptions
+-   Propagation: Exceptions stop the chain unless handled
+-   Async Handlers: `handleAsync()` moves error handling to thread pool
+
+Memory Management
+-----------------
+
+-   Reference Holding: Long-running futures can prevent garbage collection
+-   Chain Completion: Entire chain holds references until completion
+-   Resource Cleanup: Use `whenComplete()` for cleanup operations
+
+Testing Considerations
+----------------------
+
+-   Deterministic Testing: Use custom executors for predictable execution
+-   Exception Testing: Verify both success and failure paths
+-   Timeout Testing: Test with realistic timeouts in integration tests
+
+🎪 Real-World Example: E-commerce Order Processing
+--------------------------------------------------
+
+public class OrderProcessor {\
+    private final ExecutorService dbPool = Executors.newFixedThreadPool(10);\
+    private final ExecutorService paymentPool = Executors.newFixedThreadPool(5);\
+    private final ExecutorService notificationPool = Executors.newFixedThreadPool(3);
+
+    public CompletableFuture<OrderResult> processOrder(OrderRequest request) {\
+        return CompletableFuture\
+            // 1. Validate order (fast, use common pool)\
+            .supplyAsync(() -> validateOrder(request))
+
+            // 2. Check inventory (database I/O)\
+            .thenComposeAsync(order -> checkInventory(order), dbPool)
+
+            // 3. Process payment (external API)\
+            .thenComposeAsync(order -> processPayment(order), paymentPool)
+
+            // 4. Create order record (database I/O)\
+            .thenComposeAsync(order -> createOrderRecord(order), dbPool)
+
+            // 5. Send notifications (don't wait for this)\
+            .thenApplyAsync(order -> {\
+                sendNotifications(order).thenRunAsync(() ->\
+                    updateAnalytics(order), notificationPool);\
+                return order;\
+            })
+
+            // 6. Handle any failures\
+            .handle((order, exception) -> {\
+                if (exception != null) {\
+                    log.error("Order processing failed", exception);\
+                    return new OrderResult(false, "Processing failed: " + exception.getMessage());\
+                }\
+                return new OrderResult(true, "Order processed successfully");\
+            })
+
+            // 7. Ensure we don't hang\
+            .orTimeout(30, TimeUnit.SECONDS)
+
+            // 8. Cleanup regardless of outcome\
+            .whenComplete((result, exception) -> {\
+                releaseResources();\
+                updateMetrics(result, exception);\
+            });\
+    }\
+}
+
+[
+
+Java
+
+](https://medium.com/tag/java?source=post_page-----ef5b115b29ad---------------------------------------)JAVA CompletableFuture Practical Cheatsheet
+===========================================
+
+[
+
+![Rupesh Raut](https://miro.medium.com/v2/resize:fill:32:32/0*gzRrUt0DNSnbFdbd.jpg)
+
+](https://medium.com/@rupeshpraut?source=post_page---byline--ef5b115b29ad---------------------------------------)
+
+[Rupesh Raut](https://medium.com/@rupeshpraut?source=post_page---byline--ef5b115b29ad---------------------------------------)
+
+Follow
+
+7 min read
+
+Jul 18, 2025
+
+6
+
+[](https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fbookmark%2Fp%2Fef5b115b29ad&operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40rupeshpraut%2Fjava-completablefuture-practical-cheatsheet-ef5b115b29ad&source=---header_actions--ef5b115b29ad---------------------bookmark_footer------------------)
+
+[](https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2Fplans%3Fdimension%3Dpost_audio_button%26postId%3Def5b115b29ad&operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40rupeshpraut%2Fjava-completablefuture-practical-cheatsheet-ef5b115b29ad&source=---header_actions--ef5b115b29ad---------------------post_audio_button------------------)
+
+🎯 What is CompletableFuture?
+-----------------------------
+
+Purpose: Enable non-blocking, asynchronous programming in Java\
+Role: Bridge between synchronous and asynchronous code execution\
+Key Benefit: Compose complex async operations without callback hell
+
+🚀 Creating CompletableFutures
+------------------------------
+
+Manual Creation
+---------------
+
+CompletableFuture<String> future = new CompletableFuture<>();\
+future.complete("result");
+
+Purpose: Create futures you control manually\
+Role: Building blocks for custom async operations\
+Usage: Testing, custom async libraries, bridging legacy code\
+Important: Must call `complete()` or `completeExceptionally()` to finish
+
+Already Completed Futures
+-------------------------
+
+CompletableFuture<String> completed = CompletableFuture.completedFuture("done");\
+CompletableFuture<String> failed = CompletableFuture.failedFuture(new Exception());
+
+Purpose: Create futures with known results\
+Role: Optimize away unnecessary async operations\
+Usage: Caching, early returns, testing\
+Important: No thread overhead, executes immediately
+
+Async Task Creation
+-------------------
+
+// For operations that return values\
+CompletableFuture<String> supply = CompletableFuture.supplyAsync(() -> {\
+    return expensiveComputation();\
+});
+
+// For operations that don't return values\
+CompletableFuture<Void> run = CompletableFuture.runAsync(() -> {\
+    cleanupTempFiles();\
+});
+
+Purpose: Execute tasks asynchronously\
+Role: Entry point for async operations\
+Usage: I/O operations, CPU-intensive tasks, background jobs\
+Important: Uses ForkJoinPool.commonPool() by default
+
+With Custom Executors
+---------------------
+
+ExecutorService dbPool = Executors.newFixedThreadPool(10);\
+CompletableFuture<User> user = CompletableFuture.supplyAsync(() ->\
+    fetchUserFromDatabase(userId), dbPool);
+
+Purpose: Control thread execution context\
+Role: Separate different workload types\
+Usage: Database operations, file I/O, CPU-bound tasks\
+Important: Choose appropriate pool size for workload type
+
+🔄 Transformation Operations
+----------------------------
+
+`thenApply()` - Transform Results
+---------------------------------
+
+CompletableFuture<String> upperCase = future.thenApply(String::toUpperCase);\
+CompletableFuture<Integer> length = future.thenApply(String::length);
+
+Purpose: Transform async results without blocking\
+Role: Data transformation pipeline\
+Usage: Format data, convert types, extract fields\
+Important: Runs on same thread as previous stage (or caller thread)
+
+`thenApplyAsync()` - Transform on Different Thread
+--------------------------------------------------
+
+CompletableFuture<ProcessedData> processed = future.thenApplyAsync(data -> {\
+    return heavyProcessing(data); // CPU-intensive\
+});
+
+Purpose: Move CPU-intensive transformations off calling thread\
+Role: Prevent blocking other operations\
+Usage: Heavy computations, image processing, data analysis\
+Important: Uses ForkJoinPool unless custom executor provided
+
+`thenAccept()` - Consume Results
+--------------------------------
+
+future.thenAccept(result -> {\
+    saveToDatabase(result);\
+    sendNotification(result);\
+});
+
+Purpose: Perform side effects with results\
+Role: End-point operations that don't return values\
+Usage: Logging, saving to database, sending notifications\
+Important: Returns `CompletableFuture<Void>`
+
+`thenRun()` - Execute After Completion
+--------------------------------------
+
+future.thenRun(() -> {\
+    releaseResources();\
+    updateMetrics();\
+});
+
+Purpose: Execute cleanup or follow-up tasks\
+Role: Finalization operations\
+Usage: Resource cleanup, metrics update, cache invalidation\
+Important: Doesn't receive the result value
+
+🔗 Chaining Dependent Operations
+--------------------------------
+
+`thenCompose()` - Chain Async Operations
+----------------------------------------
+
+CompletableFuture<UserProfile> profile =\
+    CompletableFuture.supplyAsync(() -> fetchUserId(email))\
+        .thenCompose(userId -> fetchUserProfile(userId))\
+        .thenCompose(profile -> enrichProfileData(profile));
+
+Purpose: Chain operations where each depends on the previous result\
+Role: Async equivalent of nested method calls\
+Usage: Multi-step workflows, dependent API calls\
+Important: Flattens nested CompletableFutures (avoids `CompletableFuture<CompletableFuture<T>>`)
+
+🤝 Combining Independent Operations
+-----------------------------------
+
+`thenCombine()` - Merge Two Results
+-----------------------------------
+
+CompletableFuture<String> weather = fetchWeather(city);\
+CompletableFuture<String> news = fetchNews(city);\
+CompletableFuture<Dashboard> dashboard = weather.thenCombine(news, (w, n) ->\
+    new Dashboard(w, n));
+
+Purpose: Combine results from independent async operations\
+Role: Parallel execution with result merging\
+Usage: Aggregating data from multiple sources\
+Important: Both operations run concurrently
+
+`thenAcceptBoth()` - Process Two Results
+----------------------------------------
+
+userFuture.thenAcceptBoth(settingsFuture, (user, settings) -> {\
+    applyUserSettings(user, settings);\
+});
+
+Purpose: Process results from two independent operations\
+Role: Side-effect operations on combined data\
+Usage: Configuration application, data synchronization\
+Important: Both operations must complete successfully
+
+`allOf()` - Wait for Multiple Operations
+----------------------------------------
+
+CompletableFuture<String> task1 = CompletableFuture.supplyAsync(() -> "Result 1");\
+CompletableFuture<String> task2 = CompletableFuture.supplyAsync(() -> "Result 2");\
+CompletableFuture<String> task3 = CompletableFuture.supplyAsync(() -> "Result 3");\
+CompletableFuture<Void> allTasks = CompletableFuture.allOf(task1, task2, task3);
+
+Purpose: Wait for all operations to complete\
+Role: Synchronization point for parallel operations\
+Usage: Batch processing, parallel data loading\
+Important: Fails if any operation fails
+
+Collecting All Results
+----------------------
+
+CompletableFuture<List<String>> allResults = CompletableFuture.allOf(futures)\
+    .thenApply(v -> futures.stream()\
+        .map(CompletableFuture::join)\
+        .collect(Collectors.toList()));
+
+Purpose: Get all results from parallel operations\
+Role: Result aggregation\
+Usage: Loading multiple data sources, batch API calls\
+Important: Use `join()` inside `thenApply()` - it's safe here
+
+`anyOf()` - First Completed Operation
+-------------------------------------
+
+CompletableFuture<String> fastest = CompletableFuture.anyOf(\
+    fetchFromCache(key),\
+    fetchFromDatabase(key),\
+    fetchFromRemoteAPI(key)\
+).thenApply(result -> (String) result);
+
+Purpose: Get result from fastest operation\
+Role: Performance optimization through racing\
+Usage: Cache with fallbacks, load balancing, timeout alternatives\
+Important: Other operations continue running unless cancelled
+
+⚠️ Error Handling
+-----------------
+
+`handle()` - Universal Error Handler
+------------------------------------
+
+CompletableFuture<String> result = riskyOperation()\
+    .handle((value, exception) -> {\
+        if (exception != null) {\
+            log.error("Operation failed", exception);\
+            return getDefaultValue();\
+        }\
+        return processValue(value);\
+    });
+
+Purpose: Handle both success and failure cases\
+Role: Recovery and fallback logic\
+Usage: Provide defaults, transform errors, logging\
+Important: Always receives both result and exception (one will be null)
+
+`exceptionally()` - Exception-Only Handler
+------------------------------------------
+
+CompletableFuture<String> withFallback = riskyOperation()\
+    .exceptionally(throwable -> {\
+        log.warn("Using fallback due to: " + throwable.getMessage());\
+        return "fallback-value";\
+    });
+
+Purpose: Provide fallback values for failures\
+Role: Error recovery without affecting success path\
+Usage: Default values, circuit breaker fallbacks\
+Important: Only called on exceptions, success values pass through
+
+Get Rupesh Raut's stories in your inbox
+---------------------------------------
+
+Join Medium for free to get updates from this writer.
+
+Subscribe
+
+`whenComplete()` - Completion Callback
+--------------------------------------
+
+future.whenComplete((result, exception) -> {\
+    if (exception != null) {\
+        metrics.incrementFailureCount();\
+        log.error("Operation failed", exception);\
+    } else {\
+        metrics.incrementSuccessCount();\
+        log.info("Operation completed: " + result);\
+    }\
+});
+
+Purpose: Execute side effects on completion\
+Role: Monitoring, logging, metrics collection\
+Usage: Cleanup, metrics, debugging\
+Important: Doesn't modify the result, purely for side effects
+
+⏰ Timeouts & Delays (Java 9+)
+-----------------------------
+
+`orTimeout()` - Fail After Timeout
+----------------------------------
+
+CompletableFuture<String> withTimeout = longRunningOperation()\
+    .orTimeout(5, TimeUnit.SECONDS);
+
+Purpose: Prevent operations from hanging indefinitely\
+Role: System reliability and responsiveness\
+Usage: External API calls, database operations\
+Important: Throws `TimeoutException` when timeout occurs
+
+`completeOnTimeout()` - Default on Timeout
+------------------------------------------
+
+CompletableFuture<String> withDefault = longRunningOperation()\
+    .completeOnTimeout("default-response", 3, TimeUnit.SECONDS);
+
+Purpose: Provide fallback when operation takes too long\
+Role: Graceful degradation\
+Usage: Non-critical operations, user experience optimization\
+Important: Completes with default value instead of failing
+
+🎯 Getting Results
+------------------
+
+`get()` - Blocking with Exception Handling
+------------------------------------------
+
+try {\
+    String result = future.get(5, TimeUnit.SECONDS);\
+} catch (TimeoutException e) {\
+    // Handle timeout\
+} catch (ExecutionException e) {\
+    // Handle wrapped exception\
+}
+
+Purpose: Block until result is available\
+Role: Synchronization point between async and sync code\
+Usage: Main thread waiting for background tasks\
+Important: Throws checked exceptions, use with timeout
+
+`join()` - Blocking with Unchecked Exceptions
+---------------------------------------------
+
+String result = future.join();
+
+Purpose: Block until result is available (unchecked exceptions)\
+Role: Cleaner syntax when you don't want to handle checked exceptions\
+Usage: Inside other async operations, testing\
+Important: Throws unchecked exceptions, can't specify timeout
+
+`getNow()` - Non-blocking Result
+--------------------------------
+
+String result = future.getNow("default-if-not-ready");
+
+Purpose: Get result immediately or return default\
+Role: Polling for completion without blocking\
+Usage: Status checking, optimistic result retrieval\
+Important: Never blocks, returns default if not completed
+
+🏗️ Production Patterns
+-----------------------
+
+Retry with Exponential Backoff
+------------------------------
+
+public static <T> CompletableFuture<T> retryWithBackoff(\
+    Supplier<CompletableFuture<T>> supplier,\
+    int maxRetries,\
+    Duration initialDelay) {
+
+    return supplier.get().handle((result, exception) -> {\
+        if (exception == null || maxRetries <= 0) {\
+            return result != null ?\
+                CompletableFuture.completedFuture(result) :\
+                CompletableFuture.<T>failedFuture(exception);\
+        }
+
+        return CompletableFuture\
+            .delayedExecutor(initialDelay.toMillis(), TimeUnit.MILLISECONDS)\
+            .execute(() -> retryWithBackoff(supplier, maxRetries - 1, initialDelay.multipliedBy(2)));\
+    }).thenCompose(Function.identity());\
+}
+
+Purpose: Resilient operations with increasing delays\
+Role: Handle transient failures\
+Usage: Network calls, database operations, external APIs
+
+Circuit Breaker Pattern
+-----------------------
+
+public class AsyncCircuitBreaker {\
+    private volatile State state = State.CLOSED;\
+    private final AtomicInteger failureCount = new AtomicInteger(0);\
+    private volatile long lastFailureTime = 0;
+
+    public <T> CompletableFuture<T> execute(Supplier<CompletableFuture<T>> supplier) {\
+        if (state == State.OPEN && !shouldAttemptReset()) {\
+            return CompletableFuture.failedFuture(new CircuitBreakerOpenException());\
+        }
+
+        return supplier.get().handle((result, exception) -> {\
+            if (exception != null) {\
+                recordFailure();\
+                throw new RuntimeException(exception);\
+            } else {\
+                recordSuccess();\
+                return result;\
+            }\
+        });\
+    }\
+}
+
+Purpose: Prevent cascading failures\
+Role: System protection and stability\
+Usage: External service calls, resource-intensive operations
+
+🧵 Thread Pool Strategy
+-----------------------
+
+Workload-Specific Pools
+-----------------------
+
+// I/O bound operations (network, file, database)\
+ExecutorService ioPool = Executors.newCachedThreadPool();
+
+// CPU bound operations\
+ExecutorService cpuPool = Executors.newFixedThreadPool(\
+    Runtime.getRuntime().availableProcessors());\
+// Scheduled operations\
+ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+
+Purpose: Optimize resource usage for different workload types\
+Role: Performance tuning and resource isolation\
+Usage: Separate database, API, and computation operations\
+Important: Size pools appropriately for workload characteristics
+
+Pool Usage Strategy
+-------------------
+
+CompletableFuture<ProcessedData> pipeline =\
+    CompletableFuture.supplyAsync(() -> fetchFromDatabase(id), ioPool)\
+        .thenApplyAsync(data -> processData(data), cpuPool)\
+        .thenApplyAsync(result -> saveToDatabase(result), ioPool);
+
+Purpose: Route operations to appropriate thread pools\
+Role: Prevent thread pool exhaustion and optimize performance\
+Usage: Complex pipelines with mixed workload types
+
+📊 Quick Reference Table
+------------------------
+
+Press enter or click to view image in full size
+
+![](https://miro.medium.com/v2/resize:fit:700/1*wPX0WcTR4zj5trnfLp7fHA.png)
+
+🚨 Critical Notes
+-----------------
+
+Performance Considerations
+--------------------------
+
+-   Default Pool Limitation: `ForkJoinPool.commonPool()` size = CPU cores - 1
+-   I/O Operations: Use custom thread pools, not ForkJoinPool
+-   Blocking Operations: Never block inside CompletableFuture callbacks
+-   Thread Context: `thenApply()` may run on calling thread, `thenApplyAsync()` uses pool
+
+Error Handling Gotchas
+----------------------
+
+-   Silent Failures: Unhandled exceptions can disappear
+-   Exception Wrapping: `ExecutionException` wraps original exceptions
+-   Propagation: Exceptions stop the chain unless handled
+-   Async Handlers: `handleAsync()` moves error handling to thread pool
+
+Memory Management
+-----------------
+
+-   Reference Holding: Long-running futures can prevent garbage collection
+-   Chain Completion: Entire chain holds references until completion
+-   Resource Cleanup: Use `whenComplete()` for cleanup operations
+
+Testing Considerations
+----------------------
+
+-   Deterministic Testing: Use custom executors for predictable execution
+-   Exception Testing: Verify both success and failure paths
+-   Timeout Testing: Test with realistic timeouts in integration tests
+
+🎪 Real-World Example: E-commerce Order Processing
+--------------------------------------------------
+
+public class OrderProcessor {\
+    private final ExecutorService dbPool = Executors.newFixedThreadPool(10);\
+    private final ExecutorService paymentPool = Executors.newFixedThreadPool(5);\
+    private final ExecutorService notificationPool = Executors.newFixedThreadPool(3);
+
+    public CompletableFuture<OrderResult> processOrder(OrderRequest request) {\
+        return CompletableFuture\
+            // 1. Validate order (fast, use common pool)\
+            .supplyAsync(() -> validateOrder(request))
+
+            // 2. Check inventory (database I/O)\
+            .thenComposeAsync(order -> checkInventory(order), dbPool)
+
+            // 3. Process payment (external API)\
+            .thenComposeAsync(order -> processPayment(order), paymentPool)
+
+            // 4. Create order record (database I/O)\
+            .thenComposeAsync(order -> createOrderRecord(order), dbPool)
+
+            // 5. Send notifications (don't wait for this)\
+            .thenApplyAsync(order -> {\
+                sendNotifications(order).thenRunAsync(() ->\
+                    updateAnalytics(order), notificationPool);\
+                return order;\
+            })
+
+            // 6. Handle any failures\
+            .handle((order, exception) -> {\
+                if (exception != null) {\
+                    log.error("Order processing failed", exception);\
+                    return new OrderResult(false, "Processing failed: " + exception.getMessage());\
+                }\
+                return new OrderResult(true, "Order processed successfully");\
+            })
+
+            // 7. Ensure we don't hang\
+            .orTimeout(30, TimeUnit.SECONDS)
+
+            // 8. Cleanup regardless of outcome\
+            .whenComplete((result, exception) -> {\
+                releaseResources();\
+                updateMetrics(result, exception);\
+            });\
+    }\
+}
+
+[
+
+Java
+
+](https://medium.com/tag/java?source=post_page-----ef5b115b29ad---------------------------------------)
