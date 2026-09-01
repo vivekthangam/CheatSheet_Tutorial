@@ -1,3 +1,5 @@
+﻿[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+
 # 📚 Java Collections: The 100+ Expert Scenarios
 
 Master the most critical part of Java development. From basic Lists to lock-free Concurrent Collections and internal algorithmic mechanics.

@@ -1,3 +1,5 @@
+﻿[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+
 # 🕵️‍♂️ Java Profiling Mastery: The Architect's Diagnostic Hub
 
 Master the art of performance diagnosis. From "Hot Method" hunting and memory leak autopsies to low-overhead production profiling and remote SSH tunneling.

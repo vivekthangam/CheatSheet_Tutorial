@@ -1,73 +1,20 @@
-[? Back to Home](README.md)
+[🏠 Back to Home](README.md) | [🎯 Interview Prep Guide](topics/interview_prep.md) | [📖 Tech Glossary](topics/glossary.md)
 
-Design Patterns & System Design: The Ultimate Scenario Guide
-1. Creational Patterns (Object Creation)
-Pattern	Scenario	Solution
-Singleton	You are building a Logging service for a distributed app.	Ensure only one instance of Logger exists to prevent file-write conflicts.
-Factory Method	A Logistics app needs to handle "Truck" and "Ship" transport.	Create a Transport interface; subclasses decide which vehicle to instantiate.
-Abstract Factory	A UI Toolkit needs to render Buttons and Checkboxes for both Windows and Mac.	Create a factory for each OS that produces a consistent family of UI components.
-Builder	Constructing a complex "Gaming PC" object with optional RAM, GPU, and SSD.	Use a Builder to step-by-step configure the PC instead of a massive constructor.
-Prototype	Cloning a complex "Game NPC" with unique stats to save database calls.	Implement a clone() method to duplicate existing objects.
-2. Structural Patterns (Relationships)
-Pattern	Scenario	Solution
-Adapter	Integrating a 3rd-party XML Payment Gateway into a JSON-based system.	Create an Adapter that translates JSON requests into XML for the legacy API.
-Facade	A "Home Theater" system with a Projector, Lights, Sound, and Player.	Provide a single watchMovie() method that handles all the complex subsystems.
-Decorator	Adding "Extra Cheese" or "Jalapeños" to a basic Pizza object dynamically.	Wrap the Pizza object in decorator classes to add features without changing the base code.
-Proxy	A high-resolution image gallery that lags during scrolling.	Use a Proxy to show a placeholder until the actual high-res image is needed.
-3. Behavioral Patterns (Communication)
-Pattern	Scenario	Solution
-Observer	A Stock Market app where multiple users need alerts when a price hits $X.	The Stock object notifies all registered "Observers" when its state changes.
-Strategy	A Navigation app offering Route options: "Fastest", "Shortest", and "Public Transit".	Encapsulate each algorithm in a separate class and switch them at runtime.
-Command	Implementing an "Undo" feature in a Text Editor.	Turn every action (typing, deleting) into an object that can be stored in a stack.
-State	A Vending Machine moving from NoCoin to HasCoin to Dispensing.	Change the object's behavior automatically as its internal state changes.
-4. 200+ System Design & Pattern Scenarios (Categorized)
-To master System Design, you must map patterns to large-scale problems. Here are the core categories to build your 200+ list:
+# 🏛️ Design Patterns & System Design: 200+ Scenario Masterclass
 
-E-Commerce Systems (Scenarios 1-50)
-Inventory Management: Use Observer to notify the marketing team when stock is low.
+A comprehensive architectural handbook mapping Gang of Four (GoF) design patterns and cloud distributed architectures to 200+ real-world software engineering scenarios across E-Commerce, Social Media, Streaming Platforms, and Cloud Infrastructure.
 
-Checkout Pipeline: Use Chain of Responsibility to process discounts, then taxes, then shipping.
+---
 
-Payment Gateway: Use Strategy to switch between Stripe, PayPal, and Crypto.
-
-Social Media Systems (Scenarios 51-100)
-Feed Generation: Use Proxy (Caching) to store the home feed of famous celebrities to avoid DB hits.
-
-Notification Service: Use Factory to create Email, SMS, or Push notifications based on user preference.
-
-Chat System: Use Mediator to handle communication between thousands of users without tight coupling.
-
-Streaming & Content (Scenarios 101-150)
-Video Encoding: Use Template Method to define the encoding steps (Upload -> Compress -> Watermark).
-
-Subscription Levels: Use State to restrict features for "Basic" vs "Premium" users.
-
-Cloud & Infrastructure (Scenarios 151-200+)
-Load Balancer: Use Strategy to pick between Round Robin or Least Connections algorithms.
-
-Configuration Manager: Use Singleton to ensure all microservices read from one source of truth.
-
-5. Sample Problem & Answer
-Problem: You are designing a "Cloud File Storage" (like Google Drive). You need to support different file types (Doc, PDF, Image) and each type requires different compression. How do you design this to be extensible?
-
-Answer: 1. Pattern: Strategy Pattern for compression. 2. Implementation: Create a CompressionStrategy interface with a compress() method. Implement ZipCompression, RarCompression, and PdfCompression. 3. Benefit: When a new file type comes (e.g., Video), you simply add a new class without touching existing logic.
-
-How to use this for your 200+ Goal
-Copy this Markdown into a file named README.md.
-
-Expand each category: Take the "Social Media" section and write 5 specific sub-scenarios for "Likes", "Shares", "Profile Updates", etc.
-
-Practice: For every scenario, ask: "If I change a requirement tomorrow, which pattern prevents me from rewriting everything?"
-
-
-yes but give them in read me md formt thisis not read me md format
-
-
-I have focused on the E-Commerce & Retail category to provide the first set of high-density scenarios and answers.
-
-# Design Patterns & System Design: 200+ Scenario Masterclass
-
-This document serves as a comprehensive guide to learning Design Patterns through practical system design scenarios.
+## 📑 Table of Contents
+1. [🏗️ 1. Creational Patterns (Object Creation)](#️-1-creational-patterns-object-creation)
+2. [🌉 2. Structural Patterns (Relationships)](#-2-structural-patterns-relationships)
+3. [⚡ 3. Behavioral Patterns (Communication)](#-3-behavioral-patterns-communication)
+4. [🌐 4. System Design: 200+ Scenario Deep-Dive](#-4-system-design-200-scenario-deep-dive)
+   - [Part 1: E-Commerce & Retail](#inventory--catalog-1-10)
+   - [Part 2: Social Media & Real-time Systems](#feed--timeline-construction-51-65)
+   - [Part 3: Streaming & Content Delivery](#media-processing--upload-101-115)
+   - [Part 4: Cloud Infrastructure & Resilience](#cloud-infrastructure--resilience-151-200)
 
 ---
 
@@ -100,7 +47,7 @@ This document serves as a comprehensive guide to learning Design Patterns throug
 ## ⚡ 3. Behavioral Patterns (Communication)
 *Focus: How objects talk to each other and handle responsibility.*
 
-| Scenario ID | Problem Description | Recommended Pattern | Implementation Logic |
+| Scenario ID | Problem Description | Recommended Pattern | Implementation Logic |entation Logic |
 | :--- | :--- | :--- | :--- |
 | BP-001 | A "Price Alert" system where 1,000 users follow one product. | **Observer** | The `Product` object notifies all `User` observers when the `price` property changes. |
 | BP-002 | A checkout system that applies "Black Friday," "Student," or "VIP" discounts. | **Strategy** | Encapsulate each discount logic in a `DiscountStrategy` class and swap them at runtime. |
@@ -110,7 +57,7 @@ This document serves as a comprehensive guide to learning Design Patterns throug
 
 ---
 
-## 🌐 4. System Design: 200+ Scenario Deep-Dive (Part 1: E-Commerce)
+## ðŸŒ 4. System Design: 200+ Scenario Deep-Dive (Part 1: E-Commerce)
 
 Below are the first 50 problems and answers for an E-commerce system using patterns.
 
@@ -146,17 +93,16 @@ Below are the first 50 problems and answers for an E-commerce system using patte
 
 ---
 
-## 🚀 5. Next Steps
+## ðŸš€ 5. Next Steps
 - [ ] Implement **CP-001** in your favorite language.
 - [ ] Create a Class Diagram for **SP-002**.
 - [ ] Expand this README with 50 scenarios for **Social Media Systems**.
 
 
-Add the following section to your README.md. This segment focuses on Social Media Systems (Scenarios 51-100), covering the architecture of feeds, interactions, and real-time connectivity.
 
 ---
 
-## 📱 4. System Design: 200+ Scenario Deep-Dive (Part 2: Social Media)
+## ðŸ“± 4. System Design: 200+ Scenario Deep-Dive (Part 2: Social Media)
 
 Following the E-Commerce section, these 50 scenarios focus on the architecture of platforms like Instagram, Twitter, and LinkedIn.
 
@@ -211,11 +157,10 @@ Following the E-Commerce section, these 50 scenarios focus on the architecture o
 ---
 
 
-Add the following section to your README.md. This segment covers Streaming & Content Delivery Systems (Scenarios 101-150), focusing on media processing, subscription logic, and content distribution like Netflix, YouTube, or Spotify.
 
 ---
 
-## 🎬 4. System Design: 200+ Scenario Deep-Dive (Part 3: Streaming & Content)
+## ðŸŽ¬ 4. System Design: 200+ Scenario Deep-Dive (Part 3: Streaming & Content)
 
 These 50 scenarios focus on high-traffic media systems, handling massive file processing, varying user permissions, and global distribution.
 
@@ -273,9 +218,9 @@ Add this final section to your README.md. This segment covers Cloud Infrastructu
 
 ---
 
-## ☁️ 4. System Design: 200+ Scenario Deep-Dive (Part 4: Cloud & Microservices)
+## â˜ï¸ 4. System Design: 200+ Scenario Deep-Dive (Part 4: Cloud & Microservices)
 
-These final 50 scenarios focus on the "back-end of the back-end"—handling distributed failures, configuration, and resource management.
+These final 50 scenarios focus on the "back-end of the back-end"â€”handling distributed failures, configuration, and resource management.
 
 ### Reliability & Fault Tolerance (151-165)
 151. **Problem:** A microservice is failing and slowing down the whole system by timing out.
@@ -316,7 +261,7 @@ These final 50 scenarios focus on the "back-end of the back-end"—handling dist
 
 ---
 
-## 🏆 Final Summary: The Big Picture
+## ðŸ† Final Summary: The Big Picture
 
 | Category | Primary Pattern Goal |
 | :--- | :--- |
@@ -326,7 +271,7 @@ These final 50 scenarios focus on the "back-end of the back-end"—handling dist
 
 ---
 
-## 🏁 Conclusion & Next Steps
+## ðŸ Conclusion & Next Steps
 You now have over 200+ specific scenarios categorized by industry and design pattern.
 
 **How to study this:**
@@ -339,13 +284,13 @@ This completes your 200+ scenario guide in README.md format! Would you like me t
 
 This README.md contains code implementations for 20 high-impact scenarios across the categories we discussed. I have used Python for these examples as it is highly readable for architectural patterns, but the logic applies to Java, C#, or C++.
 
-# 💻 Design Pattern Implementation: 20 Key Scenarios
+# ðŸ’» Design Pattern Implementation: 20 Key Scenarios
 
 This file provides code solutions for 20 critical system design scenarios.
 
 ---
 
-## 🏗️ Creational Patterns
+## ðŸ—ï¸ Creational Patterns
 
 ### 1. Singleton: Global Configuration Manager (CP-001)
 *Scenario: Ensure only one instance of the app settings exists.*
@@ -428,7 +373,7 @@ class DarkThemeFactory(ThemeFactory):
 
 class LightThemeFactory(ThemeFactory):
     def create_button(self): return "Rendering Light Button"
-🌉 Structural Patterns
+ðŸŒ‰ Structural Patterns
 5. Adapter: Legacy XML to JSON (SP-001)
 ```
 
@@ -494,7 +439,7 @@ class ProxyImage:
         if not self.real_image:
             self.real_image = RealImage(self.filename)
         self.real_image.display()
-⚡ Behavioral Patterns
+âš¡ Behavioral Patterns
 9. Observer: Stock Market Alerts (BP-001)
 ```
 
@@ -566,7 +511,7 @@ class NoCoinState(State):
 class VendingMachine:
     def __init__(self): self.state = NoCoinState()
     def request(self): print(self.state.insert_coin())
-☁️ System Design Patterns
+â˜ï¸ System Design Patterns
 13. Circuit Breaker (System Reliability)
 ```
 
@@ -694,7 +639,6 @@ class FeedIterator:
         raise StopIteration
 
 
-Would you like me to explain the **Unit Testing** approach for any of these patterns to ensure they work as intended in a production environment?
 some sceaios are missong from above please add them to
 
 To ensure your README.md is truly comprehensive, I have added 20 more high-level scenarios focusing on Emerging Technologies (AI, Blockchain, IoT, and Security). These address the "missing gaps" in modern software architecture.
@@ -704,7 +648,7 @@ Markdown
 
 ```
 
-## 🚀 4. System Design: 200+ Scenario Deep-Dive (Part 5: Emerging Tech & Security)
+## ðŸš€ 4. System Design: 200+ Scenario Deep-Dive (Part 5: Emerging Tech & Security)
 
 These scenarios cover modern challenges like AI model deployment, blockchain nodes, and cybersecurity.
 
@@ -750,7 +694,7 @@ These scenarios cover modern challenges like AI model deployment, blockchain nod
 
 ---
 
-## 🛠️ Summary of Final 200+ Scenarios
+## ðŸ› ï¸ Summary of Final 200+ Scenarios
 
 | Category | High-Impact Patterns |
 | :--- | :--- |
@@ -771,7 +715,7 @@ To reach your goal of a comprehensive 200+ scenario library, here is the next ma
 
 ---
 
-## 🎮 4. System Design: 200+ Scenario Deep-Dive (Part 6: Specialty Industries)
+## ðŸŽ® 4. System Design: 200+ Scenario Deep-Dive (Part 6: Specialty Industries)
 
 ### Game Development (Scenarios 251-275)
 251. **Problem:** An NPC (Non-Player Character) needs to switch between "Patrolling," "Chasing," and "Attacking."
@@ -813,7 +757,7 @@ To reach your goal of a comprehensive 200+ scenario library, here is the next ma
 
 ---
 
-## 🛠️ Summary Checklist for Scenarios 250-325
+## ðŸ› ï¸ Summary Checklist for Scenarios 250-325
 
 | Pattern | High-Value Scenario |
 | :--- | :--- |
@@ -833,7 +777,7 @@ To round out your collection and ensure you hit the 200+ target with high-qualit
 
 ---
 
-## 🏎️ 4. System Design: 200+ Scenario Deep-Dive (Part 7: Robotics & Autonomous Systems)
+## ðŸŽï¸ 4. System Design: 200+ Scenario Deep-Dive (Part 7: Robotics & Autonomous Systems)
 
 ### Autonomous Vehicles & Drones (326-350)
 326. **Problem:** A self-driving car needs to switch between "Cruise," "Emergency Braking," and "Lane Change" modes.
@@ -860,7 +804,7 @@ To round out your collection and ensure you hit the 200+ target with high-qualit
 
 ---
 
-## 🏛️ 5. Enterprise Architecture Scenarios (376-400+)
+## ðŸ›ï¸ 5. Enterprise Architecture Scenarios (376-400+)
 
 ### Security & Data Integrity
 376. **Problem:** A "Multi-factor Authentication" (MFA) system where you can choose between SMS, Authenticator App, or Email.
@@ -879,7 +823,7 @@ To round out your collection and ensure you hit the 200+ target with high-qualit
 
 ---
 
-## 💡 6. Design Pattern Selection Cheat Sheet (The "Interview Slayer")
+## ðŸ’¡ 6. Design Pattern Selection Cheat Sheet (The "Interview Slayer")
 
 Use this table to decide which pattern to use based on your "True Intent."
 
@@ -898,7 +842,7 @@ Use this table to decide which pattern to use based on your "True Intent."
 
 ---
 
-## 🏁 Final Conclusion
+## ðŸ Final Conclusion
 You now have a **README.md** library containing over 400 total logic points (200+ Scenarios + 200+ Detailed Answers and Implementations). 
 
 ### Your Study Roadmap:
@@ -911,7 +855,7 @@ Final Next Step:
 
 ---
 
-## 🏆 7. Final Exam: The Hybrid Pattern Challenge
+## ðŸ† 7. Final Exam: The Hybrid Pattern Challenge
 *Test your mastery: These scenarios require combining TWO or more patterns for a complete solution.*
 
 ### Scenario 1: The High-Availability Notification Engine
@@ -949,7 +893,7 @@ Final Next Step:
 
 ---
 
-## 📝 8. Self-Assessment Quiz
+## ðŸ“ 8. Self-Assessment Quiz
 
 | Question | Pattern to Use |
 | :--- | :--- |
@@ -961,7 +905,7 @@ Final Next Step:
 
 ---
 
-## 📖 How to use this README for Interviews
+## ðŸ“– How to use this README for Interviews
 1. **The "Why" First:** When an interviewer gives you a problem, don't jump to the pattern name. Describe the **problem** (e.g., "We have tight coupling here...").
 2. **The Trade-off:** Mention that while a pattern solves a problem, it might add complexity (e.g., "I'll use a Decorator, but we must be careful not to create too many wrapper layers").
 3. **The Implementation:** Draw the class diagram first, then write the interface/abstract class, then the concrete implementations.
@@ -980,11 +924,11 @@ This final section for your README.md focuses on High-Level System Design, the k
 
 ---
 
-## 🏛️ 9. FAANG System Design Interview: 50 Questions & Patterns
+## ðŸ›ï¸ 9. FAANG System Design Interview: 50 Questions & Patterns
 
 These questions focus on architectural trade-offs. The "Answer" highlights the core design pattern or architectural strategy used to solve the problem.
 
-### 🚀 Scalability & Distributed Systems (1-15)
+### ðŸš€ Scalability & Distributed Systems (1-15)
 
 1. **How would you design a Rate Limiter for an API?**
    * **Answer:** Use the **Proxy Pattern** to intercept requests and the **Strategy Pattern** to switch between algorithms (Leaky Bucket vs. Token Bucket).
@@ -1008,7 +952,7 @@ These questions focus on architectural trade-offs. The "Answer" highlights the c
     * **Answer:** Use the **Mediator Pattern** via a message broker (Kafka/Redis) to decouple senders and receivers.
 
 
-### 📊 Storage & Data Management (11-25)
+### ðŸ“Š Storage & Data Management (11-25)
 
 11. **How do you design a NoSQL Database from scratch?**
     * **Answer:** Use the **Strategy Pattern** for the storage engine (LSM Tree vs. B-Tree).
@@ -1031,13 +975,13 @@ These questions focus on architectural trade-offs. The "Answer" highlights the c
 20. **How would you design a Message Queue (like SQS)?**
     * **Answer:** **Observer Pattern** for subscribers and **Command Pattern** for message persistence.
 
-### 📲 Application-Specific Systems (21-40)
+### ðŸ“² Application-Specific Systems (21-40)
 
-21. **How would you design Netflix’s Content Delivery Network (CDN)?**
+21. **How would you design Netflixâ€™s Content Delivery Network (CDN)?**
     * **Answer:** **Proxy Pattern** (Edge locations) and **Strategy Pattern** for choosing the closest node.
 22. **How do you design a News Feed (like Facebook)?**
     * **Answer:** **Observer Pattern** (Fan-out on write) or **Proxy** (Pull on demand).
-23. **How would you design Uber’s driver-rider matching?**
+23. **How would you design Uberâ€™s driver-rider matching?**
     * **Answer:** **Mediator Pattern** to handle the location-based matching logic.
 24. **How do you implement a search "Auto-complete" feature?**
     * **Answer:** Use a **Trie data structure** (a specialized **Composite Pattern**).
@@ -1055,7 +999,7 @@ These questions focus on architectural trade-offs. The "Answer" highlights the c
     * **Answer:** **Factory Method** to create the message type and **Strategy** for the delivery provider.
 
 
-### 🛡️ Reliability & Security (41-50)
+### ðŸ›¡ï¸ Reliability & Security (41-50)
 
 41. **How do you handle "Cascading Failures"?**
     * **Answer:** **Circuit Breaker Pattern (Proxy)**.
@@ -1085,7 +1029,7 @@ Here is a deep-dive design for one of the most common FAANG interview questions:
 
 This is a perfect example of how to combine Structural and Creational patterns to solve a high-scale problem.
 
-# 🚀 FAANG Deep-Dive: Designing a URL Shortener
+# ðŸš€ FAANG Deep-Dive: Designing a URL Shortener
 
 ## 1. The Problem Statement
 Design a service that takes a long URL and returns a shorter, unique alias. When a user visits the short URL, they are redirected to the original long URL.
@@ -1168,7 +1112,7 @@ Data Partitioning: Shard the database based on the Short_Hash to distribute the 
 
 Read-Through Cache: Use a Redis cluster. Since most people click the same "trending" links, a 20% cache hit rate can reduce DB load by 80%.
 
-💡 Interview Tip: The "Bonus" Answer
+ðŸ’¡ Interview Tip: The "Bonus" Answer
 If the interviewer asks: "What if two people shorten the same URL?"
 
 Option A: Give them the same short code (Save space, requires a reverse-index).
@@ -1184,7 +1128,7 @@ Here is the deep-dive design for a Real-Time Messenger (like WhatsApp or Telegra
 Markdown
 ```
 
-# 📱 FAANG Deep-Dive: Designing a Real-Time Messenger
+# ðŸ“± FAANG Deep-Dive: Designing a Real-Time Messenger
 
 ## 1. The Problem Statement
 Design a service that allows users to send and receive messages in real-time, see "Last Seen" status, and handle group chats.
@@ -1246,7 +1190,7 @@ class ReadState(MessageState):
     def transition(self, message):
         print("Message lifecycle complete.")
 4. Data Storage Strategy
-Chat messages are "Time-Series" data—they are write-heavy and ordered by time.
+Chat messages are "Time-Series" dataâ€”they are write-heavy and ordered by time.
 
 Primary Database: Cassandra or HBase. These NoSQL databases are excellent for high-volume writes and allow for efficient retrieval using (User_ID, Message_ID) as a composite key.
 
@@ -1265,7 +1209,7 @@ Push Notifications: If a user is offline, the WebSocket is closed.
 
 Solution: Use the Observer Pattern. When a message hits the broker, the NotificationService (an observer) sees the user is offline and triggers a Push Notification via Firebase (FCM) or Apple (APNS).
 
-💡 Interview Tip: The "Group Chat" Scalability
+ðŸ’¡ Interview Tip: The "Group Chat" Scalability
 If the interviewer asks: "How do you handle a group with 10,000 members?"
 
 Explain that you don't send 10,000 individual messages at once.
@@ -1278,7 +1222,7 @@ Use the Iterator Pattern to chunk the recipient list and process them in paralle
 **Would you like me to move on to the "Netflix/Video Streaming" design, or would you like a deep-dive into "Uber/Lyft" location-based matching?**
 
 
-# 🎬 FAANG Deep-Dive: Designing a Video Streaming Service (Netflix)
+# ðŸŽ¬ FAANG Deep-Dive: Designing a Video Streaming Service (Netflix)
 
 ## 1. The Problem Statement
 Design a system capable of storing petabytes of video data and streaming it to millions of users simultaneously across different devices and network speeds.
@@ -1364,7 +1308,7 @@ Solution: The Memento Pattern. The player periodically saves a "Snapshot" of the
 
 Predictive Caching: * Solution: Use the Observer Pattern. If a user finishes Episode 1, the NextEpisodeService (an observer) starts pre-fetching the first 30 seconds of Episode 2 into the background buffer.
 
-💡 Interview Tip: The "Microservices" Decoupling
+ðŸ’¡ Interview Tip: The "Microservices" Decoupling
 If the interviewer asks: "How do you update the UI without stopping the stream?"
 
 Explain the Facade Pattern. The Mobile/TV app talks to a single API Gateway. Behind that gateway are hundreds of microservices (Recommendations, Billing, Subtitles). We can deploy a new "Recommendation" service without the "Streaming" service ever knowing it changed.
@@ -1378,7 +1322,7 @@ This deep-dive focuses on Uber or Lyft (Real-time Geospatial Matching). This is 
 Markdown
 ```
 
-# 🚗 FAANG Deep-Dive: Designing a Ride-Sharing Service (Uber/Lyft)
+# ðŸš— FAANG Deep-Dive: Designing a Ride-Sharing Service (Uber/Lyft)
 
 ## 1. The Problem Statement
 Design a system that matches riders with nearby drivers in real-time, calculates fares, and tracks the ride progress on a map.
@@ -1459,7 +1403,7 @@ Preventing Double Matching: Two riders request a ride at the same millisecond in
 
 Solution: Use a Distributed Lock (via Redis or Zookeeper) on the Driver_ID during the matching transaction.
 
-💡 Interview Tip: The "Lifecycle" of a Trip
+ðŸ’¡ Interview Tip: The "Lifecycle" of a Trip
 If asked how to handle the flow from "Requested" to "Completed," use the State Pattern.
 
 States: Searching, Accepted, Arrived, In-Progress, Completed.
@@ -1477,7 +1421,7 @@ Markdown
 
 ```
 
-## 🏁 10. Master Summary: Pattern-to-System Mapping
+## ðŸ 10. Master Summary: Pattern-to-System Mapping
 
 This table is your "Quick Reference" during a high-pressure technical interview.
 
@@ -1494,7 +1438,7 @@ This table is your "Quick Reference" during a high-pressure technical interview.
 
 ---
 
-## 📈 11. The "Senior Engineer" Roadmap (How to Master This)
+## ðŸ“ˆ 11. The "Senior Engineer" Roadmap (How to Master This)
 
 To truly internalize these 200+ scenarios and 50+ system designs, follow this 4-week execution plan:
 
@@ -1516,7 +1460,7 @@ To truly internalize these 200+ scenarios and 50+ system designs, follow this 4-
 
 ---
 
-## 🔗 12. Recommended Resources
+## ðŸ”— 12. Recommended Resources
 * **Book:** *Design Patterns: Elements of Reusable Object-Oriented Software* (The "Gang of Four" book).
 * **Website:** *Refactoring.Guru* (Excellent visual guides for patterns).
 * **Video:** Search for "System Design Interview" on YouTube (look for channels like *Gaurav Sen* or *ByteByteGo*).
@@ -1532,9 +1476,9 @@ You have built a massive, professional-grade design repository!
 
 This Single-Page Interview Cheat Sheet is designed for the "final 10 minutes" before you walk into a technical interview. It condenses the most critical patterns, trade-offs, and system components into a high-density, scannable format.
 
-# ⚡ THE 10-MINUTE DESIGN PATTERN & SYSTEM DESIGN CHEAT SHEET
+# âš¡ THE 10-MINUTE DESIGN PATTERN & SYSTEM DESIGN CHEAT SHEET
 
-## 🎯 1. The "Big Three" Design Pillars
+## ðŸŽ¯ 1. The "Big Three" Design Pillars
 
 | Category | High-Yield Pattern | Best Used For... |
 | :--- | :--- | :--- |
@@ -1544,7 +1488,7 @@ This Single-Page Interview Cheat Sheet is designed for the "final 10 minutes" be
 
 ---
 
-## 🛠️ 2. Instant Pattern Selection Guide (Key Phrases)
+## ðŸ› ï¸ 2. Instant Pattern Selection Guide (Key Phrases)
 
 If the interviewer mentions... | **Use This Pattern**
 :--- | :---
@@ -1558,7 +1502,7 @@ If the interviewer mentions... | **Use This Pattern**
 
 ---
 
-## 🏗️ 3. The FAANG System Design Checklist
+## ðŸ—ï¸ 3. The FAANG System Design Checklist
 
 
 When designing any system (URL Shortener, Uber, etc.), follow this **Step-by-Step flow**:
@@ -1571,7 +1515,7 @@ When designing any system (URL Shortener, Uber, etc.), follow this **Step-by-Ste
 
 ---
 
-## ⚠️ 4. The "Senior Answer" (Trade-offs)
+## âš ï¸ 4. The "Senior Answer" (Trade-offs)
 
 Interviewers love it when you mention why a pattern might be **bad**.
 
@@ -1582,7 +1526,7 @@ Interviewers love it when you mention why a pattern might be **bad**.
 
 ---
 
-## 🗺️ 5. Key System Component Cheat Sheet
+## ðŸ—ºï¸ 5. Key System Component Cheat Sheet
 
 * **Load Balancer:** Use **Round Robin** or **Least Connections** strategies.
 * **Message Queue:** Use for **Asynchronous processing** (Observer Pattern).
@@ -1593,7 +1537,7 @@ Interviewers love it when you mention why a pattern might be **bad**.
 
 ---
 
-## 📝 6. The 5-Second Resume (Closing Statements)
+## ðŸ“ 6. The 5-Second Resume (Closing Statements)
 * *"I choose patterns that increase **maintainability** and **readability**."*
 * *"I prioritize **Availability** over **Consistency** for social apps, but vice-versa for banking."*
 * *"I use **Interfaces** to ensure the system is **Open for Extension** but **Closed for Modification**."*
@@ -1610,7 +1554,7 @@ Since you are focusing on Java, it is essential to understand how Design Pattern
 
 Here is a Java Syntax Guide for Design Patterns in README.md format.
 
-# ☕ Java Design Patterns: Syntax & Best Practices
+# â˜• Java Design Patterns: Syntax & Best Practices
 
 In Java, patterns are heavily built on **Strong Typing** and **Object-Oriented (OOP)** principles.
 
@@ -1697,7 +1641,7 @@ Thread Safety: Java is multi-threaded. When implementing Singleton or Proxy, alw
 
 Avoid Reflection: While some patterns (like Proxy) use reflection, it can be slow. Use Dynamic Proxies (java.lang.reflect.Proxy) sparingly in high-performance FAANG systems.
 
-🚀 Java Design Pattern Vocabulary Table
+ðŸš€ Java Design Pattern Vocabulary Table
 Pattern	Java Feature Used
 Observer	PropertyChangeListener or Flow API (Java 9+)
 Iterator	java.util.Iterator / Iterable
@@ -1714,13 +1658,13 @@ You now have the logic, the scenarios, the system design, and the Java code.
 **Would you like me to create a "Mock Interview Script" where I play the interviewer and you try to solve a problem using these Java patterns?**
 
 
-# 🏗️ System Design Interview Master Guide
+# ðŸ—ï¸ System Design Interview Master Guide
 
 This document is a structured repository for practicing system design. It covers the framework, top FAANG problem statements, architectural solutions, and the technology stacks used by industry leaders.
 
 ---
 
-## 🛠️ 1. The 4-Step Interview Framework
+## ðŸ› ï¸ 1. The 4-Step Interview Framework
 When tackling these problems, follow this exact flow:
 
 1. **Clarification:** Define features (MVP), scale (DAU/MAU), and data retention.
@@ -1730,7 +1674,7 @@ When tackling these problems, follow this exact flow:
 
 ---
 
-## 📝 2. Problem Statements & Detailed Solutions
+## ðŸ“ 2. Problem Statements & Detailed Solutions
 
 ### Problem 1: Design a URL Shortener (e.g., TinyURL)
 **Scenario:** Create a service that takes a long URL and returns a short, unique link.
@@ -1791,7 +1735,7 @@ When tackling these problems, follow this exact flow:
 
 ---
 
-## ⚡ 3. Technology Stack Cheat Sheet
+## âš¡ 3. Technology Stack Cheat Sheet
 
 | Component | Technology | Use Case |
 | :--- | :--- | :--- |
@@ -1805,7 +1749,7 @@ When tackling these problems, follow this exact flow:
 
 ---
 
-## 🎯 4. Advanced Concepts for Senior Roles
+## ðŸŽ¯ 4. Advanced Concepts for Senior Roles
 * **Consistent Hashing:** To minimize data re-mapping when adding/removing nodes.
 * **CAP Theorem:** Understanding the trade-off between Consistency, Availability, and Partition Tolerance.
 * **Back-of-the-envelope estimation:** Practicing calculations for QPS (Queries Per Second) and Storage requirements.
@@ -1813,14 +1757,14 @@ When tackling these problems, follow this exact flow:
 
 ---
 
-## 🚀 5. Practice Scenarios (Self-Study)
+## ðŸš€ 5. Practice Scenarios (Self-Study)
 1. **Design a Web Crawler:** Focus on the URL Frontier and Politeness.
 2. **Design an Ad Click Aggregator:** Focus on exactly-once processing using Kafka.
 3. **Design a Distributed ID Generator:** Focus on Snowflake-like algorithms.
 
 ---
 
-## 🔐 6. Deep Dive: Scalable Authorization System (Professional Context)
+## ðŸ” 6. Deep Dive: Scalable Authorization System (Professional Context)
 **Scenario:** Design a centralized Authorization Service for a large-scale microservices architecture.
 * **Key Challenge:** Centralized auth can become a single point of failure and a latency bottleneck.
 * **Solution:** Use **Policy-Based Access Control (PBAC)** with a "Sidecar" or "Middleware" approach. Cache permissions locally at the service level but manage policies centrally.
@@ -1838,7 +1782,7 @@ When tackling these problems, follow this exact flow:
 
 ---
 
-## 📐 7. "Back-of-the-Envelope" Estimation Guide
+## ðŸ“ 7. "Back-of-the-Envelope" Estimation Guide
 In FAANG interviews, you must estimate scale. Use these "Power of 10" rules:
 
 * **Requests per second (QPS):** 100 Million requests per day $\approx$ 1,200 QPS.
@@ -1850,7 +1794,7 @@ In FAANG interviews, you must estimate scale. Use these "Power of 10" rules:
 
 ---
 
-## 📝 8. Interview Problem List (Exercise Table)
+## ðŸ“ 8. Interview Problem List (Exercise Table)
 
 | Problem | Difficulty | Focus Area |
 | :--- | :--- | :--- |
@@ -1862,7 +1806,7 @@ In FAANG interviews, you must estimate scale. Use these "Power of 10" rules:
 
 ---
 
-## 🛠️ 9. Recommended Tech Stack for Most Problems
+## ðŸ› ï¸ 9. Recommended Tech Stack for Most Problems
 When in doubt during an interview, these are "Safe Bets":
 
 1.  **Application:** Java / Spring Boot (High performance, great ecosystem).
@@ -1876,15 +1820,15 @@ When in doubt during an interview, these are "Safe Bets":
 
 ---
 
-## 🏁 How to Practice
+## ðŸ How to Practice
 1. **Pick a problem** from the list above.
 2. **Set a timer** for 45 minutes.
 3. **Draft the README** for that specific system, including the High-Level Diagram.
-4. **Review** against the CAP theorem—did you prioritize Availability or Consistency?
+4. **Review** against the CAP theoremâ€”did you prioritize Availability or Consistency?
 
 ---
 
-## 📱 10. Messaging System: API & Database Deep Dive
+## ðŸ“± 10. Messaging System: API & Database Deep Dive
 
 ### A. API Design (REST/WebSocket)
 In a messaging system, we use **REST** for user actions (onboarding, profile) and **WebSockets** for the actual message flow.
@@ -1907,7 +1851,7 @@ In a messaging system, we use **REST** for user actions (onboarding, profile) an
 }
 ```
 
-# 📚 The Ultimate 100+ System Design Problem Catalog
+# ðŸ“š The Ultimate 100+ System Design Problem Catalog
 
 Use this list to drill down into different architectures. For each problem, try to define:
 1. **Functional Requirements** (What it does)
@@ -1917,7 +1861,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🌐 1. Social Media & Content Platforms (High Fan-out)
+## ðŸŒ 1. Social Media & Content Platforms (High Fan-out)
 1. **Design Instagram:** Photo uploads, permanent storage, and follower feeds.
 2. **Design Twitter (X):** Real-time tweeting, retweeting, and timeline generation.
 3. **Design Facebook Newsfeed:** Ranking algorithms and "friend" graph scaling.
@@ -1931,7 +1875,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🎥 2. Streaming & Media (High Bandwidth/Storage)
+## ðŸŽ¥ 2. Streaming & Media (High Bandwidth/Storage)
 11. **Design YouTube:** Video transcoding, global CDN delivery, and view counts.
 12. **Design Netflix:** Content libraries, DRM, and adaptive bitrate streaming.
 13. **Design Spotify:** Audio streaming, playlist management, and offline mode sync.
@@ -1942,7 +1886,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🛒 3. E-commerce & Marketplace (High Consistency/ACID)
+## ðŸ›’ 3. E-commerce & Marketplace (High Consistency/ACID)
 18. **Design Amazon:** Product catalog, shopping cart, and order management.
 19. **Design Flash Sale System:** Handling 100k requests per second for limited inventory.
 20. **Design Ticketmaster:** Preventing double-booking and handling massive traffic spikes.
@@ -1955,7 +1899,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🚕 4. Real-Time & Geospatial (High Velocity)
+## ðŸš• 4. Real-Time & Geospatial (High Velocity)
 27. **Design Uber/Lyft:** Dispatching, location tracking, and surge pricing.
 28. **Design Google Maps:** Pathfinding (A* algorithm) and ETA calculation.
 29. **Design Yelp:** Proximity search (find restaurants within 5 miles) using Geohashing.
@@ -1964,7 +1908,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 💬 5. Communication & Messaging (High Concurrency)
+## ðŸ’¬ 5. Communication & Messaging (High Concurrency)
 32. **Design WhatsApp/Messenger:** One-to-one and group chats with WebSockets.
 33. **Design Slack:** Channels, threads, and workspace-level authorization.
 34. **Design Discord:** Large-scale voice channels and role-based permissions.
@@ -1973,7 +1917,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🛠️ 6. Infrastructure & Tooling (Core Components)
+## ðŸ› ï¸ 6. Infrastructure & Tooling (Core Components)
 37. **Design a URL Shortener (TinyURL):** Hashing and redirection logic.
 38. **Design a Rate Limiter:** Protecting APIs from DDoS or abuse.
 39. **Design a Web Crawler (Google Bot):** Scalable indexing and "politeness" logic.
@@ -1991,7 +1935,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🛡️ 7. Security & Authorization (Your Domain!)
+## ðŸ›¡ï¸ 7. Security & Authorization (Your Domain!)
 51. **Design a Centralized Auth Service:** RBAC vs ABAC for 100+ microservices.
 52. **Design an OAuth2 Provider:** Authorization code flow and token management.
 53. **Design a Secret Manager (HashiCorp Vault):** Encrypted storage for API keys.
@@ -2001,7 +1945,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 📁 8. Productivity & Storage
+## ðŸ“ 8. Productivity & Storage
 57. **Design Google Docs:** Collaborative editing and conflict resolution (OT/CRDT).
 58. **Design Dropbox/Google Drive:** File versioning and delta-sync.
 59. **Design Notion:** Block-based document storage and flexible schemas.
@@ -2009,7 +1953,7 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🧩 9. Niche & Advanced Scenarios
+## ðŸ§© 9. Niche & Advanced Scenarios
 61. **Design a Leaderboard System:** For a game with 10M players (Redis Sorted Sets).
 62. **Design an Ad Click Aggregator:** Counting billions of clicks for billing.
 63. **Design a Health-Check System:** Monitoring the status of a global cluster.
@@ -2032,14 +1976,14 @@ Use this list to drill down into different architectures. For each problem, try 
 
 ---
 
-## 🏛️ 12. Deep Dive: Global Centralized Authorization Service (#51)
+## ðŸ›ï¸ 12. Deep Dive: Global Centralized Authorization Service (#51)
 
 **Scenario:** Design a system to manage permissions (RBAC/ABAC) for 500+ microservices, handling 10M+ requests per second with < 5ms latency.
 
 ### 1. Key Challenges
 * **Availability:** If the Auth service is down, the entire company is down (Single Point of Failure).
 * **Latency:** Adding an auth check to every API call can slow down the user experience.
-* **Consistency:** If a user’s "Admin" role is revoked, it must take effect globally and immediately.
+* **Consistency:** If a userâ€™s "Admin" role is revoked, it must take effect globally and immediately.
 
 ### 2. The Architecture (Policy-Based)
 
@@ -2077,7 +2021,7 @@ To achieve < 5ms latency, you cannot call a central database every time.
 
 ---
 
-## 🚀 13. Advanced FAANG Interview Pro-Tips
+## ðŸš€ 13. Advanced FAANG Interview Pro-Tips
 
 ### A. The "Fan-out" Problem in Auth
 What happens if you delete a Group that has 1 million users?
@@ -2090,14 +2034,14 @@ What happens if you delete a Group that has 1 million users?
 
 ---
 
-## ✅ Final Practice Checklist
+## âœ… Final Practice Checklist
 1. [ ] Can you explain the difference between **Authentication** (401) and **Authorization** (403)?
 2. [ ] Do you know when to use **RBAC** (Role-Based) vs **ABAC** (Attribute-Based)?
 3. [ ] Can you draw the flow of an **OAuth2 Authorization Code Grant**?
 
 ---
 
-## 📂 14. Deep Dive: Global File Storage (#58 - Dropbox/Google Drive)
+## ðŸ“‚ 14. Deep Dive: Global File Storage (#58 - Dropbox/Google Drive)
 
 **Scenario:** Design a system where users can upload, download, and sync files across multiple devices.
 * **Scale:** 500M users, 100B+ files.
@@ -2127,7 +2071,7 @@ What happens if you delete a Group that has 1 million users?
 
 ---
 
-## 🗓️ 15. 4-Week Mastery Study Schedule
+## ðŸ—“ï¸ 15. 4-Week Mastery Study Schedule
 
 Since you are working full-time, this schedule focuses on **one high-quality problem per day**.
 
@@ -2153,7 +2097,7 @@ Since you are working full-time, this schedule focuses on **one high-quality pro
 
 ---
 
-## 💡 Quick Tips for your FAANG Interview
+## ðŸ’¡ Quick Tips for your FAANG Interview
 1. **Mention your work:** When discussing Auth, say: *"In my current role on the Authorization team, we handle this by..."* This builds instant credibility.
 2. **Be the first to find the bottleneck:** Don't wait for the interviewer to ask. Say: *"I realize that a single Redis node might fail here, so I would implement a Redis Cluster with replication."*
 3. **Draft Diagrams:** Even in a README, try to visualize the flow:
@@ -2161,7 +2105,7 @@ Since you are working full-time, this schedule focuses on **one high-quality pro
 
 ---
 
-## 🧪 16. The "FAANG Stress Test": Mock Interview Template
+## ðŸ§ª 16. The "FAANG Stress Test": Mock Interview Template
 
 Before you consider a problem "solved," you must be able to answer these 10 high-pressure questions. 
 
@@ -2183,7 +2127,7 @@ Before you consider a problem "solved," you must be able to answer these 10 high
 
 ---
 
-## 📋 17. Final Resource Summary
+## ðŸ“‹ 17. Final Resource Summary
 
 | Resource Type | Recommended Tool/Link |
 | :--- | :--- |
@@ -2194,14 +2138,14 @@ Before you consider a problem "solved," you must be able to answer these 10 high
 
 ---
 
-## 🏁 How to use this README effectively
+## ðŸ How to use this README effectively
 1. **Clone/Copy** this entire text into your GitHub repository as `README.md`.
 2. **Bold** the problems in the "100+ List" as you complete them.
 3. **Add** your own diagrams and notes to the "Deep Dive" sections.
 
 ---
 
-## ☕ 18. Java & Spring Boot Performance Cheat Sheet
+## â˜• 18. Java & Spring Boot Performance Cheat Sheet
 
 When designing systems in Java, the "logic" in your microservices must be as scalable as the "infrastructure."
 
@@ -2227,7 +2171,7 @@ In a high-QPS system, you must manage how Java handles threads.
 
 ---
 
-## 🛡️ 19. Authorization-Specific Java Patterns
+## ðŸ›¡ï¸ 19. Authorization-Specific Java Patterns
 Since you work on Authorization, these are high-value patterns to mention:
 
 1. **Stateless Auth:** Use **JWT (JSON Web Tokens)** to avoid session lookups in the DB.
@@ -2236,7 +2180,7 @@ Since you work on Authorization, these are high-value patterns to mention:
 
 ---
 
-## 📊 20. JVM Tuning & Monitoring
+## ðŸ“Š 20. JVM Tuning & Monitoring
 * **Garbage Collection (G1GC or ZGC):** For low-latency systems (like a Chat app), recommend **ZGC** because it keeps "Stop-the-world" pauses under 1ms regardless of heap size.
 * **Micrometer & Prometheus:** Use `io.micrometer` to expose custom metrics (e.g., "auth_check_latency") to Grafana dashboards.
 
@@ -2244,7 +2188,7 @@ Since you work on Authorization, these are high-value patterns to mention:
 
 ---
 
-## 🛠️ Final Tooling Checklist for Your Doc
+## ðŸ› ï¸ Final Tooling Checklist for Your Doc
 | Category | Recommended Tool |
 | :--- | :--- |
 | **Profiling** | JProfiler or VisualVM (to find memory leaks). |
@@ -2254,7 +2198,7 @@ Since you work on Authorization, these are high-value patterns to mention:
 
 ---
 
-## 🎭 21. Mock Interview Script: Design a URL Shortener (TinyURL)
+## ðŸŽ­ 21. Mock Interview Script: Design a URL Shortener (TinyURL)
 
 **Interviewer:** "I want you to design a service like TinyURL. It takes a long URL and makes it short."
 
@@ -2272,7 +2216,7 @@ Since you work on Authorization, these are high-value patterns to mention:
 
 ### Step 4: The Core Logic (The "Deep Dive")
 **Interviewer:** "How do you generate the 7-character short URL?"
-**Candidate:** "I'll use **Base-62 encoding** ($[a-z, A-Z, 0-9]$). A 7-character string gives us $62^7$ combinations, which is roughly 3.5 trillion—plenty for our 5-year estimate."
+**Candidate:** "I'll use **Base-62 encoding** ($[a-z, A-Z, 0-9]$). A 7-character string gives us $62^7$ combinations, which is roughly 3.5 trillionâ€”plenty for our 5-year estimate."
 
 **Interviewer:** "How do you ensure two servers don't generate the same ID?"
 **Candidate:** "I'll use a **Range-based Counter Service** with **Zookeeper**. Each application server gets a range of 1,000 IDs (e.g., Server A gets 1-1000, Server B gets 1001-2000). Once a server exhausts its range, it asks Zookeeper for a new one. This avoids a central database bottleneck and prevents collisions."
@@ -2290,33 +2234,33 @@ Since you work on Authorization, these are high-value patterns to mention:
 
 ---
 
-## 🏢 22. Company-Specific Interview "Flavors"
+## ðŸ¢ 22. Company-Specific Interview "Flavors"
 
 Every FAANG company has a specific architectural philosophy. Tailor your answers based on where you are interviewing:
 
-### 🔍 Google: "The Infrastructure Kings"
+### ðŸ” Google: "The Infrastructure Kings"
 * **Focus:** Massive scale, Distributed Hash Tables (DHT), and consistency.
 * **Keywords to use:** Spanner (TrueTime), Colossus (File System), Maglev (Load Balancer).
 * **Pro-Tip:** Focus on how to handle *global* scale and network partitions.
 
-### 👥 Meta (Facebook): "The Social Graph"
+### ðŸ‘¥ Meta (Facebook): "The Social Graph"
 * **Focus:** Availability, User Graph relationships, and high-velocity data.
 * **Keywords to use:** Tao (Graph Service), RocksDB, Memcached (at scale), Cassandra.
 * **Pro-Tip:** Discuss "Fan-out" (pushing updates to friends) and how to handle "Hot Users" (celebrities).
 
-### 📦 Amazon: "The Microservice Masters"
+### ðŸ“¦ Amazon: "The Microservice Masters"
 * **Focus:** Decoupling, Customer experience, and Latency.
 * **Keywords to use:** DynamoDB (Leaderless replication), SQS (Queueing), Event-driven architecture.
 * **Pro-Tip:** Amazon loves **Service Oriented Architecture (SOA)**. Focus on how services communicate asynchronously.
 
-### 🍎 Apple: "The Privacy & Security Experts"
+### ðŸŽ Apple: "The Privacy & Security Experts"
 * **Focus:** Privacy, End-to-end encryption, and Hardware-Software integration.
 * **Keywords to use:** PII (Personally Identifiable Information) masking, Differential Privacy, HSM (Hardware Security Modules).
 * **Pro-Tip:** Since you work in **Authorization**, this is your strongest match. Emphasize data privacy and secure access controls.
 
 ---
 
-## ✅ 23. Final System Design Checklist (The "Cheat Sheet")
+## âœ… 23. Final System Design Checklist (The "Cheat Sheet")
 
 Before you finish any interview, double-check that you've mentioned these "Senior" topics:
 
@@ -2328,28 +2272,28 @@ Before you finish any interview, double-check that you've mentioned these "Senio
 
 ---
 
-## 🎨 24. Suggested Diagram Prompts
+## ðŸŽ¨ 24. Suggested Diagram Prompts
 If you are using Excalidraw or a similar tool to practice, try drawing these three "Universal Patterns":
 
-1.  **The Write Path:** Client → LB → API Gateway → Kafka → Worker → DB.
+1.  **The Write Path:** Client â†’ LB â†’ API Gateway â†’ Kafka â†’ Worker â†’ DB.
     
-2.  **The Read Path:** Client → LB → API Gateway → Cache → DB.
+2.  **The Read Path:** Client â†’ LB â†’ API Gateway â†’ Cache â†’ DB.
     
-3.  **The Auth Path:** Client → API Gateway (PEP) → Central Auth Service (PDP) → Redis.
+3.  **The Auth Path:** Client â†’ API Gateway (PEP) â†’ Central Auth Service (PDP) â†’ Redis.
     
 
 ---
 
-# 🚀 Good luck on your journey!
+# ðŸš€ Good luck on your journey!
 You are now equipped with a professional-grade System Design repository. Use your unique background as a first-generation engineer to show your passion and technical depth. You've got this!
 
-# 🏆 FAANG System Design Interview: Top Questions & Answers
+# ðŸ† FAANG System Design Interview: Top Questions & Answers
 
 This section covers the most "High-Yield" questions asked at Google, Meta, Amazon, and Netflix, with the exact architectural reasoning expected for Senior roles.
 
 ---
 
-## 🏗️ 25. The "Big Three" Universal Questions
+## ðŸ—ï¸ 25. The "Big Three" Universal Questions
 
 ### Q1: Design a Distributed Rate Limiter
 **Company:** Google, Amazon, Stripe.
@@ -2382,7 +2326,7 @@ This section covers the most "High-Yield" questions asked at Google, Meta, Amazo
 
 ---
 
-## 🔐 26. Domain-Specific: High-Scale Auth (Your Focus)
+## ðŸ” 26. Domain-Specific: High-Scale Auth (Your Focus)
 
 ### Q4: Design a "Google-Scale" Authorization System (Zanzibar)
 **Company:** Google, Airbnb, Carta.
@@ -2397,7 +2341,7 @@ This section covers the most "High-Yield" questions asked at Google, Meta, Amazo
 
 ---
 
-## 🚀 27. The FAANG "Deep Dive" Checklist
+## ðŸš€ 27. The FAANG "Deep Dive" Checklist
 When answering any of the above, interviewers will "poke" your design with these questions:
 
 1.  **"What if Redis fails?"**
@@ -2409,18 +2353,18 @@ When answering any of the above, interviewers will "poke" your design with these
 
 ---
 
-## 📚 28. Recommended FAANG Preparation Resources
+## ðŸ“š 28. Recommended FAANG Preparation Resources
 * **System Design Primer:** (GitHub) The most famous free resource.
 * **ByteByteGo:** (Alex Xu) Excellent for visual learners.
 * **Designing Data-Intensive Applications:** (Martin Kleppmann) The "Bible" of system design.
 
-# 🏛️ System Design Interview: 100+ Question Master Catalog
+# ðŸ›ï¸ System Design Interview: 100+ Question Master Catalog
 
 This repository contains 100+ system design scenarios categorized by industry, followed by deep-dive architectural solutions for the top 10 most frequent FAANG questions.
 
 ---
 
-## 🔝 Part 1: Top 10 High-Yield Questions & Solutions
+## ðŸ” Part 1: Top 10 High-Yield Questions & Solutions
 
 ### 1. Design a URL Shortener (TinyURL)
 * **Question:** How to map a long URL to a 7-character short link?
@@ -2479,9 +2423,9 @@ This repository contains 100+ system design scenarios categorized by industry, f
 
 ---
 
-## 📂 Part 2: 90+ Problem Scenarios to Practice
+## ðŸ“‚ Part 2: 90+ Problem Scenarios to Practice
 
-### 🛍️ E-commerce & Logistics (11-25)
+### ðŸ›ï¸ E-commerce & Logistics (11-25)
 11. Design a Price Tracking system (Keepa).
 12. Design a Coupon Code validation service (handling millions of codes).
 13. Design a Shopping Cart that persists across devices.
@@ -2498,7 +2442,7 @@ This repository contains 100+ system design scenarios categorized by industry, f
 24. Design a Subscription Billing system (Netflix style).
 25. Design a Fraud Detection system for transactions.
 
-### 📱 Social Media & Content (26-45)
+### ðŸ“± Social Media & Content (26-45)
 26. Design an Instagram Story system (24-hour TTL).
 27. Design a "Trending Hashtags" service (Count-Min Sketch).
 28. Design a Tinder Swipe/Matching system.
@@ -2520,7 +2464,7 @@ This repository contains 100+ system design scenarios categorized by industry, f
 44. Design a Notification center for 10 types of alerts.
 45. Design a Meme Generator API.
 
-### 🛠️ Infrastructure & DevTools (46-70)
+### ðŸ› ï¸ Infrastructure & DevTools (46-70)
 46. Design a Distributed Cron Job Scheduler.
 47. Design a Metrics Monitoring system (Prometheus).
 48. Design a Logging service (ELK stack).
@@ -2547,7 +2491,7 @@ This repository contains 100+ system design scenarios categorized by industry, f
 69. Design a Delta Sync algorithm for mobile apps.
 70. Design a Database Migration tool (Zero-downtime).
 
-### 🏦 Finance & Productivity (71-85)
+### ðŸ¦ Finance & Productivity (71-85)
 71. Design a Stock Brokerage (Robinhood).
 72. Design a Crypto Exchange matching engine.
 73. Design a Digital Wallet (Paytm).
@@ -2564,7 +2508,7 @@ This repository contains 100+ system design scenarios categorized by industry, f
 84. Design a Document Version Control system (Git logic).
 85. Design a URL Redirector for Marketing campaigns.
 
-### 🔐 Security & Authorization (86-100+)
+### ðŸ” Security & Authorization (86-100+)
 86. Design a Centralized Identity Provider (SSO).
 87. Design an OAuth2 / OpenID Connect server.
 88. Design a Role-Based Access Control (RBAC) system.
@@ -2583,7 +2527,7 @@ This repository contains 100+ system design scenarios categorized by industry, f
 
 ---
 
-## 🎓 Part 3: How to Practice
+## ðŸŽ“ Part 3: How to Practice
 For any problem above, fill out this template:
 1.  **Scope:** Who is the user? What are the top 3 features?
 2.  **Scale:** How many QPS? How much storage?
@@ -2591,24 +2535,24 @@ For any problem above, fill out this template:
 4.  **Deep Dive:** How do you shard the DB? Where do you put the cache?
 5.  **Trade-offs:** Consistency vs. Availability (CAP Theorem).
 
-# 📊 System Design Cheat Sheet: Numbers & Patterns
+# ðŸ“Š System Design Cheat Sheet: Numbers & Patterns
 
 ## 1. Numbers You MUST Know (Back-of-the-Envelope)
 In a FAANG interview, use these to estimate your scale:
 
 | Resource | Value |
 | :--- | :--- |
-| **Requests per Day** | 1 Million req/day ≈ 12 requests/sec. |
-| **High Traffic** | 100 Million req/day ≈ 1,200 requests/sec. |
-| **Storage (Text)** | 1 Million tweets/day ≈ 100 MB - 500 MB. |
-| **Storage (Image)** | 1 Million photos/day (at 2MB) ≈ 200 GB. |
-| **Latency (Cache)** | Redis/Memcached ≈ 0.5 ms - 1 ms. |
-| **Latency (DB)** | SSD Read ≈ 1 ms - 10 ms. |
-| **Latency (Global)** | US to Europe Roundtrip ≈ 150 ms. |
+| **Requests per Day** | 1 Million req/day â‰ˆ 12 requests/sec. |
+| **High Traffic** | 100 Million req/day â‰ˆ 1,200 requests/sec. |
+| **Storage (Text)** | 1 Million tweets/day â‰ˆ 100 MB - 500 MB. |
+| **Storage (Image)** | 1 Million photos/day (at 2MB) â‰ˆ 200 GB. |
+| **Latency (Cache)** | Redis/Memcached â‰ˆ 0.5 ms - 1 ms. |
+| **Latency (DB)** | SSD Read â‰ˆ 1 ms - 10 ms. |
+| **Latency (Global)** | US to Europe Roundtrip â‰ˆ 150 ms. |
 
 ---
 
-## 🏗️ 2. Answers for the "Design a..." Questions (By Pattern)
+## ðŸ—ï¸ 2. Answers for the "Design a..." Questions (By Pattern)
 
 ### Pattern A: The "Read-Heavy / Social" Pattern
 **Applied to:** Instagram, Twitter, Facebook, Pinterest, LinkedIn.
@@ -2662,7 +2606,7 @@ In a FAANG interview, use these to estimate your scale:
 
 ---
 
-## 🏁 3. How to Answer Any Question in the 100+ List
+## ðŸ 3. How to Answer Any Question in the 100+ List
 Whenever you see "Design a [X]", follow this mental checklist:
 
 1.  **Is it Read-Heavy?** -> Add a Cache (Redis).
@@ -2674,7 +2618,7 @@ Whenever you see "Design a [X]", follow this mental checklist:
 
 ---
 
-## 🚀 22. Java Implementation: Distributed Rate Limiter (Pattern D)
+## ðŸš€ 22. Java Implementation: Distributed Rate Limiter (Pattern D)
 
 In a FAANG interview, writing the Java code is only 50% of the answer. The other 50% is explaining **why** you used a Lua script to ensure atomicity in a distributed environment.
 
@@ -2705,7 +2649,7 @@ end
 
 ---
 
-## 🛡️ 24. Integrating Rate Limiting with Spring Security
+## ðŸ›¡ï¸ 24. Integrating Rate Limiting with Spring Security
 
 In a production environment, you want to block malicious traffic *before* it reaches your Business Logic layer. The best place for this in a Java stack is the **Spring Security Filter Chain**.
 

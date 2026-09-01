@@ -1,3 +1,5 @@
+﻿[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+
 # 🧹 Java Garbage Collection Mastery: The Cleaning Engine
 
 Master the JVM's memory management. From generational heap architecture and marking-sweeping-compacting to low-latency G1/ZGC tuning for high-throughput microservices.

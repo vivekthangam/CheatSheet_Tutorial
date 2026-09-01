@@ -1,8 +1,22 @@
-[? Back to Home](README.md)
+[🏠 Back to Home](README.md)
 
-# 🐧 Linux Mastery: Part 1 - The Core Foundation
+# 🐧 Linux Mastery: Complete Systems & DevOps Architecture Guide
 
-This section covers the essential commands for navigating the filesystem, managing files, and viewing data. These are the most frequently used commands in any Linux environment.
+This guide covers essential commands for navigating filesystems, process management, networking, storage, kernel diagnostics, and production Linux administration.
+
+---
+
+## 📑 Table of Contents
+1. [📂 1. Navigation & Pathfinding](#-1-navigation--pathfinding)
+2. [📄 2. File & Directory Creation](#-2-file--directory-creation)
+3. [✂️ 3. Moving, Copying, and Deletion](#️-3-moving-copying-and-deletion)
+4. [👁️ 4. Viewing & Inspecting Files](#️-4-viewing--inspecting-files)
+5. [🔍 5. Searching Files & Text (find, grep)](#-linux-mastery-part-2---searching-and-text-processing)
+6. [🔐 6. Permissions & User Management (chmod, chown)](#-linux-mastery-part-3---permissions-ownership-and-security)
+7. [⚙️ 7. Process Management & System Performance (ps, top, kill)](#-linux-mastery-part-4---process-management-and-system-monitoring)
+8. [🌐 8. Networking & Connectivity (curl, netstat, ss, iptables)](#-linux-mastery-part-5---networking-and-connectivity)
+9. [🗜️ 9. Archiving & Compression (tar, gzip)](#-linux-mastery-part-6---archiving-and-compression)
+10. [📜 10. Bash Shell Scripting & Automation](#-linux-mastery-part-7---bash-scripting-and-automation)
 
 ---
 

@@ -1,6 +1,8 @@
+[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Observability Guide](observability_splunk_mastery.md) | [Troubleshooting Guide](troubleshooting_mastery.md)
+
 # 📖 The Architect's Technical Glossary (2026 Edition)
 
-A high-fidelity reference guide for the modern Distributed Systems, Cloud Native, and AI Engineering domains.
+A high-fidelity reference guide for the modern Distributed Systems, Cloud Native, Observability, Chaos Engineering, and AI Engineering domains.
 
 ---
 
@@ -8,7 +10,10 @@ A high-fidelity reference guide for the modern Distributed Systems, Cloud Native
 1. [🧬 AI & Large Language Models (LLMs)](#-ai--large-language-models-llms)
 2. [☸️ Kubernetes & Cloud Native](#️-kubernetes--cloud-native)
 3. [☕ Java & JVM Ecosystem](#-java--jvm-ecosystem)
-4. [🐙 Git & Version Control](#-git--version-control)
+4. [📊 Observability & Telemetry](#-observability--telemetry)
+5. [🌪️ Chaos Engineering & Resilience](#️-chaos-engineering--resilience)
+6. [🛠️ Systems Troubleshooting & Kernel Diagnostics](#️-systems-troubleshooting--kernel-diagnostics)
+7. [🐙 Git & Version Control](#-git--version-control)
 
 ---
 
@@ -48,6 +53,40 @@ A high-fidelity reference guide for the modern Distributed Systems, Cloud Native
 
 ---
 
+## 📊 Observability & Telemetry
+
+| Term | Definition | Context |
+| :--- | :--- | :--- |
+| **High Cardinality** | Unbounded unique label combinations in metrics. | Can crash Prometheus/Mimir memory if user IDs are used. |
+| **RED Method** | Rate, Errors, Duration. | Golden signals for request-driven microservices. |
+| **USE Method** | Utilization, Saturation, Errors. | Golden signals for hardware resources (CPU, RAM, Disk). |
+| **W3C Trace Context** | Standardized `traceparent` header format. | Propagating distributed trace context across HTTP/gRPC. |
+| **Tail Sampling** | Making trace retention decisions after request completes. | Persisting 100% of errors and slow requests while dropping 99% of fast 200 OK traces. |
+
+---
+
+## 🌪️ Chaos Engineering & Resilience
+
+| Term | Definition | Context |
+| :--- | :--- | :--- |
+| **Blast Radius** | The maximum impact area of a chaos experiment. | Keeping experiments isolated to canary or single namespace. |
+| **Steady State** | Baseline measurable normal behavior (e.g. 99.9% 200 OK). | Hypotheses test if steady state holds under chaos. |
+| **Bulkhead** | Isolating resource pools (thread pools, connection pools). | Prevents slow 3rd-party APIs from crashing the entire app. |
+| **Circuit Breaker** | Automatically failing fast when downstream is degraded. | Resilience4j state transitions (Closed -> Open -> Half-Open). |
+
+---
+
+## 🛠️ Systems Troubleshooting & Kernel Diagnostics
+
+| Term | Definition | Context |
+| :--- | :--- | :--- |
+| **Exit Code 137** | Process terminated by SIGKILL (OOMKilled). | Container exceeded Linux cgroups memory limit. |
+| **CrashLoopBackOff** | K8s pod repeatedly starting, failing, and restarting. | Diagnosed via `kubectl logs --previous` and `describe pod`. |
+| **iowait (`wa`)** | CPU time spent waiting for outstanding disk I/O. | Diagnosed via `iotop` and `lsof`. |
+| **File Descriptor Leak** | Unclosed sockets/files reaching process `ulimit -n`. | Diagnosed via `lsof -p <PID> | wc -l`. |
+
+---
+
 ## 🐙 Git & Version Control
 
 | Term | Definition | Context |
@@ -58,3 +97,4 @@ A high-fidelity reference guide for the modern Distributed Systems, Cloud Native
 | **Force-Push** | Overwriting a remote branch (Danger!). | Use with `--lease` for safety. |
 
 ---
+

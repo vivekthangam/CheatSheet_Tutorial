@@ -1,3 +1,5 @@
+﻿[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+
 # 📦 Maven & Build Mastery: The Architect's Assembly Line
 
 Master the logic, dependency trees, and automation lifecycles of modern Java build systems. From Maven's strict convention-over-configuration to Gradle's high-performance DSL flexibility and Jenkins' orchestration power.

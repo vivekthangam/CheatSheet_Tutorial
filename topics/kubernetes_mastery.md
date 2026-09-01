@@ -1,3 +1,5 @@
+﻿[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+
 # ☸️ Kubernetes Mastery: The Architect's Zero-to-Hero Guide
 
 Master the orchestration logic, internal mechanics, and "Search & Destroy" troubleshooting tactics used by senior architects in production-grade Fintech environments.
