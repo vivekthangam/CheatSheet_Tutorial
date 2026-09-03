@@ -84,6 +84,21 @@ Welcome to the comprehensive, production-grade engineering documentation and sce
 
 ---
 
+### ⚖️ 9. Policy-as-Code, Open Policy Agent (OPA) & Rules Engines
+| Guide / Topic | File Link | Focus & Highlights | Production Scenarios |
+| :--- | :--- | :--- | :--- |
+| **OPA & Rego Architectural Masterclass** | [opa_rego_200_scenarios_master_guide.md](opa_rego_200_scenarios_master_guide.md) | OPA In-Memory AST Engine, PEP vs PDP Architecture, Modern Rego v1 Syntax (`if`, `contains`, `:=`), Complete Built-In Functions Reference (10 Categories), Policy & Rules Engines Comparison (AWS Cedar, Kyverno, Oso Polar, Casbin, Drools, Camunda DMN, Sentinel) | **200 Real-World Production Scenarios** across API Gateways, K8s Admission Control, Terraform IaC, Data Masking, CI/CD Security & Compliance |
+
+---
+
+### 🌐 10. Modern API Protocols: GraphQL & gRPC Polyglot Architecture
+| Guide / Topic | File Link | Focus & Highlights | Production Scenarios |
+| :--- | :--- | :--- | :--- |
+| **GraphQL Polyglot Masterclass** | [graphql_polyglot_master_guide.md](graphql_polyglot_master_guide.md) | GraphQL AST Execution, Schema Definition Language (SDL), N+1 Problem & DataLoader, Complete Setups in **Node.js** (Apollo 4), **Golang** (`gqlgen`), and **Java** (Spring Boot 3 `@BatchMapping`), Pros & Cons Matrix (Node vs Go vs Java), Apollo Federation v2 vs Stitching, Query Depth & Complexity Security | **100 Real-World Production Scenarios** across N+1 Collapses, Security Attacks, Schema Evolution, and Federation |
+| **gRPC Polyglot Masterclass** | [grpc_polyglot_master_guide.md](grpc_polyglot_master_guide.md) | Protocol Buffers v3 (Proto3) Varint Binary Encoding, HTTP/2 Stream Multiplexing & Flow Control, All 4 RPC Patterns (Unary, Server Streaming, Client Streaming, Bidirectional Streaming) in **Node.js**, **Golang**, and **Java**, Pros & Cons Matrix, Rich Errors (`google.rpc.Status`), Deadlines, Keepalives, L4 vs L7 Load Balancing | **100 Real-World Production Scenarios** across HTTP/2 Head-of-Line Blocking, Streaming Backpressure, Load Balancing, and Schema Evolution |
+
+---
+
 ## 🎯 Hub Architecture & Philosophy
 
 This documentation repository is built around three foundational tiers:
@@ -108,6 +123,9 @@ This documentation repository is built around three foundational tiers:
 
 ## ⚡ Quick Start Shortcuts for Developers
 
+- 🌐 **Building or debugging GraphQL APIs in Node, Go, or Java?** Explore the [GraphQL Polyglot Master Guide](graphql_polyglot_master_guide.md)
+- ⚡ **Architecting high-performance gRPC services in Node, Go, or Java?** Explore the [gRPC Polyglot Master Guide](grpc_polyglot_master_guide.md)
+- ⚖️ **Mastering OPA, Rego v1, Built-ins, or Policy/Rules Engines?** Explore the [OPA & Rego Master Guide](opa_rego_200_scenarios_master_guide.md)
 - 📖 **Need a clear definition or setting up Istio, NGINX LB, OAuth Server, Vault or OPA?** Explore the [Master Dictionary, Tools & Labs Guide](security_infra_tools_glossary_master_guide.md)
 - 🔬 **Setting up Auth/Infra from scratch or debugging production incidents?** Explore the [200 Scenarios & Setup Labs Guide](security_infra_200_scenarios_master_guide.md)
 - 🛡️ **Configuring SSO, SAML, Kerberos, or OAuth2/OIDC?** Dive into the [Enterprise Security & Auth Master Guide](security_auth_master_guide.md)
