@@ -1,0 +1,373 @@
+[🏠 Back to Home](README.md)
+
+# 🗄️ Spring SQL & JDBC Enterprise Architecture Master Guide
+
+A production-grade engineering handbook for high-performance relational database programming in Java using **Spring JDBC**, **`NamedParameterJdbcTemplate`**, and **HikariCP**. Learn how to bypass ORM overhead, write ultra-fast batch operations, stream millions of rows without Out-Of-Memory (OOM) errors, and tune connection pools for enterprise scale.
+
+---
+
+## 📑 Table of Contents
+1. [🧠 Zero-to-Hero Mental Model: Direct SQL vs ORM Abstraction](#-zero-to-hero-mental-model-direct-sql-vs-orm-abstraction)
+2. [⚙️ 1. Core APIs: JdbcTemplate vs NamedParameterJdbcTemplate](#️-1-core-apis-jdbctemplate-vs-namedparameterjdbctemplate)
+3. [🗺️ 2. Result Mapping: RowMapper, ResultSetExtractor & RowCallbackHandler](#-2-result-mapping-rowmapper-resultsetextractor--rowcallbackhandler)
+4. [⚡ 3. Ultra-Fast Batch Inserts & Bulk Updates](#-3-ultra-fast-batch-inserts--bulk-updates)
+5. [💧 4. HikariCP Connection Pool Architecture & Performance Tuning](#-4-hikaricp-connection-pool-architecture--performance-tuning)
+6. [🛡️ 5. Programmatic vs Declarative Transactions (TransactionTemplate)](#-5-programmatic-vs-declarative-transactions-transactiontemplate)
+7. [🏭 6. Production Scenarios & War Room Incident Forensics](#-6-production-scenarios--war-room-incident-forensics)
+8. [⚖️ 7. Spring SQL Master Cheat Sheet](#️-7-spring-sql-master-cheat-sheet)
+
+---
+
+## 🧠 Zero-to-Hero Mental Model: Direct SQL vs ORM Abstraction
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                             DATABASE INGESTION PATHWAYS                          │
+│                                                                                  │
+│  [ High Overhead / Complex Graph ]                                               │
+│  Java Object ──> [ Hibernate/JPA ] ──> Dirty Checking ──> 1st Level Cache ──┐    │
+│                                                                              │    │
+│                                                                              ▼    │
+│  [ Zero Overhead / High Performance ]                                   [ SQL Engine ]
+│  Java Record ──> [ NamedParameterJdbcTemplate ] ──> Direct Batch Packet ─────┘    │
+│                  - No Reflection Session Overhead                                │
+│                  - Direct PreparedStatement Binding                              │
+│                  - Deterministic Query Execution Plans                           │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+When building high-throughput APIs, financial ledgers, or massive batch pipelines:
+- **JPA/Hibernate** provides productivity for complex entity domain graphs and navigation.
+- **Spring SQL (JDBC)** provides pure, raw performance, zero memory caching overhead, exact SQL control, and orders-of-magnitude faster bulk throughput.
+
+---
+
+## ⚙️ 1. Core APIs: JdbcTemplate vs NamedParameterJdbcTemplate
+
+### Maven Configuration (`pom.xml`)
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+</dependencies>
+```
+
+### Why NamedParameterJdbcTemplate is Industry Best Practice
+Standard `JdbcTemplate` uses positional placeholders (`?`), which are brittle, prone to off-by-one indexing errors, and unreadable when queries have 15+ parameters. `NamedParameterJdbcTemplate` binds values by parameter name (`:orderId`).
+
+```java
+package com.example.sql.repository;
+
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+@Repository
+public class OrderJdbcRepository {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    public OrderJdbcRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public int updateOrderStatus(String orderId, String status, BigDecimal minAmount) {
+        String sql = """
+            UPDATE orders
+            SET status = :status, updated_at = NOW()
+            WHERE id = :orderId AND total_amount >= :minAmount
+            """;
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+            .addValue("status", status)
+            .addValue("orderId", orderId)
+            .addValue("minAmount", minAmount);
+
+        return jdbcTemplate.update(sql, params);
+    }
+}
+```
+
+---
+
+## 🗺️ 2. Result Mapping: RowMapper, ResultSetExtractor & RowCallbackHandler
+
+Choosing the wrong mapping strategy can cause catastrophic JVM Out-Of-Memory (OOM) errors when queries return 100,000+ records.
+
+| Mapper Type | Return Type | Memory Characteristics | When to Use |
+| :--- | :--- | :--- | :--- |
+| **`RowMapper<T>`** | `List<T>` | Accumulates entire result set in memory | Small-to-medium lists ($< 5,000$ rows) |
+| **`ResultSetExtractor<T>`** | `T` (Arbitrary single object or complex map) | Fully custom aggregation over entire cursor | Constructing Parent-Child hierarchical trees (e.g. Order + OrderItems) |
+| **`RowCallbackHandler`** | `void` (Streaming) | $O(1)$ memory, streams row by row | Exporting 100,000+ rows to CSV, JSON, or Kafka without loading into heap |
+
+### 2.1 Clean Modern RowMapper (Java Record)
+```java
+public record CustomerSummary(String id, String name, String email, BigDecimal balance) {}
+
+public List<CustomerSummary> findTopCustomers(BigDecimal threshold) {
+    String sql = "SELECT id, name, email, balance FROM customers WHERE balance >= :threshold ORDER BY balance DESC";
+    
+    return jdbcTemplate.query(
+        sql,
+        new MapSqlParameterSource("threshold", threshold),
+        (rs, rowNum) -> new CustomerSummary(
+            rs.getString("id"),
+            rs.getString("name"),
+            rs.getString("email"),
+            rs.getBigDecimal("balance")
+        )
+    );
+}
+```
+
+### 2.2 ResultSetExtractor: Aggregating 1-to-Many Relationships in a Single Query
+Avoids running $N$ secondary queries to fetch child items.
+
+```java
+public record OrderWithItems(String orderId, String customerId, List<String> itemSkus) {}
+
+public OrderWithItems getOrderWithItems(String orderId) {
+    String sql = """
+        SELECT o.id, o.customer_id, i.sku
+        FROM orders o
+        LEFT JOIN order_items i ON o.id = i.order_id
+        WHERE o.id = :orderId
+        """;
+
+    return jdbcTemplate.query(sql, new MapSqlParameterSource("orderId", orderId), rs -> {
+        String ordId = null;
+        String custId = null;
+        List<String> skus = new java.util.ArrayList<>();
+
+        while (rs.next()) {
+            if (ordId == null) {
+                ordId = rs.getString("id");
+                custId = rs.getString("customer_id");
+            }
+            String sku = rs.getString("sku");
+            if (sku != null) {
+                skus.add(sku);
+            }
+        }
+        return (ordId != null) ? new OrderWithItems(ordId, custId, skus) : null;
+    });
+}
+```
+
+### 2.3 Streaming 1,000,000 Rows Without OOM via RowCallbackHandler
+```java
+public void streamLargeExportToCsv(java.io.Writer csvWriter) {
+    String sql = "SELECT id, email, signup_date FROM users ORDER BY id ASC";
+
+    // Crucial: Fetch size must be set to prevent PostgreSQL driver from buffering all rows
+    jdbcTemplate.getJdbcTemplate().setFetchSize(1000);
+
+    jdbcTemplate.getJdbcTemplate().query(sql, rs -> {
+        // Invoked once per row as the cursor streams from the network socket
+        try {
+            csvWriter.write(String.format("%s,%s,%s\n",
+                rs.getString("id"),
+                rs.getString("email"),
+                rs.getString("signup_date")
+            ));
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("CSV stream error", e);
+        }
+    });
+}
+```
+
+---
+
+## ⚡ 3. Ultra-Fast Batch Inserts & Bulk Updates
+
+Executing 10,000 individual `INSERT` statements requires 10,000 network round trips. JDBC Batching groups them into single TCP packets.
+
+```java
+package com.example.sql.batch;
+
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Repository
+public class BulkAuditRepository {
+
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    public BulkAuditRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public record AuditEntry(String id, String eventType, String payload, long timestamp) {}
+
+    @Transactional
+    public int[] batchInsertAudits(List<AuditEntry> entries) {
+        String sql = """
+            INSERT INTO audit_logs (id, event_type, payload, created_at)
+            VALUES (:id, :eventType, :payload, TO_TIMESTAMP(:timestamp / 1000.0))
+            """;
+
+        // Converts collection of POJOs/Records into batch parameter array
+        var batchParams = SqlParameterSourceUtils.createBatch(entries);
+
+        // Executes single batch update
+        return jdbcTemplate.batchUpdate(sql, batchParams);
+    }
+}
+```
+
+---
+
+## 💧 4. HikariCP Connection Pool Architecture & Performance Tuning
+
+HikariCP is the default, ultra-fast connection pool in Spring Boot. Improper sizing is the #1 cause of production latency spikes.
+
+```
+Incoming Threads ──> [ Connection Pool: 10 Max Connections ] ──> PostgreSQL Database
+ (e.g. 200 req/s)               │
+                                ▼
+                       (Thread waits up to connectionTimeout=3000ms)
+                       If exceeded: SQLTransientConnectionException
+```
+
+### HikariCP Pool Sizing Golden Formula
+According to PostgreSQL and HikariCP benchmarks:
+$$\text{Pool Size} = (\text{CPU Cores} \times 2) + \text{Effective Spindle / SSD Count}$$
+
+> [!TIP]
+> Setting pool size to 100 on an 8-core database server **degrades** throughput due to CPU context switching and disk I/O thrashing. A pool size of **16 to 25** typically handles thousands of requests per second.
+
+### Production `application.yml` Tuning
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://db-primary.internal:5432/finance_db?reWriteBatchedInserts=true
+    username: ${DB_USER}
+    password: ${DB_PASS}
+    hikari:
+      pool-name: EnterpriseHikariPool
+      maximum-pool-size: 20
+      minimum-idle: 10
+      idle-timeout: 300000        # 5 minutes
+      max-lifetime: 1800000       # 30 minutes (must be shorter than database server wait_timeout)
+      connection-timeout: 3000    # 3 seconds (fail fast if pool is exhausted)
+      leak-detection-threshold: 2000 # Warn if a connection is checked out longer than 2 seconds!
+```
+
+> [!IMPORTANT]
+> For PostgreSQL, always append `?reWriteBatchedInserts=true` to the JDBC URL! Without this parameter, the driver breaks multi-row batch inserts into individual statements behind the scenes.
+
+---
+
+## 🛡️ 5. Programmatic vs Declarative Transactions (TransactionTemplate)
+
+While `@Transactional` is convenient, it can lead to accidental long-running transactions if external REST calls or slow disk operations are performed inside the method. `TransactionTemplate` provides fine-grained boundaries.
+
+```java
+package com.example.sql.service;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+
+@Service
+public class AccountTransferService {
+
+    private final TransactionTemplate transactionTemplate;
+    private final NotificationClient notificationClient;
+    private final LedgerRepository ledgerRepository;
+
+    public AccountTransferService(TransactionTemplate transactionTemplate,
+                                  NotificationClient notificationClient,
+                                  LedgerRepository ledgerRepository) {
+        this.transactionTemplate = transactionTemplate;
+        this.notificationClient = notificationClient;
+        this.ledgerRepository = ledgerRepository;
+    }
+
+    public void transferFunds(String fromAcc, String toAcc, long amountCents) {
+        // 1. Critical DB Operations kept in tight, atomic transaction
+        transactionTemplate.execute(status -> {
+            ledgerRepository.debit(fromAcc, amountCents);
+            ledgerRepository.credit(toAcc, amountCents);
+            return true;
+        });
+
+        // 2. Slow external network call executed OUTSIDE transaction boundary
+        // Database connection was already released back to the pool!
+        notificationClient.sendSmsAlert(fromAcc, "Funds transferred successfully");
+    }
+}
+```
+
+---
+
+## 🏭 6. Production Scenarios & War Room Incident Forensics
+
+### Scenario 1: Connection Leak Detection Alert Triggered
+- **Symptom in Logs:**
+  `WARN com.zaxxer.hikari.pool.ProxyLeakTask: Connection leak detection triggered for connection org.postgresql.jdbc.PgConnection@1a2b3c, stack trace follows...`
+- **Root Cause:** A developer opened a raw JDBC connection via `dataSource.getConnection()` and did not use try-with-resources, or an unhandled exception bypassed `connection.close()`.
+- **The Fix:** Rely on `JdbcTemplate` or `TransactionTemplate` which guarantees automatic connection cleanup in a `finally` block.
+
+### Scenario 2: Dynamic Search Filter with Optional SQL Parameters
+- **Challenge:** A user can filter orders by status, minAmount, startDate, or any combination. Concatenating strings directly causes SQL injection risks.
+- **The Clean Solution:** Dynamic `MapSqlParameterSource` with conditional SQL fragments:
+
+```java
+public List<OrderSummary> searchOrders(String status, BigDecimal minAmount, String country) {
+    StringBuilder sql = new StringBuilder("SELECT id, status, total_amount, country FROM orders WHERE 1=1");
+    MapSqlParameterSource params = new MapSqlParameterSource();
+
+    if (status != null && !status.isBlank()) {
+        sql.append(" AND status = :status");
+        params.addValue("status", status);
+    }
+    if (minAmount != null) {
+        sql.append(" AND total_amount >= :minAmount");
+        params.addValue("minAmount", minAmount);
+    }
+    if (country != null && !country.isBlank()) {
+        sql.append(" AND country = :country");
+        params.addValue("country", country);
+    }
+
+    return jdbcTemplate.query(sql.toString(), params, (rs, i) -> new OrderSummary(
+        rs.getString("id"),
+        rs.getString("status"),
+        rs.getBigDecimal("total_amount"),
+        rs.getString("country")
+    ));
+}
+```
+
+---
+
+## ⚖️ 7. Spring SQL Master Cheat Sheet
+
+| Operation | Syntax Example |
+| :--- | :--- |
+| **Execute Single Row Query** | `jdbcTemplate.queryForObject(sql, params, (rs, rowNum) -> rs.getString("name"))` |
+| **Execute Single Scalar** | `jdbcTemplate.queryForObject("SELECT count(*) FROM users", Map.of(), Long.class)` |
+| **Execute Multi-Row Query** | `jdbcTemplate.query(sql, params, (rs, rowNum) -> new Record(...))` |
+| **Single Update / Insert** | `jdbcTemplate.update(sql, params)` |
+| **Batch Update** | `jdbcTemplate.batchUpdate(sql, SqlParameterSourceUtils.createBatch(list))` |
+| **Generate Primary Key** | `SimpleJdbcInsert.withTableName("users").usingGeneratedKeyColumns("id")` |
+| **Set Cursor Fetch Size** | `jdbcTemplate.getJdbcTemplate().setFetchSize(1000)` |
+| **Programmatic Tx** | `transactionTemplate.execute(status -> { ... return val; })` |
+
+---
+[🏠 Back to Home](README.md)
