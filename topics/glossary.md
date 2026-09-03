@@ -1,4 +1,4 @@
-[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Observability Guide](observability_splunk_mastery.md) | [Troubleshooting Guide](troubleshooting_mastery.md)
+[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [System Design Guide](../system_design.md) | [Observability Guide](observability_splunk_mastery.md) | [Troubleshooting Guide](troubleshooting_mastery.md)
 
 # 📖 The Architect's Technical Glossary (2026 Edition)
 
@@ -7,13 +7,31 @@ A high-fidelity reference guide for the modern Distributed Systems, Cloud Native
 ---
 
 ## 📑 Table of Contents
-1. [🧬 AI & Large Language Models (LLMs)](#-ai--large-language-models-llms)
-2. [☸️ Kubernetes & Cloud Native](#️-kubernetes--cloud-native)
-3. [☕ Java & JVM Ecosystem](#-java--jvm-ecosystem)
-4. [📊 Observability & Telemetry](#-observability--telemetry)
-5. [🌪️ Chaos Engineering & Resilience](#️-chaos-engineering--resilience)
-6. [🛠️ Systems Troubleshooting & Kernel Diagnostics](#️-systems-troubleshooting--kernel-diagnostics)
-7. [🐙 Git & Version Control](#-git--version-control)
+1. [🏛️ System Design & Distributed Architecture](#️-system-design--distributed-architecture)
+2. [🧬 AI & Large Language Models (LLMs)](#-ai--large-language-models-llms)
+3. [☸️ Kubernetes & Cloud Native](#️-kubernetes--cloud-native)
+4. [☕ Java & JVM Ecosystem](#-java--jvm-ecosystem)
+5. [📊 Observability & Telemetry](#-observability--telemetry)
+6. [🌪️ Chaos Engineering & Resilience](#️-chaos-engineering--resilience)
+7. [🛠️ Systems Troubleshooting & Kernel Diagnostics](#️-systems-troubleshooting--kernel-diagnostics)
+8. [🐙 Git & Version Control](#-git--version-control)
+
+---
+
+## 🏛️ System Design & Distributed Architecture
+
+| Term | Definition | Context |
+| :--- | :--- | :--- |
+| **Consistent Hashing** | A hashing algorithm where adding/removing nodes only re-maps $K/N$ keys on average. | Distributed caching (Redis Cluster, DynamoDB). |
+| **Bloom Filter** | Probabilistic data structure testing set membership with zero false negatives and low false positives. | Eliminating disk lookups for non-existent keys (Cassandra, Bigtable). |
+| **LSM-Tree** | Log-Structured Merge-tree converting random disk writes into sequential appends. | Write-heavy NoSQL databases (RocksDB, Cassandra). |
+| **B+ Tree** | Self-balancing tree with high fan-out, storing all key-value pairs in leaf nodes. | Relational DB indexes (PostgreSQL, MySQL InnoDB). |
+| **PACELC Theorem** | Extension to CAP stating trade-offs in normal operation (Latency vs Consistency) as well as under partitions. | Database evaluation (CockroachDB vs Cassandra). |
+| **Idempotency Key** | Unique client token ensuring duplicate requests are processed at most once. | Distributed payment processing and REST APIs. |
+| **Saga Pattern** | A sequence of local transactions coordinated via events or orchestrators with compensating rollback steps. | Replacing 2-Phase Commit (2PC) across microservices. |
+| **Transactional Outbox**| Pattern of writing business entities and outgoing events to local DB in a single ACID transaction, then streaming via CDC. | Reliable event publishing with Kafka and Debezium. |
+| **Cache-Aside** | Application reads from cache; on miss, loads from DB and updates cache. | Standard read-heavy caching architecture. |
+| **Circuit Breaker** | Automatically failing fast when downstream services are degraded to prevent cascading collapse. | Microservice resiliency (Resilience4j, Envoy). |
 
 ---
 
@@ -97,4 +115,3 @@ A high-fidelity reference guide for the modern Distributed Systems, Cloud Native
 | **Force-Push** | Overwriting a remote branch (Danger!). | Use with `--lease` for safety. |
 
 ---
-

@@ -1,10 +1,20 @@
-public static void main(String[] args) throws InterruptedException {
-        System.out.println("Load Test Starting... Connect VisualVM now.");
+package com.tutorial.jvm;
+
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * JVM Garbage Collection & VisualVM Memory Load Simulator
+ * Demonstrates high-throughput allocation of short-lived objects in Eden space.
+ */
+public class Untitled {
+
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println("Load Test Starting... Connect VisualVM / JConsole now.");
         
         // Simulate a web server processing thousands of requests per second
         while (true) {
             generateTraffic();
-            // Small sleep to prevent immediate CPU meltdown
+            // Small sleep to prevent immediate CPU saturation
             Thread.sleep(1); 
         }
     }
@@ -18,6 +28,9 @@ public static void main(String[] args) throws InterruptedException {
     }
 
     private static void processData(Object obj) {
-        // Just a dummy method so the compiler doesn't optimize the code away
-        if (obj == null) System.out.println("Empty");
+        // Dummy consumer method to prevent JIT dead-code elimination
+        if (obj == null) {
+            System.out.println("Empty");
+        }
     }
+}
