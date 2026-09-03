@@ -1,8 +1,9 @@
-[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [System Design Guide](../system_design.md) | [Observability Guide](observability_splunk_mastery.md) | [Troubleshooting Guide](troubleshooting_mastery.md)
+[Back to Home](../README.md) | [📖 Master Terms & Tools Encyclopedia](../security_infra_tools_glossary_master_guide.md) | [Interview Prep Guide](interview_prep.md) | [System Design Guide](../system_design.md) | [Observability Guide](observability_splunk_mastery.md) | [Troubleshooting Guide](troubleshooting_mastery.md)
 
 # 📖 The Architect's Technical Glossary (2026 Edition)
 
-A high-fidelity reference guide for the modern Distributed Systems, Cloud Native, Observability, Chaos Engineering, and AI Engineering domains.
+> 💡 **Looking for complete coverage of Authentication, Authorization, Microservices, and Infrastructure terms?**  
+> Explore the dedicated [Security, Microservices & Infrastructure Master Dictionary & Tools Guide](../security_infra_tools_glossary_master_guide.md) containing 120+ terms with analogies, complete enterprise tools directory, and from-scratch setups for Istio, OAuth Server, NGINX LB, Vault, and OPA!
 
 ---
 
