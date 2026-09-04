@@ -1,22 +1,189 @@
-﻿[ðŸ  Back to Home](README.md) | [âš¡ Quick Reference Cheat Sheet](java_collection.md) | [ðŸ™ Collections Mastery](topics/java_collections_mastery.md)
+[🏠 Back to Home](README.md) | [⚡ Quick Reference Cheat Sheet](java_collection.md) | [📚 Collections Reference](topics/java_collections_mastery.md) | [🔥 200 Collections & Streams Scenarios Guide](java_collections_streams_200_scenarios_master_guide.md)
 
-# ðŸ“š Java Collections Framework: 100+ Real-World Scenarios Masterclass
+# 📚 Java Collections & Streams Polyglot Masterclass: 100+ Real-World Scenarios
 
-A definitive, production-grade guide to the Java Collections Framework (JCF) and Stream API. Every data structure is explained through concrete software engineering scenarios, trade-offs, and executable Java code.
+> 🚀 **Looking for Tier-1 Product Interview Scenarios?** Check out the dedicated **[Java Collections Framework & Streams: 200 Real-World Interview Scenarios Master Guide](java_collections_streams_200_scenarios_master_guide.md)** featuring 200 deep technical scenarios across 10 master categories!
 
----
-
-## ðŸ“‘ Table of Contents
-1. [ðŸ“¦ Core Data Structures (Scenarios 1-10)](#-core-data-structures-scenarios-1-10)
-2. [ðŸ—ºï¸ Maps & Caching Scenarios (Scenarios 11-40)](#ï¸-maps--caching-scenarios-scenarios-11-40)
-3. [ðŸŒ² Sorting, Trees & Priority (Scenarios 41-70)](#-sorting-trees--priority-scenarios-41-70)
-4. [ðŸ™ Concurrency & Thread-Safe Collections (Scenarios 71-100+)](#-concurrency--thread-safe-collections-scenarios-71-100)
-5. [ðŸŒŠ Java Streams & Functional Pipelines](#-java-streams--functional-pipelines)
-6. [âš–ï¸ Data Structure Decision Matrix & Cheat Sheet](#ï¸-data-structure-decision-matrix--cheat-sheet)
+A definitive, production-grade guide to the Java Collections Framework (JCF) and Stream API. Every data structure is explained through concrete software engineering scenarios, memory layouts, algorithmic trade-offs, and production-tested Java code.
 
 ---
 
-## ðŸ“¦ Core Data Structures (Scenarios 1-10)
+## 📑 Master Table of Contents
+1. [TRACK 1: THE JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)](#track-1-the-junior--entry-level-foundations-zero-to-hero)
+2. [📦 Core Data Structures (Scenarios 1-10)](#-core-data-structures-scenarios-1-10)
+3. [🗺️ Maps & Caching Scenarios (Scenarios 11-40)](#-maps--caching-scenarios-scenarios-11-40)
+4. [🌲 Sorting, Trees & Priority (Scenarios 41-70)](#-sorting-trees--priority-scenarios-41-70)
+5. [🏛️ Concurrency & Thread-Safe Collections (Scenarios 71-100+)](#-concurrency--thread-safe-collections-scenarios-71-100)
+6. [🌊 Java Streams & Functional Pipelines](#-java-streams--functional-pipelines)
+7. [⚖️ Data Structure Decision Matrix & Cheat Sheet](#-data-structure-decision-matrix--cheat-sheet)
+
+---
+
+# TRACK 1: THE JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)
+
+## 1. The Real-World Mental Model (The Organizer's Storage Room)
+
+If you have 1,000 items in an office, how you organize them determines whether finding an item takes 1 millisecond or 10 minutes:
+
+```
+┌─────────────┬───────────────────────────────┬──────────────────────────────────────────┐
+│ Collection  │ Real-World Physical Analogy   │ Core Superpower                          │
+├─────────────┼───────────────────────────────┼──────────────────────────────────────────┤
+│ List        │ Line of people at Starbucks   │ Keeps exact insertion order; duplicates  │
+│             │ (index 0, 1, 2, 3...)         │ allowed; jump to any index in O(1).      │
+├─────────────┼───────────────────────────────┼──────────────────────────────────────────┤
+│ Set         │ VIP Club Bouncer Guest List   │ Strictly UNIQUE items only; duplicate    │
+│             │ (No duplicates allowed!)      │ arrivals are rejected at the door!       │
+├─────────────┼───────────────────────────────┼──────────────────────────────────────────┤
+│ Map         │ Hotel Coat-Check Room         │ Key-Value pairs; hand in your ticket     │
+│             │ (Ticket #42 ──► Winter Coat)  │ (Key), get your exact coat (Value) in O(1)│
+├─────────────┼───────────────────────────────┼──────────────────────────────────────────┤
+│ Queue       │ Supermarket Checkout Line     │ First-In, First-Out (FIFO) processing;   │
+│             │                               │ first person in line gets served first.   │
+├─────────────┼───────────────────────────────┼──────────────────────────────────────────┤
+│ Stream      │ Factory Assembly Conveyor Belt│ Lazy pipeline; items glide past filters  │
+│             │                               │ and transformations without storing all! │
+└─────────────┴───────────────────────────────┴──────────────────────────────────────────┘
+```
+
+---
+
+## 2. The JCF Hierarchy at a Glance
+
+```
+                  ┌──────────────────────┐
+                  │      Iterable        │
+                  └──────────┬───────────┘
+                             │
+                  ┌──────────▼───────────┐
+                  │     Collection       │
+                  └──┬───────┬─────────┬─┘
+                     │       │         │
+          ┌──────────▼─┐ ┌───▼────┐ ┌──▼────────┐       ┌───────────────┐
+          │    List    │ │  Queue │ │    Set    │       │      Map      │ (Separate
+          └────┬───────┘ └───┬────┘ └──┬────────┘       └───────┬───────┘  Hierarchy!)
+               │             │         │                        │
+       ┌───────┴──────┐      │     ┌───┴──────────┐     ┌───────┴──────────┐
+       ▼              ▼      ▼     ▼              ▼     ▼                  ▼
+  ArrayList      LinkedList Deque HashSet     TreeSet HashMap          TreeMap
+```
+
+---
+
+## 3. Beginner Code Walkthrough: The 4 Everyday Structures
+
+```java
+package com.example.collections;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class CollectionsQuickStart {
+    public static void main(String[] args) {
+        // 1. LIST: Preserves order, allows duplicates
+        List<String> fruits = new ArrayList<>(List.of("Apple", "Banana", "Apple"));
+        System.out.println("List with duplicates: " + fruits); // [Apple, Banana, Apple]
+
+        // 2. SET: Eliminates all duplicates automatically
+        Set<String> uniqueFruits = new HashSet<>(fruits);
+        System.out.println("Set (duplicates removed): " + uniqueFruits); // [Apple, Banana]
+
+        // 3. MAP: Key-Value fast lookup
+        Map<String, Integer> fruitPrices = new HashMap<>();
+        fruitPrices.put("Apple", 2);
+        fruitPrices.put("Banana", 1);
+        System.out.println("Price of Banana: $" + fruitPrices.get("Banana")); // $1
+
+        // 4. STREAM PIPELINE: Filter, Transform, and Collect
+        List<String> upperCaseApples = fruits.stream()
+            .filter(f -> f.equals("Apple"))
+            .map(String::toUpperCase)
+            .collect(Collectors.toList());
+        System.out.println("Stream Result: " + upperCaseApples); // [APPLE, APPLE]
+    }
+}
+```
+
+---
+
+## 4. What Happens When Things Break? (Top 3 Common Traps)
+
+1. **`ConcurrentModificationException` (The Foreach Mutate Trap):**
+   ```java
+   // BUG: Modifying list while iterating!
+   for (String fruit : fruits) {
+       if (fruit.equals("Apple")) fruits.remove(fruit); // CRASH! Throws ConcurrentModificationException!
+   }
+   // FIX: Use iterator.remove() or list.removeIf(f -> f.equals("Apple"));
+   ```
+
+2. **The `equals()` and `hashCode()` Contract Disaster:**
+   If you use a custom object (e.g. `class User { String id; }`) as a key in a `HashMap` or element in a `HashSet`, and you do NOT override both `equals()` and `hashCode()`, the map **will fail to find your object** even if all fields are identical!
+
+3. **`NullPointerException` with Primitive Auto-Unboxing:**
+   ```java
+   Map<String, Integer> map = new HashMap<>();
+   int price = map.get("NotExisting"); // CRASH! map.get() returns null, unboxing to int throws NPE!
+   // FIX: Integer price = map.getOrDefault("NotExisting", 0);
+   ```
+
+---
+
+## 5. Top 5 Beginner Mistakes in Production
+
+1. **Choosing `LinkedList` over `ArrayList` for General Use:** Beginners assume `LinkedList` is faster because "inserting is $O(1)$". In reality, CPU hardware loves cache-contiguous arrays (`ArrayList`). `LinkedList` has poor CPU cache locality and consumes 4x more memory per node! **Rule:** Default to `ArrayList` 99% of the time.
+2. **Calling `.remove(0)` on `ArrayList` inside a Loop:** Removing the first element in an `ArrayList` forces all remaining elements to shift left in memory ($O(N)$). Inside a loop of $N$ items, this turns your code into an $O(N^2)$ slug! **Fix:** Use `ArrayDeque` when removing from the head.
+3. **Using `new HashMap<>()` without Initial Capacity for Large Datasets:** When you insert 100,000 items into a default `HashMap`, it resizes and rehashes its internal bucket array dozens of times. **Fix:** Provide initial capacity: `new HashMap<>((int) (expectedItems / 0.75f) + 1)`.
+4. **Indiscriminate Use of `.parallelStream()`:** Beginners think "parallel means faster". Running `.parallelStream()` on small collections or blocking I/O calls starves Java's global `ForkJoinPool.commonPool()`, slowing down the entire microservice!
+5. **Reusing a Closed Java Stream:** Java Streams cannot be reused once a terminal operation (`.collect()`, `.findFirst()`, `.count()`) has run. Reusing it throws `IllegalStateException: stream has already been operated upon or closed`.
+
+---
+
+## 6. Top 10 Junior Interview Questions (With "Explain Like I'm 5" Answers)
+
+### Q1: What is the difference between `ArrayList` and `LinkedList`?
+- **ELI5 Answer:** *"An `ArrayList` is a row of numbered lockers side-by-side. You can run directly to locker #50 instantly. A `LinkedList` is a treasure hunt where clue #1 tells you where clue #2 is hidden. You have to visit every clue one-by-one to reach #50."*
+- **Technical Answer:** *"`ArrayList` is backed by a contiguous resizable array offering $O(1)$ random access (`get(i)`) and high CPU cache locality, but $O(N)$ worst-case insertion/deletion when shifting. `LinkedList` is a doubly linked list with $O(1)$ head/tail insertion/deletion, but $O(N)$ traversal and high memory pointer overhead."*
+
+### Q2: How does a `HashMap` work internally in Java?
+- **ELI5 Answer:** *"Like putting books into numbered buckets. You calculate a number from the book's title (hash code), place it into that bucket, and later jump straight to that exact bucket instead of searching the whole library."*
+- **Technical Answer:** *"`HashMap` uses an array of buckets (`Node<K,V>[]`). When you call `put(key, val)`, Java computes `hash(key) & (n - 1)` to determine the bucket index. If collisions occur, nodes are chained in a linked list. In Java 8+, if a bucket exceeds 8 elements, it converts from a linked list to a Red-Black Tree (`TreeNode`) to guarantee $O(\log N)$ worst-case lookups."*
+
+### Q3: Why must you override both `equals()` and `hashCode()` together?
+- **ELI5 Answer:** *"`hashCode()` tells the postal worker which neighborhood mailbox to visit. `equals()` tells them which specific person's name is on the envelope inside that box. If you don't keep them matching, letters go to the wrong neighborhood and are lost forever!"*
+- **Technical Answer:** *"The contract requires that if `a.equals(b)` is true, then `a.hashCode() == b.hashCode()` must also be true. If you override `equals()` without `hashCode()`, two equal objects may hash to different buckets in a `HashMap`, causing lookups for equal keys to fail."*
+
+### Q4: What is the difference between `HashMap` and `ConcurrentHashMap`?
+- **ELI5 Answer:** *"`HashMap` is a single shared notebook that gets torn in half if two people write at once. `ConcurrentHashMap` is a building with 16 separate rooms; people writing in Room 1 don't block people writing in Room 2."*
+- **Technical Answer:** *"`HashMap` is not thread-safe and can corrupt internal structures or loop infinitely under concurrent writes. `ConcurrentHashMap` achieves high concurrency using bucket-level CAS (Compare-And-Swap) for insertions and `synchronized` locks only on the head node of the target bucket, allowing non-blocking concurrent reads and partitioned writes."*
+
+### Q5: What is the difference between `HashSet` and `TreeSet`?
+- **ELI5 Answer:** *"`HashSet` throws toys into a toy chest in random order, but is super fast. `TreeSet` lines up all toys neatly in alphabetical order from smallest to biggest, but takes a little more time to place each toy."*
+- **Technical Answer:** *"`HashSet` is backed by a `HashMap` providing $O(1)$ time complexity with no ordering guarantees. `TreeSet` is backed by a Red-Black Tree (`NavigableMap`) providing $O(\log N)$ operations while keeping elements sorted according to natural ordering or a `Comparator`."*
+
+### Q6: What is a Java Stream and how is it different from a Collection?
+- **ELI5 Answer:** *"A Collection is a bucket holding 10 apples. A Stream is a water slide that lets apples zoom down one-by-one so you can wash and peel them on their way down."*
+- **Technical Answer:** *"A Collection is an in-memory data structure that holds physical data elements. A Stream is a lazily-evaluated computational pipeline that carries data from a source through transformations (intermediate operations) without mutating the source or storing elements."*
+
+### Q7: What is the difference between `map()` and `flatMap()` in Streams?
+- **ELI5 Answer:** *"`map()` turns an orange into an orange juice glass (1-to-1). `flatMap()` opens a box of 6 donuts and puts all 6 donuts loose onto the table (1-to-many flattening)."*
+- **Technical Answer:** *"`map()` applies a function that transforms each element of type `T` into another element of type `R` ($1:1$). `flatMap()` applies a function where each element maps to a `Stream<R>`, and flattens all resulting streams into a single unified stream ($1:N$)."*
+
+### Q8: What does "Lazy Evaluation" mean in Java Streams?
+- **ELI5 Answer:** *"A lazy chef who refuses to chop vegetables until a customer actually sits down and orders the soup."*
+- **Technical Answer:** *"Intermediate operations (like `.filter()` or `.map()`) do not execute immediately when declared. They only execute when a terminal operation (like `.collect()`, `.findFirst()`, or `.count()`) is invoked, allowing the JVM to optimize the pipeline and short-circuit early."*
+
+### Q9: What is the difference between `Comparable` and `Comparator`?
+- **ELI5 Answer:** *"`Comparable` is how an object naturally judges itself (e.g. 'I am taller than you'). `Comparator` is a third-party judge who ranks contestants by a custom rule (e.g. 'rank players by highest score today')."*
+- **Technical Answer:** *"`Comparable<T>` is implemented inside the class itself via `compareTo(T o)` defining natural ordering. `Comparator<T>` is an external functional interface implemented via `compare(T o1, T o2)` allowing multiple custom sorting strategies without modifying the original class."*
+
+### Q10: What is the difference between `Fail-Fast` and `Fail-Safe` iterators?
+- **ELI5 Answer:** *"`Fail-Fast` screams and stops immediately if anyone touches the cookie jar while you're counting. `Fail-Safe` makes a photocopy of the cookie jar and counts the copy peacefully without caring what happens to the real jar."*
+- **Technical Answer:** *"`Fail-Fast` iterators (e.g., `ArrayList`, `HashMap`) check the internal `modCount`. If the collection is structurally modified during iteration, they throw `ConcurrentModificationException`. `Fail-Safe` iterators (e.g., `CopyOnWriteArrayList`, `ConcurrentHashMap`) operate on a clone or snapshot of the collection, permitting concurrent modification without exceptions."*
+
+---
+
+## 📦 Core Data Structures (Scenarios 1-10)
 
 ### 1. Ensuring Unique Records (The Event Guest List)
 **Scenario:** You are building an event check-in system. You need to store attendee names as they arrive, but you must guarantee that no duplicate record is stored even if someone checks in twice.

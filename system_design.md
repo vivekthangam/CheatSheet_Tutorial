@@ -8,6 +8,16 @@
 ---
 
 ## 📑 Master Table of Contents
+
+### 🟢 Track 1: Junior & Entry-Level Foundations
+1. [🧠 The Real-World Mental Model (The Fast-Food Restaurant & The Mega Highway)](#1-the-real-world-mental-model-the-fast-food-restaurant--the-mega-highway)
+2. [🧱 The 5 Core Building Blocks](#2-the-5-core-building-blocks)
+3. [💻 Beginner Code Walkthrough: Scalable Architecture & The Cache-Aside Pattern](#3-beginner-code-walkthrough-scalable-architecture--the-cache-aside-pattern)
+4. [💥 What Happens When Things Break? (Top 3 Production Disasters)](#4-what-happens-when-things-break-top-3-production-disasters)
+5. [⚠️ Top 5 Beginner Mistakes in Production](#5-top-5-beginner-mistakes-in-production)
+6. [🎯 Top 10 Junior Interview Questions (With "Explain Like I'm 5" Answers)](#6-top-10-junior-interview-questions-with-explain-like-im-5-answers)
+
+### 🔴 Track 2: Senior Architect Core & High-Level System Design (HLD)
 1. [🧠 Phase 0: The Senior Architect Mental Model & Trade-Offs](#-phase-0-the-senior-architect-mental-model--trade-offs)
 2. [⚙️ Phase 1: DSA Engines in Distributed Systems](#️-phase-1-dsa-engines-in-distributed-systems)
 3. [📐 Phase 2: SOLID Principles & Clean Architecture](#-phase-2-solid-principles--clean-architecture)
@@ -41,6 +51,207 @@
 10. [📚 Phase 9: 90+ Practice Problems & System Design Number Rules](#-phase-9-90-practice-problems--system-design-number-rules)
 
 ---
+
+# TRACK 1: THE JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)
+
+## 1. The Real-World Mental Model (The Fast-Food Restaurant & The Mega Highway)
+
+### What is System Design?
+- **Single-Machine World (Your Bedroom PC):**
+  When you write code in college or a tutorial, everything runs on your personal laptop. The frontend, backend, and database all share 1 CPU, 1 block of RAM, and 1 hard drive.
+- **Enterprise Distributed Systems (Serving 100 Million Users):**
+  What happens when 500,000 customers open your app at 12:01 AM on Black Friday? A single computer melts. **System Design is the engineering art of dividing work across hundreds of cooperating computers** so the platform never crashes, never loses data, and responds in under 100 milliseconds anywhere on Earth.
+
+### The Fast-Food Restaurant Analogy
+Imagine you own a tiny neighborhood burger joint that suddenly becomes world-famous overnight:
+1. **Vertical Scaling (Scale Up / The 10-Foot Giant Chef):**
+   - You hire a giant 10-foot-tall chef with 4 arms who cooks faster and uses a bigger stove (buying a server with 128 CPU cores and 1 TB RAM).
+   - *The Catch:* Chefs cannot grow infinitely tall. The bigger the machine, the exponentially more expensive it gets. And if that one giant chef catches the flu, your entire restaurant closes! (**Single Point of Failure / SPOF**).
+2. **Horizontal Scaling (Scale Out / 20 Normal Chefs):**
+   - Instead of 1 giant chef, you hire 20 normal chefs standing side-by-side behind 20 smaller grills (adding cheap commodity server instances).
+   - If Chef #4 drops their spatula or takes a break, the other 19 chefs keep cooking without interruption!
+3. **The Load Balancer (The Front Door Host / Maitre D'):**
+   - If 1,000 hungry customers arrive at once, they will all rush toward Cashier #1 while Cashiers 2–10 stand empty.
+   - The Load Balancer stands at the entrance, greeting each incoming customer and steering them evenly across the counters (**Round Robin** or **Least Busy**), preventing bottlenecks.
+4. **Caching (The Heated Warmer Rack):**
+   - A customer orders french fries. Do you peel a raw potato, chop it, and deep fry it from scratch every time (a slow database disk read taking 200ms)?
+   - No! You fry 50 batches ahead of time and keep them in a heated warmer bin within arm's reach (Redis in-memory RAM cache). When the customer asks, you hand them fries in **1 millisecond**!
+5. **Database Sharding (Splitting up the Storage Pantry):**
+   - When you have 50 million recipe cards, keeping them all in 1 filing cabinet causes chefs to bump into each other. You split the pantry into Shard A (ingredients for customers with last names A–M) and Shard B (customers N–Z).
+6. **Asynchronous Message Queue (The Order Carousel):**
+   - The cashier does not scream orders into the kitchen while the cooks are holding hot pans. The cashier clips the order ticket to a spinning carousel (**RabbitMQ / Kafka**). The kitchen picks tickets up at their own safe pace. If the kitchen gets backed up, orders queue safely on the carousel without dropping.
+
+---
+
+## 2. The 5 Core Building Blocks
+
+| Term | What It Means | Real-World Analogy |
+| :--- | :--- | :--- |
+| **Horizontal vs Vertical Scaling** | Vertical adds more CPU/RAM to 1 machine. Horizontal adds more machines to a cluster behind a load balancer. | Buying a bigger moving truck vs hiring a fleet of 10 standard delivery vans. |
+| **Load Balancer (L4 vs L7)** | Reverse proxy that distributes incoming traffic across backend service instances. L4 routes at TCP port level; L7 routes by HTTP URL path / headers. | L4 is a parking attendant directing cars to open parking lanes. L7 is a receptionist reading the recipient name on an envelope before routing. |
+| **In-Memory Cache (Redis)** | Ultra-fast RAM storage ($\mathcal{O}(1)$ sub-millisecond) storing frequently read data to protect the relational database from being crushed. | Keeping your car keys in a dish on the hallway table instead of searching the attic storage bins every morning. |
+| **Database Replication & Sharding** | Replication creates read-only copies of the database to handle heavy read traffic. Sharding splits large tables across multiple database machines by shard key. | Replication is printing 10,000 copies of a morning newspaper. Sharding is splitting a giant dictionary into Volume 1 (A-M) and Volume 2 (N-Z). |
+| **Content Delivery Network (CDN)** | A globally distributed network of edge cache servers (Cloudflare, Akamai, AWS CloudFront) caching images, videos, and static assets physically close to users. | Putting neighborhood vending machines on every street corner so people don't have to walk to the central bottling factory for a soda. |
+
+---
+
+## 3. Beginner Code Walkthrough: Scalable Architecture & The Cache-Aside Pattern
+
+### Visual Architecture Flow of a Modern Scalable Platform
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                             MODERN SCALABLE WEB ARCHITECTURE                             │
+│                                                                                          │
+│  [ Client Browser / Mobile ] ──► [ Global Anycast DNS ] ──► [ CDN: Cloudflare / CloudFront]
+│                                                                (Static Assets: 5ms)      │
+│                                                                        │                 │
+│                                                          (API Traffic) │                 │
+│                                                                        ▼                 │
+│                                                            [ Load Balancer: ALB / Nginx ]
+│                                                                        │                 │
+│                                   ┌────────────────────────────────────┴──────────┐      │
+│                                   ▼                                               ▼      │
+│                        [ App Pod 1 (Stateless) ]                       [ App Pod 2 ]     │
+│                                   │                                               │      │
+│                    ┌──────────────┴───────────────┐                               │      │
+│                    ▼                              ▼                               ▼      │
+│          [ Redis Cache Cluster ]       [ Primary DB (Writes) ] ──Replication──► [ Read ] │
+│             (RAM Lookups: 1ms)            (PostgreSQL / MySQL)                   (Replica)
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Clean Implementation: Cache-Aside Pattern (Spring Boot 3 + Redis)
+
+```java
+package com.example.systemdesign.service;
+
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+
+@Service
+public class ProductCatalogService {
+
+    private final ProductRepository productRepository; // Relational DB (PostgreSQL)
+    private final RedisTemplate<String, ProductDTO> redisTemplate; // In-Memory Cache (Redis)
+
+    public ProductCatalogService(ProductRepository productRepository, 
+                                 RedisTemplate<String, ProductDTO> redisTemplate) {
+        this.productRepository = productRepository;
+        this.redisTemplate = redisTemplate;
+    }
+
+    public ProductDTO getProductById(Long productId) {
+        String cacheKey = "product:" + productId;
+
+        // 🌟 Trainer Rule 1: Step 1: Check In-Memory Cache first (Sub-millisecond RAM read)
+        ProductDTO cachedProduct = redisTemplate.opsForValue().get(cacheKey);
+        if (cachedProduct != null) {
+            // CACHE HIT! Return immediately without touching the slow disk database!
+            return cachedProduct;
+        }
+
+        // 🌟 Trainer Rule 2: Step 2: CACHE MISS! Query relational database
+        ProductDTO dbProduct = productRepository.findById(productId)
+            .map(p -> new ProductDTO(p.getId(), p.getName(), p.getPrice()))
+            .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+
+        // 🌟 Trainer Rule 3: Step 3: Populate cache with a strict TTL (Time-To-Live)!
+        // NEVER store cache keys forever without expiration; TTL prevents memory leaks & stale data!
+        redisTemplate.opsForValue().set(cacheKey, dbProduct, Duration.ofMinutes(15));
+
+        return dbProduct;
+    }
+
+    public void updateProductPrice(Long productId, Double newPrice) {
+        // 🌟 Trainer Rule 4: Cache Invalidation Strategy
+        // Update database first, then immediately EVICT the stale cache key!
+        productRepository.updatePrice(productId, newPrice);
+        redisTemplate.delete("product:" + productId);
+    }
+}
+
+record ProductDTO(Long id, String name, Double price) {}
+```
+
+---
+
+## 4. What Happens When Things Break? (Top 3 Production Disasters)
+
+1. **The Cache Stampede (Thundering Herd Problem):**
+   - **What happens:** A hot product key (e.g. `product:iphone-17`) expires from Redis at 12:00:00 AM. At that exact millisecond, 50,000 concurrent user requests experience a Cache Miss simultaneously. All 50,000 threads execute the heavy database query at once, spiking database CPU to 100% and taking down the entire platform!
+   - **Fix:** Use a Distributed Mutex Lock (via Redis `SETNX`) so only 1 thread queries the database and warms the cache while other threads wait briefly, OR implement Probabilistic Early Expiration (XFetch algorithm).
+2. **Cascading Failure Across Synchronous Microservices:**
+   - **What happens:** Service A synchronously calls Service B; Service B calls Service C. Service C experiences a slow database lock and takes 10 seconds per response. Threads in Service B pile up and block; Service A runs out of HTTP worker threads; the API Gateway runs out of sockets. A slowdown in a tiny leaf service cascades and collapses the entire company!
+   - **Fix:** Implement **Circuit Breakers** (Resilience4j) with fast-failing timeouts, and decouple downstream services using asynchronous message queues.
+3. **The Split-Brain Syndrome in Clustered Databases:**
+   - **What happens:** A temporary network cable disconnect occurs between Data Center East and Data Center West. Nodes in West cannot communicate with East. Both sides believe the other side is dead; both elect their own Primary node and begin accepting new customer writes. When the network reconnects, both nodes have conflicting data that cannot be automatically merged!
+   - **Fix:** Enforce an odd number of consensus voting nodes (Quorum: $N/2 + 1$) via Raft or Paxos (e.g. ZooKeeper, etcd).
+
+---
+
+## 5. Top 5 Beginner Mistakes in Production
+
+1. **Building Stateful Microservices (Storing Sessions in Server RAM):**
+   Saving a user's login session inside Tomcat's local memory. If the Load Balancer routes the user's second click to Server #2, the user is abruptly logged out! **Fix:** Keep application servers 100% stateless; store sessions in external Redis or use signed JWT tokens.
+2. **Not Knowing the Read-to-Write Ratio:**
+   Designing a read-heavy system (e.g. Twitter: 100 reads for every 1 tweet write) using heavy write-optimized architectures, or designing a write-heavy telemetry system (e.g. IoT sensors: 10,000 writes/sec) with relational tables and 15 indexes that slow down every insert.
+3. **Single Point of Failure (SPOF) Blindness:**
+   Drawing 10 application pods in the architecture diagram, but having all of them connect to a single standalone PostgreSQL instance running on one server with no automated failover replica. If that one server dies, your 10 pods are useless.
+4. **Synchronous Chaining Instead of Asynchronous Events:**
+   When a user clicks "Place Order", the code synchronously calls: Payment Service, Inventory Service, Email Service, Warehouse Service, and Analytics Service in one single HTTP request. If the Email Service takes 4 seconds, the user waits 5 seconds! **Fix:** Publish an `OrderPlacedEvent` to Kafka and let Email and Analytics process in the background.
+5. **Premature Sharding:**
+   Trying to shard databases when the total dataset is only 50 GB. Modern PostgreSQL on a modern cloud server can easily handle 2 TB of data and 20,000 queries per second with proper indexing and read replicas. Sharding adds immense architectural complexity (cross-shard joins, distributed transactions) and should be delayed until truly necessary.
+
+---
+
+## 6. Top 10 Junior Interview Questions (With "Explain Like I'm 5" Answers)
+
+### Q1: What is the difference between Horizontal Scaling and Vertical Scaling?
+- **ELI5 Answer:** *"Vertical scaling is buying a bigger backpack to carry more books. Horizontal scaling is hiring 5 friends who each wear a backpack and walk beside you."*
+- **Technical Answer:** *"Vertical scaling (Scaling Up) means adding more computing power (CPU cores, RAM, disk I/O) to an existing single machine. It has physical hardware limits and introduces a Single Point of Failure. Horizontal scaling (Scaling Out) means adding more commodity server nodes to a distributed cluster behind a load balancer, providing virtually unlimited elasticity and fault tolerance."*
+
+### Q2: What is a Load Balancer and how does Round Robin differ from Least Connections?
+- **ELI5 Answer:** *"A teacher handing out cards. Round Robin gives 1 card to Student 1, then Student 2, then Student 3 in a circle. Least Connections looks around the room and hands the card to whoever currently has their hands free."*
+- **Technical Answer:** *"A Load Balancer distributes incoming network traffic across a pool of backend servers to ensure no single server is overwhelmed. Round Robin distributes requests sequentially in circular order without considering server load. Least Connections checks active TCP socket connections on each server and routes new requests to the server with the fewest active requests, making it superior for requests with varying execution times."*
+
+### Q3: What is the difference between Layer 4 (L4) and Layer 7 (L7) load balancing?
+- **ELI5 Answer:** *"L4 is a traffic cop directing cars by looking only at the color and shape of the car. L7 is an airport customs officer opening the trunk and reading the shipping paperwork before deciding which gate to open."*
+- **Technical Answer:** *"Layer 4 load balancing operates at the Transport Layer (TCP/UDP) routing packets purely by source/destination IP and port without inspecting message content; it is extremely fast and lightweight (e.g. AWS NLB). Layer 7 load balancing operates at the Application Layer (HTTP/HTTPS), parsing HTTP headers, cookies, and URL paths (e.g. routing `/api/users` to User Service and `/api/video` to Video Service), enabling advanced content-based routing and TLS termination (e.g. AWS ALB, Nginx)."*
+
+### Q4: How does Caching work, and what is the Cache-Aside pattern?
+- **ELI5 Answer:** *"Checking your pocket for money before walking all the way to the bank vault downtown. If your pocket is empty, you go to the bank once, put cash in your pocket, and remember it for next time."*
+- **Technical Answer:** *"Caching stores high-frequency data in fast in-memory RAM (Redis/Memcached). In the Cache-Aside pattern (Lazy Loading), the application checks the cache first. On a Cache Hit, it returns data in ~1ms. On a Cache Miss, it reads from the relational database, writes the result to the cache with a Time-To-Live (TTL), and returns data to the client."*
+
+### Q5: What is the difference between Database Replication and Database Sharding?
+- **ELI5 Answer:** *"Replication is printing 100 identical copies of a school textbook so 100 students can read simultaneously. Sharding is tearing a 1,000-page book into 5 separate chapters so each chapter is small enough to carry in your pocket."*
+- **Technical Answer:** *"Replication copies the exact same entire dataset across multiple nodes (Primary for writes, Replicas for reads), scaling read throughput and providing failover high availability. Sharding (Horizontal Partitioning) divides a giant table into smaller subsets called shards distributed across multiple database machines based on a Shard Key (e.g. `user_id % 4`), scaling both write throughput and storage capacity."*
+
+### Q6: What is the CAP Theorem, and why can you never have C, A, and P all at the same time?
+- **ELI5 Answer:** *"A telephone game between two friends in different rooms. If the telephone wire is cut (Partition), you must choose: either refuse to answer any questions to avoid lying (Consistency), or keep answering questions even if your answers are out of date (Availability). You cannot do both!"*
+- **Technical Answer:** *"The CAP theorem states that a distributed data store can guarantee at most two out of three properties simultaneously: Consistency (every read receives the most recent write or an error), Availability (every non-failing node returns a response), and Partition Tolerance (the system operates despite arbitrary network message loss). Because network partitions ($P$) are physically unavoidable in real-world distributed networks, systems must trade off between $CP$ (Consistency over Availability, e.g. HBase, ZooKeeper) and $AP$ (Availability over Consistency, e.g. Cassandra, DynamoDB)."*
+
+### Q7: What is a Content Delivery Network (CDN) and why is it used?
+- **ELI5 Answer:** *"Instead of ordering a pizza from Italy and waiting 12 hours for a cargo plane, a local pizzeria in your neighborhood delivers it in 15 minutes."*
+- **Technical Answer:** *"A Content Delivery Network (CDN) is a geographically distributed network of Point of Presence (PoP) edge proxy servers that cache static and semi-static assets (images, CSS, JavaScript, video segments) geographically close to end users. It reduces round-trip network latency (RTT), offloads 80%+ of bandwidth from origin servers, and provides DDoS mitigation."*
+
+### Q8: What is the difference between Synchronous and Asynchronous communication?
+- **ELI5 Answer:** *"Synchronous is a live phone call: you say hello and wait holding the phone to your ear until the other person replies. Asynchronous is sending a text message: you send it, put your phone in your pocket, and do your chores until you get a beep."*
+- **Technical Answer:** *"In Synchronous communication (REST HTTP, gRPC), the calling thread blocks and waits for the recipient to process the request and return a response. In Asynchronous communication (Kafka, RabbitMQ, SQS), the sender publishes a message or event to a broker and immediately resumes execution without waiting for consumers to finish, maximizing throughput and decoupling system dependencies."*
+
+### Q9: What is the Circuit Breaker pattern?
+- **ELI5 Answer:** *"The electrical breaker box in your house. If a lamp starts sparking, the switch trips and shuts off power to that one room so the entire house doesn't burn down."*
+- **Technical Answer:** *"A Circuit Breaker (e.g. Resilience4j) wraps remote network calls to prevent cascading failures. It monitors failure rates across 3 states: `CLOSED` (normal operation), `OPEN` (calls fail instantly without attempting the remote network call once failure thresholds are breached, protecting both the caller and the struggling service), and `HALF-OPEN` (periodically testing if the downstream service has recovered before resetting to `CLOSED`)."*
+
+### Q10: How do you design a stateless application tier?
+- **ELI5 Answer:** *"A public laundromat washing machine. The machine doesn't care whose clothes it washed 5 minutes ago; every time you put a quarter in, it just washes whatever is inside and forgets you as soon as you open the door."*
+- **Technical Answer:** *"A stateless application server stores zero client session data, user state, or temporary files in local memory or local disk. Every client request contains all the necessary credentials and context (e.g. via signed JWT tokens or cookies). Shared state (user profiles, carts) is stored in a centralized, external datastore (Redis cluster or database). This allows any server pod to handle any incoming request and enables instant horizontal auto-scaling."*
+
+---
+
+# TRACK 2: ADVANCED SYSTEM DESIGN & ENTERPRISE ARCHITECT MASTERCLASS
 
 # 🧠 Phase 0: The Senior Architect Mental Model & Trade-Offs
 
