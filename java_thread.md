@@ -18,6 +18,54 @@
 
 ---
 
+## 🛠️ Prerequisites & Foundational Knowledge
+
+Before mastering Java multithreading and concurrency, engineers must understand the low-level operating system and hardware mechanics governing concurrent execution:
+
+### 1. Operating System Kernel Scheduling & Preemption
+- **Kernel Threads**: Schedulable entities managed directly by the OS kernel. Modern operating systems use preemptive multitasking, allocating time slices (quantums ~10ms–100ms) to runnable threads based on priority and CFS (Completely Fair Scheduler on Linux).
+- **Context Switch Overhead**: When a CPU core switches from Thread A to Thread B:
+  1. Saves CPU registers, program counter, and stack pointer to Thread A's Thread Control Block (TCB).
+  2. Flushes CPU instruction pipelines and invalidates Translation Lookaside Buffers (TLB).
+  3. Loads Thread B's TCB state into hardware registers.
+  *Cost*: A context switch consumes 1–5 microseconds and causes cache pollution, making thread over-subscription detrimental to throughput.
+
+### 2. Multi-Core Architecture, CPU Caches & MESI Protocol
+Modern processors use multi-level memory hierarchies:
+```
++-------------------------------------------------------------+
+|                      Main Memory (RAM)                      |
++-------------------------------------------------------------+
+                              ▲
+                              │ (~50-100ns latency)
++-------------------------------------------------------------+
+|                    Shared L3 Cache (~10-20ns)               |
++-------------------------------------------------------------+
+               ▲                               ▲
+               │                               │
++-----------------------------+ +-----------------------------+
+|     L2 Cache Core 0 (~4ns)  | |     L2 Cache Core 1 (~4ns)  |
++-----------------------------+ +-----------------------------+
+               ▲                               ▲
++-----------------------------+ +-----------------------------+
+|     L1 Data / Inst Core 0   | |     L1 Data / Inst Core 1   |
+|         (~1ns, 64KB)        | |         (~1ns, 64KB)        |
++-----------------------------+ +-----------------------------+
+```
+- **MESI Cache Coherence Protocol**: CPU caches transfer data in 64-byte chunks called **Cache Lines**. Cache lines exist in one of four states: **M**odified, **E**xclusive, **S**hared, or **I**nvalid.
+- **Cache Line False Sharing**: Occurs when two independent variables accessed by different CPU cores reside on the same 64-byte cache line. Writing to one variable invalidates the other core's cache line, causing devastating CPU bus stalls.
+
+### 3. The Java Memory Model (JMM) & Happens-Before Specification
+Because compilers and out-of-order CPU execution pipelines reorder instructions for efficiency, the JMM (JSR-133) provides formal memory visibility guarantees called **Happens-Before**:
+- If Action A *happens-before* Action B, the memory effects of Action A are guaranteed to be visible to Action B.
+- **Primary Happens-Before Rules**:
+  1. **Program Order Rule**: Each action in a single thread happens-before any subsequent action in that thread.
+  2. **Monitor Lock Rule**: An unlock on a monitor happens-before every subsequent lock on that same monitor.
+  3. **Volatile Variable Rule**: A write to a `volatile` field happens-before every subsequent read of that same field.
+  4. **Thread Start Rule**: A call to `Thread.start()` happens-before any action in the started thread.
+  5. **Thread Termination Rule**: Any action in a thread happens-before any other thread successfully returns from `thread.join()`.
+  6. **Transitivity**: If A happens-before B, and B happens-before C, then A happens-before C.
+
 ---
 
 # TRACK 1: THE JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)
@@ -180,7 +228,270 @@ public class ThreadPoolDemo {
 
 ---
 
+# TRACK 2: MASTER CONCURRENCY & THREADING PRIMITIVES CATALOG
+
+```
+Java Concurrency Primitives Feature Matrix:
++--------------------------+-----------------------+---------------------+-------------------------------+
+| Primitive                | Primary Use Case      | Blocking Mechanism  | Contention Overhead           |
++--------------------------+-----------------------+---------------------+-------------------------------+
+| Platform Thread          | Long CPU-bound tasks  | OS Kernel Sleep     | Heavy (~1MB stack, context-sw)|
+| Virtual Thread (Java 21) | High-concurrency I/O  | JVM Continuation    | Ultra-light (~1KB, user-space)|
+| synchronized block       | Critical sections     | JVM Object Monitor  | Medium (CAS -> Heavy OS lock) |
+| ReentrantLock            | Timed/interruptible   | LockSupport.park()  | Highly scalable AQS           |
+| StampedLock              | Read-dominated state  | Optimistic validation| Near-zero for optimistic reads|
+| Atomic Variables         | Single counters/refs  | Hardware CPU CAS    | Cache invalidation on writes  |
+| LongAdder                | High-write statistics | Cell Striping (CAS) | Near-zero (distributes writes)|
+| CompletableFuture        | Async DAG workflows   | Non-blocking callback| Depends on ForkJoinPool sizing|
+| StructuredTaskScope      | Coordinated subtasks  | Join / Cancel Scope | Bounded lifecycle user-space  |
+| ConcurrentHashMap        | Thread-safe key-value | CAS + Bucket Locks  | Lock-free reads, stripe writes|
++--------------------------+-----------------------+---------------------+-------------------------------+
+```
+
 ---
+
+### 2.1 Platform Threads & Thread Lifecycle (`Thread`, Daemon, UncaughtExceptionHandler)
+- **Deep Overview**: A 1:1 mapping to native OS kernel threads. Threads progress through 6 states: `NEW`, `RUNNABLE`, `BLOCKED` (waiting for monitor lock), `WAITING` (`wait()`, `join()`, `park()`), `TIMED_WAITING` (`sleep()`, timed park), and `TERMINATED`. Daemon threads do not prevent JVM shutdown.
+- **Pros**: Direct CPU core utilization; predictable scheduling for CPU-intensive mathematics, video encoding, or crypto.
+- **Cons**: 1MB stack memory reservation; expensive OS context switches; caps concurrency at ~5,000–10,000 threads per JVM.
+- **Hard Limits & Gotchas**: Exceeding OS thread limits causes `OutOfMemoryError: unable to create new native thread`. Uncaught exceptions silently terminate the thread unless an `UncaughtExceptionHandler` is attached.
+- **Production Code Blueprint**:
+```java
+Thread thread = new Thread(() -> {
+    log.info("Executing task on: {}", Thread.currentThread().getName());
+}, "worker-order-processor-01");
+
+thread.setDaemon(false);
+thread.setPriority(Thread.NORM_PRIORITY);
+thread.setUncaughtExceptionHandler((t, ex) -> {
+    log.error("CRITICAL: Uncaught exception on thread {}:", t.getName(), ex);
+    MetricsRegistry.incrementThreadCrashCounter();
+});
+thread.start();
+```
+
+---
+
+### 2.2 Java 21+ Virtual Threads (Project Loom, Carrier Threads & Pinning)
+- **Deep Overview**: User-space lightweight threads multiplexed over a small pool of OS carrier threads (sized to `Runtime.getRuntime().availableProcessors()`). When a virtual thread blocks on socket or file I/O, the JVM unmounts its continuation from the carrier thread, preserving the call stack in heap memory and assigning the carrier to another virtual thread.
+- **Pros**: Supports 1,000,000+ concurrent threads; synchronous blocking code styles execute with reactive-like scalability; eliminates reactive callback hell.
+- **Cons**: Not suited for long CPU-intensive computations (which hog carrier threads).
+- **Hard Limits & Gotchas**: **Thread Pinning**: Entering a `synchronized` block or executing native JNI methods pins the virtual thread to its carrier thread, preventing unmounting during blocking I/O! Always replace `synchronized` with `ReentrantLock` in virtual thread codebases.
+- **Production Code Blueprint**:
+```java
+// ExecutorService spawning unbounded virtual threads on demand
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    IntStream.range(0, 100_000).forEach(i -> executor.submit(() -> {
+        // Safe blocking call: Carrier thread unmounts immediately!
+        HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    }));
+} // Automatically awaits completion of all subtasks upon exit
+```
+
+---
+
+### 2.3 Synchronization & Object Monitors (`synchronized`, `wait()`, `notifyAll()`)
+- **Deep Overview**: Built-in JVM language-level monitor locking based on object headers (Mark Word). Undergoes lock inflation: Unlocked $\rightarrow$ Lightweight Lock (CAS on thread stack) $\rightarrow$ Heavyweight Monitor (`ObjectMonitor` managed by OS mutex).
+- **Pros**: Automatic lock acquisition and release across exception exits; clean syntax.
+- **Cons**: No timed try-lock; non-interruptible; unfair scheduling; causes carrier thread pinning with Virtual Threads.
+- **Hard Limits & Gotchas**: Never call `notify()` when multiple threads wait on different conditions; always use `notifyAll()` inside a `while (!condition)` check to guard against spurious wakeups.
+- **Production Code Blueprint**:
+```java
+public class BoundedBlockingQueue<T> {
+    private final Queue<T> queue = new LinkedList<>();
+    private final int capacity;
+
+    public BoundedBlockingQueue(int capacity) { this.capacity = capacity; }
+
+    public synchronized void put(T item) throws InterruptedException {
+        while (queue.size() == capacity) {
+            wait(); // Always wait inside a while loop!
+        }
+        queue.add(item);
+        notifyAll();
+    }
+
+    public synchronized T take() throws InterruptedException {
+        while (queue.isEmpty()) {
+            wait();
+        }
+        T item = queue.poll();
+        notifyAll();
+        return item;
+    }
+}
+```
+
+---
+
+### 2.4 Advanced Locks & Conditions (`ReentrantLock`, `StampedLock`, `Condition`)
+- **Deep Overview**: Explicit locks built on AbstractQueuedSynchronizer (AQS). Supports fair/unfair queuing, timed attempts (`tryLock(timeout)`), interruptible acquisition, and separate condition variables (`notFull`, `notEmpty`). `StampedLock` provides optimistic read validation without acquiring memory barriers if no write occurred.
+- **Pros**: Eliminates carrier thread pinning in Java 21; fine-grained control; optimistic read modes yield 5x higher throughput.
+- **Cons**: Requires strict manual lock release in a `finally` block to prevent permanent lock leaks.
+- **Production Code Blueprint**:
+```java
+public class HighThroughputPointRegistry {
+    private double x, y;
+    private final StampedLock sl = new StampedLock();
+
+    public void move(double deltaX, double deltaY) {
+        long stamp = sl.writeLock();
+        try {
+            x += deltaX;
+            y += deltaY;
+        } finally {
+            sl.unlockWrite(stamp);
+        }
+    }
+
+    public double distanceFromOrigin() {
+        long stamp = sl.tryOptimisticRead(); // Completely lock-free read!
+        double curX = x, curY = y;
+        if (!sl.validate(stamp)) { // Check if a write lock occurred concurrently
+            stamp = sl.readLock(); // Fallback to pessimistic read lock
+            try {
+                curX = x;
+                curY = y;
+            } finally {
+                sl.unlockRead(stamp);
+            }
+        }
+        return Math.hypot(curX, curY);
+    }
+}
+```
+
+---
+
+### 2.5 Atomic Variables & Hardware CAS (`AtomicReference`, `LongAdder`, `VarHandle`)
+- **Deep Overview**: Implements lock-free synchronization via CPU atomic instructions (e.g., `LOCK CMPXCHG` on x86). `LongAdder` eliminates memory bus contention by striping writes across an array of internal cell counters, merging them only on `sum()`.
+- **Pros**: Zero thread suspension; zero context-switch overhead; high performance under moderate contention.
+- **Cons**: Under extreme multi-threaded write contention, standard `AtomicInteger.incrementAndGet()` spins continuously in a CAS loop, burning 100% CPU.
+- **Production Code Blueprint**:
+```java
+public class HighConcurrencyMetricsCollector {
+    // Distributes counter writes across CPU cores to avoid cache-line bouncing
+    private final LongAdder requestCount = new LongAdder();
+    private final AtomicReference<SystemState> currentState = 
+        new AtomicReference<>(SystemState.HEALTHY);
+
+    public void recordRequest() {
+        requestCount.increment(); // 10x faster than AtomicLong under high thread contention
+    }
+
+    public boolean transitionState(SystemState expected, SystemState newState) {
+        return currentState.compareAndSet(expected, newState);
+    }
+}
+```
+
+---
+
+### 2.6 ThreadPoolExecutor & WorkStealingPool (Sizing, Queues & Rejection Policies)
+- **Deep Overview**: Manages a pool of reusable worker threads. Parameters: `corePoolSize`, `maximumPoolSize`, `keepAliveTime`, `workQueue` (`BlockingQueue`), and `RejectedExecutionHandler`.
+- **Pros**: Reuses threads; bounds system memory; queues burst traffic.
+- **Cons**: Misconfiguration causes cascading latency spikes or OOM crashes.
+- **Hard Limits & Gotchas**: Never use `Executors.newFixedThreadPool()` or `newCachedThreadPool()` in production! They use unbounded `LinkedBlockingQueue` (which overflows heap) or unbounded threads (which crashes OS). Always instantiate `ThreadPoolExecutor` directly with bounded queues.
+- **Production Code Blueprint**:
+```java
+int cpuCores = Runtime.getRuntime().availableProcessors();
+ThreadPoolExecutor executor = new ThreadPoolExecutor(
+    cpuCores,                          // Core threads kept alive
+    cpuCores * 2,                      // Max threads during traffic spikes
+    60L, TimeUnit.SECONDS,             // Idle thread keep-alive
+    new ArrayBlockingQueue<>(5_000),   // Strictly bounded queue!
+    new ThreadFactoryBuilder().setNameFormat("order-exec-%d").build(),
+    new ThreadPoolExecutor.CallerRunsPolicy() // Backpressure: Calling thread executes task if full
+);
+```
+
+---
+
+### 2.7 Coordination Primitives (CountDownLatch, CyclicBarrier, Semaphore, Phaser)
+- **`CountDownLatch`**: One-shot gate. Threads wait until count reaches 0 via `countDown()`. Ideal for service startup initialization.
+- **`CyclicBarrier`**: Reusable synchronization point where a fixed set of threads wait for each other before proceeding in cyclic computational phases.
+- **`Semaphore`**: Manages a set of permits. Used to implement concurrency limiters (e.g., max 50 concurrent database connections).
+- **`Phaser`**: Flexible, reusable barrier supporting dynamic addition and departure of registered parties across multiple execution phases.
+- **Production Code Blueprint**:
+```java
+// Service Startup Gate
+CountDownLatch startupLatch = new CountDownLatch(3);
+
+executor.submit(() -> { initDatabase(); startupLatch.countDown(); });
+executor.submit(() -> { initKafka(); startupLatch.countDown(); });
+executor.submit(() -> { initCache(); startupLatch.countDown(); });
+
+// Block main thread up to 15 seconds for all services to initialize
+if (!startupLatch.await(15, TimeUnit.SECONDS)) {
+    throw new SystemBootException("System startup timed out waiting for dependent subsystems!");
+}
+```
+
+---
+
+### 2.8 CompletableFuture & Asynchronous Pipelines
+- **Deep Overview**: Implements monadic, non-blocking asynchronous programming (`Future` + `CompletionStage`). Chained via `.thenApply()`, `.thenCompose()`, `.thenCombine()`, and `.exceptionally()`.
+- **Pros**: Declarative async DAG pipelines; combines multiple concurrent HTTP/DB calls without blocking threads.
+- **Cons**: Exceptions must be handled explicitly inside `.exceptionally()` or `.handle()`, otherwise failures fail silently.
+- **Production Code Blueprint**:
+```java
+CompletableFuture<User> userFuture = CompletableFuture.supplyAsync(
+    () -> userClient.fetchUser(userId), executor
+);
+CompletableFuture<List<Order>> ordersFuture = CompletableFuture.supplyAsync(
+    () -> orderClient.fetchOrders(userId), executor
+);
+
+// Combine both results asynchronously when both complete
+CompletableFuture<DashboardDto> dashboardFuture = userFuture.thenCombine(ordersFuture, 
+    (user, orders) -> new DashboardDto(user, orders)
+).orTimeout(3, TimeUnit.SECONDS) // Enforce hard deadline SLA
+ .exceptionally(ex -> {
+     log.error("Failed to build dashboard for user: {}", userId, ex);
+     return DashboardDto.emptyFallback(userId);
+ });
+```
+
+---
+
+### 2.9 Structured Concurrency & Scoped Values (`StructuredTaskScope`, `ScopedValue`)
+- **Deep Overview**: Introduced in Java 21+. Structured Concurrency treats multiple concurrent subtasks running in separate threads as a single unit of work, ensuring child threads cannot outlive the parent task scope. `ScopedValue` replaces `ThreadLocal` with immutable, securely inherited context bindings.
+- **Pros**: Guarantees zero orphan threads; automatic cancellation propagation; 100% thread-dump readability (nested tree format).
+- **Production Code Blueprint**:
+```java
+// Java 21 Structured Concurrency
+public Response fetchUserData(String userId) throws Exception {
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        Subtask<UserProfile> profileTask = scope.fork(() -> userClient.getProfile(userId));
+        Subtask<UserBalance> balanceTask = scope.fork(() -> accountClient.getBalance(userId));
+
+        scope.join();           // Join both subtasks
+        scope.throwIfFailed();  // Propagate first failure immediately, cancelling the other!
+
+        return new Response(profileTask.get(), balanceTask.get());
+    } // Both child virtual threads are guaranteed terminated here!
+}
+```
+
+---
+
+### 2.10 Concurrent Collections (`ConcurrentHashMap`, `CopyOnWriteArrayList`, `BlockingQueue`)
+- **`ConcurrentHashMap`**: Lock-free reads via volatile node pointers; fine-grained bucket synchronization during mutations; auto-resizes concurrently without blocking readers.
+- **`CopyOnWriteArrayList`**: Modifies a fresh clone of the backing array on every write. $O(1)$ lock-free volatile reads; perfect for read-heavy observer lists and configuration registries.
+- **`BlockingQueue`**: Producer-consumer conduits (`ArrayBlockingQueue`, `LinkedBlockingQueue`, `PriorityBlockingQueue`).
+- **Production Code Blueprint**:
+```java
+ConcurrentMap<String, UserSession> sessionRegistry = new ConcurrentHashMap<>();
+
+// Atomic computeIfAbsent: Guarantees compute function runs exactly once per key
+UserSession session = sessionRegistry.computeIfAbsent(sessionId, id -> {
+    return authService.authenticateAndBuildSession(id);
+});
+```
+
+---
+
+# TRACK 3: PRODUCTION CONCURRENCY SCENARIOS MASTERCLASS (SCENARIOS 1–100+)
 
 ## 🚀 Modern Java Concurrency (Java 21+)
 
@@ -4869,6 +5180,8 @@ The scenarios progress from basic threading concepts to advanced concurrent prog
 * **Correct Choice:** `Semaphore(100)` with a background scheduled thread that releases all permits once per second.
 
 ---
+
+# TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (SENIOR & PRINCIPAL CONCURRENCY SCENARIOS)
 
 ## 🎓 Senior Multithreading Interview Preparation & Scenario Q&A
 

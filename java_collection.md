@@ -50,6 +50,31 @@ LinkedList (Fragmented Heap - Cache Misses):
 
 ---
 
+## 🛠️ Prerequisites & Foundational Knowledge
+
+Before mastering the Java Collections Framework (JCF) and Stream API, developers must understand the foundational computer science and hardware memory architecture concepts:
+
+### 1. Memory Hierarchy & CPU Cache Lines
+- **Contiguous Array Memory**: Elements in an array are stored in consecutive physical RAM addresses. When a thread reads `array[i]`, the CPU hardware prefetcher loads the surrounding 64-byte **Cache Line** into L1/L2 cache, enabling ultra-low-latency ($O(1)$) iteration.
+- **Pointer-Chasing Overhead**: Linked structures (`LinkedList`, tree nodes) allocate small isolated objects scattered across the JVM heap. Traversing next/prev pointers incurs repeated CPU L1/L2 cache misses, stalling the CPU memory bus for 50–100ns per node traversal.
+
+### 2. Hash Functions & Modulo Arithmetic
+- **The Hash Contract**: A hash function converts an arbitrary object into a 32-bit signed integer (`int hashCode()`).
+- **Bitwise Bucket Indexing**: In `HashMap`, bucket index is calculated via bitwise AND with a power-of-two capacity:
+  $$\text{index} = (n - 1) \ \& \ \text{hash}$$
+  This bitwise mask is equivalent to $\text{hash} \pmod n$, executing in a single CPU instruction cycle ($<0.5\text{ns}$).
+- **Avalanche Effect & Perturbation Function**: To prevent lower-bit clustering when hash codes share common suffixes, Java 8 applies a bitwise XOR shift:
+  $$\text{hash} = h \ \hat{} \ (h >>> 16)$$
+
+### 3. Tree Balancing & Red-Black Invariants
+A Red-Black Tree is a self-balancing binary search tree ensuring $O(\log n)$ search, insert, and delete operations:
+1. Every node is either RED or BLACK.
+2. The root is always BLACK.
+3. No two consecutive RED nodes can exist on any path.
+4. Every path from root to null leaves must contain the exact same number of BLACK nodes (Black-Height invariant).
+
+---
+
 # TRACK 1: THE JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)
 
 ## 1. The 5 Core Building Blocks of Collections
@@ -200,6 +225,207 @@ public class CollectionsBasicsMasterclass {
 
 ---
 
+# TRACK 2: MASTER COLLECTIONS & STREAMS CATALOG
+
+```
+Java Collections Master Feature Matrix:
++--------------------------+-----------------------+---------------------+-------------------------------+
+| Collection               | Ordering Guarantee    | Lookup Complexity   | Thread Safety Model           |
++--------------------------+-----------------------+---------------------+-------------------------------+
+| ArrayList                | Insertion (Index 0..N)| O(1) by index       | Unsynchronized (Fail-Fast)    |
+| LinkedList               | Insertion (Doubly-link| O(N) linear scan    | Unsynchronized (Fail-Fast)    |
+| HashSet                  | None                  | O(1) average        | Unsynchronized (Fail-Fast)    |
+| LinkedHashSet            | Insertion / Access    | O(1) average        | Unsynchronized (Fail-Fast)    |
+| TreeSet                  | Natural / Comparator  | O(log N) Red-Black  | Unsynchronized (Fail-Fast)    |
+| HashMap                  | None                  | O(1) avg / O(log N) | Unsynchronized (Fail-Fast)    |
+| LinkedHashMap            | Insertion / Access    | O(1) avg / O(log N) | Unsynchronized (Fail-Fast)    |
+| TreeMap                  | Sorted Keys           | O(log N) Red-Black  | Unsynchronized (Fail-Fast)    |
+| ConcurrentHashMap        | None                  | O(1) lock-free read | Lock-Free CAS + Bucket Locks  |
+| PriorityQueue            | Heap Priority (Min/Max| O(1) peek / O(log N)| Unsynchronized (Fail-Fast)    |
+| ArrayDeque               | FIFO / LIFO           | O(1) head/tail      | Unsynchronized (Fail-Fast)    |
+| CopyOnWriteArrayList     | Insertion             | O(1) lock-free read | Copy-on-Write (Snapshot Iter) |
+| EnumSet / EnumMap        | Enum Ordinal          | O(1) bitwise / array| Unsynchronized (Fail-Fast)    |
+| SequencedCollection (J21)| Bidirectional Order   | O(1) first/last     | Inherits backing collection   |
++--------------------------+-----------------------+---------------------+-------------------------------+
+```
+
+---
+
+### 2.1 `ArrayList` vs `LinkedList` (Memory Layout, Cache Locality & Resizing)
+- **Deep Overview**: `ArrayList` is backed by a contiguous `Object[]` array. When capacity is exceeded, it expands by 50% ($1.5\times$ via `newCapacity = oldCapacity + (oldCapacity >> 1)`). `LinkedList` is a doubly-linked chain of `Node<E>` objects with `item`, `next`, and `prev` pointers.
+- **Pros**: `ArrayList` offers $O(1)$ random access, zero pointer overhead, and exceptional CPU L1/L2 cache prefetching.
+- **Cons**: `LinkedList` consumes 24 extra bytes of heap per node on 64-bit JVMs and causes constant CPU cache misses.
+- **Hard Limits & Gotchas**: Almost never use `LinkedList` in production! Even insertions in the middle of a list are faster in `ArrayList` up to 100,000 elements because CPU memory copying (`System.arraycopy`) in contiguous RAM is orders of magnitude faster than pointer-chasing through cache misses.
+- **Production Code Blueprint**:
+```java
+// Sizing ArrayList with initial capacity prevents expensive array copy reallocations
+List<OrderDto> orders = new ArrayList<>(expectedBatchSize);
+for (RawOrder raw : rawBatch) {
+    orders.add(transformer.toDto(raw));
+}
+```
+
+---
+
+### 2.2 `HashSet` vs `TreeSet` vs `LinkedHashSet`
+- **`HashSet`**: Backed by an internal `HashMap<E, Object>` with a dummy present value. Provides $O(1)$ add, remove, and contains, with zero ordering guarantee.
+- **`LinkedHashSet`**: Maintains a doubly-linked list running through all entries, guaranteeing deterministic **insertion-order iteration** with $O(1)$ performance.
+- **`TreeSet`**: Backed by a `NavigableMap` (`TreeMap`), maintaining elements sorted by `Comparable` natural order or a custom `Comparator` in $O(\log n)$ time.
+- **Hard Limits & Gotchas**: `TreeSet` uses `comparator.compare(a, b) == 0` (NOT `equals()`) to determine uniqueness! If `compare(a, b) == 0`, `TreeSet` rejects `b` even if `a.equals(b)` is false.
+- **Production Code Blueprint**:
+```java
+// Deduplicate user roles while preserving exact assignment order
+Set<Role> assignedRoles = new LinkedHashSet<>();
+assignedRoles.add(Role.USER);
+assignedRoles.add(Role.ADMIN);
+assignedRoles.add(Role.USER); // Rejected automatically, order preserved
+```
+
+---
+
+### 2.3 `HashMap` vs `TreeMap` vs `LinkedHashMap` (Collisions, Treeification & LRU Caches)
+- **`HashMap`**: Fast $O(1)$ hash table. Under hash collisions, buckets store elements as singly linked lists. When a bucket reaches 8 elements (`TREEIFY_THRESHOLD`) and capacity $\ge 64$, it converts into a Red-Black tree ($O(\log n)$) to prevent HashDoS attacks.
+- **`LinkedHashMap`**: Adds a doubly-linked list across entries. Can order by **insertion order** or **access order** (`accessOrder = true`), making it ideal for building LRU caches.
+- **`TreeMap`**: Red-Black tree providing $O(\log n)$ operations with range queries (`subMap`, `headMap`, `tailMap`).
+- **Production Code Blueprint (Thread-Safe LRU Cache)**:
+```java
+public class LruCache<K, V> extends LinkedHashMap<K, V> {
+    private final int maxCapacity;
+
+    public LruCache(int maxCapacity) {
+        super(maxCapacity, 0.75f, true); // true = Access-Order
+        this.maxCapacity = maxCapacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > maxCapacity;
+    }
+}
+```
+
+---
+
+### 2.4 `ConcurrentHashMap` (Hardware CAS, Bucket Locks & CounterCells)
+- **Deep Overview**: In Java 8+, `ConcurrentHashMap` eliminated segment locks.
+  1. **Lock-Free Reads**: Reads (`get()`) are completely lock-free; node references and values are marked `volatile`.
+  2. **CAS Insertion**: Inserts into empty bucket heads use hardware `CompareAndSwap` with zero locking.
+  3. **Synchronized Bucket Heads**: Collisions lock only the first `Node` in that specific bucket, allowing concurrent writes to all other buckets.
+  4. **Concurrent Resizing**: Multiple threads cooperate to migrate buckets during table expansion.
+- **Production Code Blueprint**:
+```java
+ConcurrentMap<String, AtomicLong> userAccessCounts = new ConcurrentHashMap<>();
+
+// Thread-safe atomic read-modify-write without external locking
+userAccessCounts.computeIfAbsent(userId, k -> new AtomicLong()).incrementAndGet();
+```
+
+---
+
+### 2.5 `PriorityQueue` & Binary Heaps
+- **Deep Overview**: An unbounded priority queue based on a balanced **Binary Min-Heap** stored in a flat array (`Object[] queue`). For any element at index $i$, its children reside at $2i + 1$ and $2i + 2$.
+- **Complexity**: $O(1)$ `peek()`, $O(\log n)$ `offer()` and `poll()`, $O(n)$ `contains()`.
+- **Hard Limits & Gotchas**: Unsynchronized and not thread-safe (use `PriorityBlockingQueue` for concurrent producers/consumers). Does not permit `null` elements.
+- **Production Code Blueprint**:
+```java
+// Max-Heap tracking Top-K highest-value transactions
+Queue<Transaction> topTransactions = new PriorityQueue<>(
+    Comparator.comparing(Transaction::amount).reversed()
+);
+```
+
+---
+
+### 2.6 `ArrayDeque` & Ring Buffers (Why `Stack` Is Deprecated)
+- **Deep Overview**: Resizable-array implementation of the `Deque` interface with head and tail pointers. Uses bitwise wrap-around masking (`(tail + 1) & (elements.length - 1)`).
+- **Why `Stack` Is Deprecated**: `java.util.Stack` extends `Vector`, which synchronizes every single operation on the object lock, introducing massive performance penalties.
+- **Pros**: Faster than `Stack` when used as a LIFO stack, and faster than `LinkedList` when used as a FIFO queue.
+- **Production Code Blueprint**:
+```java
+// High-performance LIFO stack
+Deque<String> callStack = new ArrayDeque<>();
+callStack.push("Frame1");
+callStack.push("Frame2");
+String top = callStack.pop();
+```
+
+---
+
+### 2.7 `CopyOnWriteArrayList` & `CopyOnWriteArraySet`
+- **Deep Overview**: Thread-safe variant of `List` in which all mutative operations (`add`, `set`, `remove`) make a fresh clone copy of the underlying array under a `ReentrantLock`.
+- **Pros**: Read operations never lock and iterate over an immutable snapshot, completely eliminating `ConcurrentModificationException`.
+- **Cons**: Write operations are extremely expensive ($O(n)$ array allocation and memory copy).
+- **Production Code Blueprint**:
+```java
+// Ideal for listener lists and infrequently updated configuration registries
+public class EventBus {
+    private final List<EventListener> listeners = new CopyOnWriteArrayList<>();
+
+    public void register(EventListener listener) { listeners.add(listener); }
+
+    public void emit(Event event) {
+        for (EventListener l : listeners) { l.onEvent(event); } // 100% lock-free iteration!
+    }
+}
+```
+
+---
+
+### 2.8 `EnumSet` & `EnumMap` (Bit Vector Mastery)
+- **Deep Overview**:
+  - `EnumSet`: Backed by a single 64-bit `long` primitive bitfield (`RegularEnumSet`) if the enum has $\le 64$ elements. Adding or testing membership is a single bitwise CPU instruction (`1L << ordinal()`).
+  - `EnumMap`: Backed by a flat array indexed directly by `enum.ordinal()`, with zero hashing and zero collisions.
+- **Pros**: Consumes a fraction of the memory of `HashSet`/`HashMap`; fastest possible collections in the JVM.
+- **Production Code Blueprint**:
+```java
+// Bit-vector permission flags
+Set<Permission> userPermissions = EnumSet.of(Permission.READ, Permission.WRITE);
+if (userPermissions.contains(Permission.ADMIN)) {
+    // Single bitwise check in 0.3ns!
+}
+```
+
+---
+
+### 2.9 Stream API Pipelines, Collectors & Parallel Processing
+- **Deep Overview**: Declarative data pipelines operating lazily over data sources.
+  - **Intermediate Operations**: Lazy (stateless: `filter`, `map`; stateful: `sorted`, `distinct`).
+  - **Terminal Operations**: Eager (`collect`, `reduce`, `forEach`, `findFirst`).
+  - **Spliterator**: Governs parallel partitioning across `ForkJoinPool.commonPool()`.
+- **Hard Limits & Gotchas**: Do NOT use `parallelStream()` for blocking I/O (HTTP or database queries)! It runs on the shared common ForkJoinPool; blocking threads in it starves all other parallel streams across the entire JVM.
+- **Production Code Blueprint**:
+```java
+Map<Department, List<EmployeeDto>> groupedEmployees = employees.stream()
+    .filter(Employee::isActive)
+    .collect(Collectors.groupingBy(
+        Employee::getDepartment,
+        Collectors.mapping(EmployeeDto::fromEntity, Collectors.toList())
+    ));
+```
+
+---
+
+### 2.10 Java 21 Sequenced Collections (`SequencedCollection`, `SequencedMap`)
+- **Deep Overview**: Introduced in Java 21 (JEP 431) to fix the longstanding lack of a unified interface for collections with defined encounter orders.
+- **Core Methods**: `getFirst()`, `getLast()`, `addFirst()`, `addLast()`, `removeFirst()`, `removeLast()`, and `reversed()` (which returns a reverse-ordered view in $O(1)$ without copying).
+- **Production Code Blueprint**:
+```java
+LinkedHashMap<String, String> auditLog = new LinkedHashMap<>();
+auditLog.put("op1", "LOGIN");
+auditLog.put("op2", "UPDATE");
+
+// Modern Java 21 Sequenced Access
+String firstEntry = auditLog.firstEntry().getValue();
+String lastEntry = auditLog.lastEntry().getValue();
+
+// View reversed in O(1) time
+SequencedMap<String, String> reversedView = auditLog.reversed();
+```
+
+---
+
+# TRACK 3: DEEP TECHNICAL INTERNALS & ARCHITECTURAL TAXONOMY
+
 ## 🌳 The Java Collections Class Hierarchy
 
 ```mermaid
@@ -267,6 +493,8 @@ classDiagram
 ```
 
 ---
+
+# TRACK 4: PRODUCTION ENGINEERING & DECISION MATRICES
 
 ## 🏆 The "Which Collection Should I Use?" Decision Matrix
 

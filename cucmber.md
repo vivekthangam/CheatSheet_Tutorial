@@ -1,9 +1,9 @@
-[🏠 Back to Home](README.md) | [🥒 View Full Cucumber BDD Guide](cucumber.md)
+[🏠 Back to Home](README.md) | [🧪 Test Automation Master Guide](test_automation_master_guide.md) | [🥒 View Full Cucumber BDD Guide](cucumber.md)
 
 # 🥒 Cucumber BDD Architecture & Cheatsheet
 
 > [!NOTE]
-> This guide has been upgraded to a comprehensive, scenario-rich guide with full Java step definitions, hooks lifecycle, data tables, and REST API testing. Please refer to [`cucumber.md`](cucumber.md) for the complete version.
+> This guide has been upgraded to a comprehensive, scenario-rich guide with full Java step definitions, hooks lifecycle, data tables, and REST API testing. Please refer to [`test_automation_master_guide.md`](test_automation_master_guide.md) for the unified enterprise guide and [`cucumber.md`](cucumber.md) for the dedicated Cucumber guide.
 
 ## Quick Summary
 - **Gherkin Grammar:** `Feature`, `Background`, `Scenario`, `Scenario Outline`, `Examples`, `Given`, `When`, `Then`, `And`, `But`.
@@ -12,4 +12,4 @@
 - **Failure Auditing:** Attach failure screenshots automatically via `scenario.attach(bytes, "image/png", "Error")`.
 - **Parallel Testing:** Multi-threaded execution configured via `junit-platform.properties` and PicoContainer.
 
-👉 **[Read the Full Cucumber BDD Master Guide & Scenarios](cucumber.md)**
+👉 **[Read the Full Test Automation Master Guide](test_automation_master_guide.md)** | **[Read the Full Cucumber BDD Guide](cucumber.md)**

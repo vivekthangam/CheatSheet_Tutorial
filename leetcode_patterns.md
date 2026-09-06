@@ -1078,6 +1078,567 @@ public class BoatsToSavePeople {
 // Time Complexity: O(N log N) due to sorting. Space Complexity: O(1) or O(log N).
 ```
 
+---
+
+#### Problem 1.11: 3Sum Closest (LeetCode #16) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums` of length $n$ and an integer `target`, find three integers in `nums` such that the sum is closest to `target`. Return the sum of the three integers. You may assume that each input would have exactly one solution.
+* **Constraints**: $3 \le \text{nums.length} \le 500$, $-1000 \le \text{nums}[i] \le 1000$, $-10^4 \le \text{target} \le 10^4$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [-1, 2, 1, -4], target = 1
+Sorted nums = [-4, -1, 1, 2]
+Fix i=0 (val=-4): L=1 (val=-1), R=3 (val=2) -> Sum = -3. Diff = |-3 - 1| = 4. Closest = -3.
+                  L++ -> L=2 (val=1), R=3 (val=2) -> Sum = -1. Diff = |-1 - 1| = 2. Closest = -1.
+Fix i=1 (val=-1): L=2 (val=1), R=3 (val=2) -> Sum = 2.  Diff = |2 - 1| = 1. Closest = 2.
+Result = 2 (Difference = 1, closest to target 1).
+```
+
+##### 3. ⚡ Optimal Two Pointers Implementation
+```java
+package com.leetcode.twopointers;
+
+import java.util.Arrays;
+
+public class ThreeSumClosest {
+    public int threeSumClosest(int[] nums, int target) {
+        Arrays.sort(nums); // O(N log N)
+        int closestSum = nums[0] + nums[1] + nums[2];
+
+        for (int i = 0; i < nums.length - 2; i++) {
+            int left = i + 1;
+            int right = nums.length - 1;
+
+            while (left < right) {
+                int currentSum = nums[i] + nums[left] + nums[right];
+
+                // Direct exact hit
+                if (currentSum == target) {
+                    return currentSum;
+                }
+
+                // Check if current sum is closer to target than closestSum
+                if (Math.abs(target - currentSum) < Math.abs(target - closestSum)) {
+                    closestSum = currentSum;
+                }
+
+                if (currentSum < target) {
+                    left++; // Need a larger sum
+                } else {
+                    right--; // Need a smaller sum
+                }
+            }
+        }
+        return closestSum;
+    }
+}
+// Time Complexity: O(N^2). Space Complexity: O(1) auxiliary (or O(log N) for sort stack).
+```
+
+---
+
+#### Problem 1.12: 3Sum Smaller (LeetCode #259) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of $n$ integers `nums` and an integer `target`, find the number of index triplets `i, j, k` with $0 \le i < j < k < n$ that satisfy the condition `nums[i] + nums[j] + nums[k] < target`.
+* **Constraints**: $n == \text{nums.length}$, $0 \le n \le 3500$, $-100 \le \text{nums}[i] \le 100$, $-100 \le \text{target} \le 100$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+Sorted nums: [-2, 0, 1, 3], target = 2
+Fix i=0 (val=-2):
+  L=1 (val=0), R=3 (val=3): sum = -2 + 0 + 3 = 1 < 2!
+  Key Insight: Since array is sorted, if nums[L] + nums[R] < target - nums[i],
+  then ALL elements between L and R when paired with L will ALSO be < target!
+  Number of valid pairs with L=1 is (R - L) = (3 - 1) = 2. (Pairs: [-2,0,3], [-2,0,1]).
+  Increment L -> L=2, R=3: sum = -2 + 1 + 3 = 2 (not < 2). Decrement R -> R=2 (L==R stop).
+Total Count = 2.
+```
+
+##### 3. ⚡ Optimal Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+import java.util.Arrays;
+
+public class ThreeSumSmaller {
+    public int threeSumSmaller(int[] nums, int target) {
+        Arrays.sort(nums);
+        int count = 0;
+
+        for (int i = 0; i < nums.length - 2; i++) {
+            int left = i + 1;
+            int right = nums.length - 1;
+
+            while (left < right) {
+                if (nums[i] + nums[left] + nums[right] < target) {
+                    // All elements from left to right form valid triplets with i and left
+                    count += (right - left);
+                    left++;
+                } else {
+                    right--;
+                }
+            }
+        }
+        return count;
+    }
+}
+// Time Complexity: O(N^2). Space Complexity: O(1) auxiliary.
+```
+
+---
+
+#### Problem 1.13: Subarrays with Product Less Than K (LeetCode #713) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of positive integers `nums` and an integer `k`, return the number of contiguous subarrays where the product of all the elements in the subarray is strictly less than `k`.
+* **Constraints**: $1 \le \text{nums.length} \le 3 \times 10^4$, $1 \le \text{nums}[i] \le 1000$, $0 \le k \le 10^6$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [10, 5, 2, 6], k = 100
+R=0: prod = 10 (< 100). Subarrays ending at R: [10] -> count += (0 - 0 + 1) = 1
+R=1: prod = 50 (< 100). Subarrays ending at R: [5], [10, 5] -> count += (1 - 0 + 1) = 2
+R=2: prod = 100 (>= 100). Shrink: prod /= nums[L] (100/10 = 10), L=1.
+     Subarrays ending at R: [2], [5, 2] -> count += (2 - 1 + 1) = 2
+R=3: prod = 60 (< 100). Subarrays ending at R: [6], [2, 6], [5, 2, 6] -> count += (3 - 1 + 1) = 3
+Total Subarrays = 1 + 2 + 2 + 3 = 8.
+```
+
+##### 3. ⚡ Optimal Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+public class SubarrayProductLessThanK {
+    public int numSubarrayProductLessThanK(int[] nums, int k) {
+        if (k <= 1) return 0; // Since nums[i] >= 1, product can never be strictly less than 1 or 0
+
+        int count = 0;
+        int product = 1;
+        int left = 0;
+
+        for (int right = 0; right < nums.length; right++) {
+            product *= nums[right];
+
+            // Shrink window from the left while product exceeds or equals k
+            while (product >= k && left <= right) {
+                product /= nums[left];
+                left++;
+            }
+
+            // Number of contiguous subarrays ending at 'right' is exactly (right - left + 1)
+            count += (right - left + 1);
+        }
+
+        return count;
+    }
+}
+// Time Complexity: O(N) because left and right each traverse at most N steps. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 1.14: Backspace String Compare (LeetCode #844) - [Easy / Medium O(1) Space]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given two strings `s` and `t`, return `true` if they are equal when both are typed into empty text editors. `'#'` means a backspace character. Solve in $O(N)$ time and $O(1)$ space.
+* **Constraints**: $1 \le s.\text{length}, t.\text{length} \le 200$. `s` and `t` only contain lowercase letters and `'#'`.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "ab#c", t = "ad#c"
+Scan backwards from end:
+s[3]='c', t[3]='c' -> Match! Move to next valid chars.
+s[2]='#', skipCount=1 -> skip s[1]='b'. Next valid char: s[0]='a'.
+t[2]='#', skipCount=1 -> skip t[1]='d'. Next valid char: t[0]='a'.
+s[0]='a', t[0]='a' -> Match! Both strings exhausted simultaneously -> Return true.
+```
+
+##### 3. ⚡ Optimal O(1) Space Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+public class BackspaceStringCompare {
+    public boolean backspaceCompare(String s, String t) {
+        int i = s.length() - 1;
+        int j = t.length() - 1;
+        int skipS = 0;
+        int skipT = 0;
+
+        while (i >= 0 || j >= 0) {
+            // Find next valid character in s
+            while (i >= 0) {
+                if (s.charAt(i) == '#') {
+                    skipS++;
+                    i--;
+                } else if (skipS > 0) {
+                    skipS--;
+                    i--;
+                } else {
+                    break;
+                }
+            }
+
+            // Find next valid character in t
+            while (j >= 0) {
+                if (t.charAt(j) == '#') {
+                    skipT++;
+                    j--;
+                } else if (skipT > 0) {
+                    skipT--;
+                    j--;
+                } else {
+                    break;
+                }
+            }
+
+            // If both characters exist, verify equality
+            if (i >= 0 && j >= 0) {
+                if (s.charAt(i) != t.charAt(j)) return false;
+            } else if (i >= 0 || j >= 0) {
+                // One string ran out while other still has characters
+                return false;
+            }
+
+            i--;
+            j--;
+        }
+
+        return true;
+    }
+}
+// Time Complexity: O(M + N). Space Complexity: O(1) strictly without allocating StringBuffers or Stacks.
+```
+
+---
+
+#### Problem 1.15: Shortest Unsorted Continuous Subarray (LeetCode #581) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums`, find one continuous subarray that if you only sort this subarray in ascending order, the whole array will be sorted in ascending order. Return the shortest such subarray's length.
+* **Constraints**: $1 \le \text{nums.length} \le 10^4$, $-10^5 \le \text{nums}[i] \le 10^5$. Must achieve $O(N)$ time and $O(1)$ space.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [2, 6, 4, 8, 10, 9, 15]
+Left-to-right scan: max seen so far. If nums[i] < max, 'i' must be part of unsorted subarray (right boundary).
+Right-to-left scan: min seen so far. If nums[i] > min, 'i' must be part of unsorted subarray (left boundary).
+Resulting unsorted window: [6, 4, 8, 10, 9] (indices 1 to 5). Length = 5 - 1 + 1 = 5.
+```
+
+##### 3. ⚡ Optimal O(N) Time O(1) Space Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+public class ShortestUnsortedSubarray {
+    public int findUnsortedSubarray(int[] nums) {
+        int n = nums.length;
+        int end = -1;
+        int max = nums[0];
+
+        // Forward pass: find the rightmost element that is smaller than the running maximum
+        for (int i = 1; i < n; i++) {
+            if (nums[i] < max) {
+                end = i;
+            } else {
+                max = nums[i];
+            }
+        }
+
+        int start = 0;
+        int min = nums[n - 1];
+
+        // Backward pass: find the leftmost element that is greater than the running minimum
+        for (int i = n - 2; i >= 0; i--) {
+            if (nums[i] > min) {
+                start = i;
+            } else {
+                min = nums[i];
+            }
+        }
+
+        return (end == -1) ? 0 : (end - start + 1);
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 1.16: Minimum Size Subarray Sum (LeetCode #209) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of positive integers `nums` and a positive integer `target`, return the minimal length of a contiguous subarray of which the sum is greater than or equal to `target`. If there is no such subarray, return `0`.
+* **Constraints**: $1 \le \text{target} \le 10^9$, $1 \le \text{nums.length} \le 10^5$, $1 \le \text{nums}[i] \le 10^4$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+target = 7, nums = [2, 3, 1, 2, 4, 3]
+Expand right: [2, 3, 1, 2] -> sum = 8 (>= 7). Len = 4.
+Shrink left:  [3, 1, 2] -> sum = 6 (< 7).
+Expand right: [3, 1, 2, 4] -> sum = 10 (>= 7). Len = 4.
+Shrink left:  [1, 2, 4] -> sum = 7 (>= 7). Len = 3.
+Shrink left:  [2, 4] -> sum = 6 (< 7).
+Expand right: [2, 4, 3] -> sum = 9 (>= 7). Len = 3.
+Shrink left:  [4, 3] -> sum = 7 (>= 7). Len = 2 (Minimum!).
+Result = 2.
+```
+
+##### 3. ⚡ Optimal Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+public class MinimumSizeSubarraySum {
+    public int minSubArrayLen(int target, int[] nums) {
+        int minLength = Integer.MAX_VALUE;
+        int sum = 0;
+        int left = 0;
+
+        for (int right = 0; right < nums.length; right++) {
+            sum += nums[right];
+
+            // Contract the window from the left as long as the condition holds
+            while (sum >= target) {
+                minLength = Math.min(minLength, right - left + 1);
+                sum -= nums[left];
+                left++;
+            }
+        }
+
+        return minLength == Integer.MAX_VALUE ? 0 : minLength;
+    }
+}
+// Time Complexity: O(N) amortized. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 1.17: Longest Mountain in Array (LeetCode #845) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `arr`, return the length of the longest subarray, which is a mountain. Return `0` if there is no mountain subarray. A mountain is defined as an array with length $\ge 3$ such that there exists some $i$ with $0 < i < \text{arr.length} - 1$ where elements strictly increase up to $i$ and strictly decrease after $i$.
+* **Constraints**: $1 \le \text{arr.length} \le 10^4$, $0 \le \text{arr}[i] \le 10^4$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+arr = [2, 1, 4, 7, 3, 2, 5]
+Scan for peaks:
+arr[3] = 7: arr[2] < 7 (4 < 7) and arr[4] < 7 (3 < 7) -> Valid Peak!
+Expand Left from 3: 7 -> 4 -> 1 (stops at 1 because arr[0]=2 > arr[1]=1). Left index = 1.
+Expand Right from 3: 7 -> 3 -> 2 (stops at 2 because arr[6]=5 > arr[5]=2). Right index = 5.
+Mountain Length = 5 - 1 + 1 = 5 ([1, 4, 7, 3, 2]).
+```
+
+##### 3. ⚡ Optimal Two Pointers Peak Expansion Solution
+```java
+package com.leetcode.twopointers;
+
+public class LongestMountainInArray {
+    public int longestMountain(int[] arr) {
+        int n = arr.length;
+        int maxMountain = 0;
+
+        // Peak cannot be the first or last element
+        for (int i = 1; i < n - 1; i++) {
+            // Check if current element is a peak
+            if (arr[i] > arr[i - 1] && arr[i] > arr[i + 1]) {
+                int left = i - 1;
+                int right = i + 1;
+
+                // Expand downward to the left
+                while (left > 0 && arr[left] > arr[left - 1]) {
+                    left--;
+                }
+
+                // Expand downward to the right
+                while (right < n - 1 && arr[right] > arr[right + 1]) {
+                    right++;
+                }
+
+                maxMountain = Math.max(maxMountain, right - left + 1);
+            }
+        }
+        return maxMountain;
+    }
+}
+// Time Complexity: O(N) since each peak expands within disjoint or shared boundaries. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 1.18: Partition Labels (LeetCode #763) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given a string `s`. We want to partition the string into as many parts as possible so that each letter appears in at most one part. Return a list of integers representing the size of these parts.
+* **Constraints**: $1 \le s.\text{length} \le 500$, `s` consists of lowercase English letters.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "ababcbacadefegdehijhklij"
+Step 1: Record last index of each character:
+        'a': 8, 'b': 5, 'c': 7, 'd': 14, 'e': 15, ...
+Step 2: Walk string with two pointers [start, end]:
+        i=0 ('a'): end = max(0, 8) = 8
+        i=1 ('b'): end = max(8, 5) = 8
+        ...
+        i=8 ('a'): i == end! Partition complete -> length = 8 - 0 + 1 = 9.
+        start = 9. Next partition begins.
+```
+
+##### 3. ⚡ Optimal Two Pointers Greedy Solution
+```java
+package com.leetcode.twopointers;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class PartitionLabels {
+    public List<Integer> partitionLabels(String s) {
+        int[] lastIndex = new int[26];
+        for (int i = 0; i < s.length(); i++) {
+            lastIndex[s.charAt(i) - 'a'] = i;
+        }
+
+        List<Integer> partitions = new ArrayList<>();
+        int start = 0;
+        int end = 0;
+
+        for (int i = 0; i < s.length(); i++) {
+            end = Math.max(end, lastIndex[s.charAt(i) - 'a']);
+
+            // When the current index reaches the furthest required boundary, cut partition
+            if (i == end) {
+                partitions.add(end - start + 1);
+                start = i + 1;
+            }
+        }
+
+        return partitions;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) auxiliary (fixed 26-element array).
+```
+
+---
+
+#### Problem 1.19: Reverse Words in a String (LeetCode #151) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an input string `s`, reverse the order of the words. A word is defined as a sequence of non-space characters. The words in `s` will be separated by at least one space. Return a string of the words in reverse order concatenated by a single space with no leading or trailing spaces.
+* **Constraints**: $1 \le s.\text{length} \le 10^4$, `s` contains English letters, digits, and spaces. Solve in $O(1)$ extra space.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "  the sky is   blue  "
+Phase 1: Reverse entire string -> "  eulb   si yks eht  "
+Phase 2: Reverse each word in-place -> "  blue   is sky the  "
+Phase 3: Clean spaces with two pointers -> "blue is sky the"
+```
+
+##### 3. ⚡ Optimal In-Place Two Pointers Reversal
+```java
+package com.leetcode.twopointers;
+
+public class ReverseWordsInString {
+    public String reverseWords(String s) {
+        char[] a = s.toCharArray();
+        int n = a.length;
+
+        // Step 1: Reverse the whole char array
+        reverse(a, 0, n - 1);
+
+        // Step 2: Reverse each word individually
+        reverseEachWord(a, n);
+
+        // Step 3: Clean up redundant spaces in-place
+        return cleanSpaces(a, n);
+    }
+
+    private void reverse(char[] a, int i, int j) {
+        while (i < j) {
+            char temp = a[i];
+            a[i++] = a[j];
+            a[j--] = temp;
+        }
+    }
+
+    private void reverseEachWord(char[] a, int n) {
+        int i = 0, j = 0;
+        while (i < n) {
+            while (i < j || (i < n && a[i] == ' ')) i++; // Skip spaces
+            while (j < i || (j < n && a[j] != ' ')) j++; // Skip word chars
+            reverse(a, i, j - 1); // Reverse the word
+        }
+    }
+
+    private String cleanSpaces(char[] a, int n) {
+        int i = 0, j = 0;
+        while (j < n) {
+            while (j < n && a[j] == ' ') j++; // Skip spaces
+            while (j < n && a[j] != ' ') a[i++] = a[j++]; // Keep word chars
+            while (j < n && a[j] == ' ') j++; // Skip spaces
+            if (j < n) a[i++] = ' '; // Keep only one space between words
+        }
+        return new String(a, 0, i);
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N) for char array in Java (in C++, strictly O(1)).
+```
+
+---
+
+#### Problem 1.20: Valid Palindrome II (LeetCode #680) - [Easy / Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a string `s`, return `true` if the `s` can be palindrome after deleting at most one character from it.
+* **Constraints**: $1 \le s.\text{length} \le 10^5$, `s` consists of lowercase English letters.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "abca"
+L=0 ('a'), R=3 ('a') -> Match! L=1, R=2
+L=1 ('b'), R=2 ('c') -> Mismatch!
+Branch 1: Skip 'b' (check substring [2...2] "c") -> Palindrome!
+Return true.
+```
+
+##### 3. ⚡ Optimal Two Pointers Solution
+```java
+package com.leetcode.twopointers;
+
+public class ValidPalindromeII {
+    public boolean validPalindrome(String s) {
+        int left = 0;
+        int right = s.length() - 1;
+
+        while (left < right) {
+            if (s.charAt(left) != s.charAt(right)) {
+                // Must be able to form palindrome by skipping either character at 'left' or 'right'
+                return isPalindromeRange(s, left + 1, right) || isPalindromeRange(s, left, right - 1);
+            }
+            left++;
+            right--;
+        }
+
+        return true;
+    }
+
+    private boolean isPalindromeRange(String s, int i, int j) {
+        while (i < j) {
+            if (s.charAt(i) != s.charAt(j)) return false;
+            i++;
+            j--;
+        }
+        return true;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
 ### Pattern 2: Sliding Window Pattern
 
 ```
@@ -1592,6 +2153,561 @@ public class FruitIntoBaskets {
 }
 // Time Complexity: O(N). Space Complexity: O(1) since HashMap contains at most 3 entries.
 ```
+
+---
+
+#### Problem 2.11: Maximum Erasure Value (LeetCode #1695) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array of positive integers `nums` and want to erase a subarray containing unique elements. The score you get from erasing the subarray is the sum of its elements. Return the maximum score you can get by erasing exactly one subarray.
+* **Constraints**: $1 \le \text{nums.length} \le 10^5$, $1 \le \text{nums}[i] \le 10^4$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [4, 2, 4, 5, 6]
+R=0 (val=4): set={4}, currentSum=4, maxSum=4
+R=1 (val=2): set={4, 2}, currentSum=6, maxSum=6
+R=2 (val=4): duplicate 4 detected!
+             Shrink from L: remove nums[0]=4, currentSum=6-4=2, L=1.
+             Add nums[2]=4: set={2, 4}, currentSum=2+4=6, maxSum=6
+R=3 (val=5): set={2, 4, 5}, currentSum=11, maxSum=11
+R=4 (val=6): set={2, 4, 5, 6}, currentSum=17, maxSum=17
+Result = 17 (Subarray: [2, 4, 5, 6]).
+```
+
+##### 3. ⚡ Optimal Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class MaximumErasureValue {
+    public int maximumUniqueSubarray(int[] nums) {
+        Set<Integer> seen = new HashSet<>();
+        int left = 0;
+        int currentSum = 0;
+        int maxSum = 0;
+
+        for (int right = 0; right < nums.length; right++) {
+            // Shrink window from the left until the duplicate element is removed
+            while (seen.contains(nums[right])) {
+                seen.remove(nums[left]);
+                currentSum -= nums[left];
+                left++;
+            }
+
+            // Expand window to include nums[right]
+            seen.add(nums[right]);
+            currentSum += nums[right];
+            maxSum = Math.max(maxSum, currentSum);
+        }
+
+        return maxSum;
+    }
+}
+// Time Complexity: O(N) since each element is added and removed at most once. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 2.12: Frequency of the Most Frequent Element (LeetCode #1838) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: The frequency of an element is the number of times it occurs in an array. You are given an integer array `nums` and an integer `k`. In one operation, you can choose an index and increment the element at that index by `1`. Return the maximum possible frequency of an element after performing at most `k` operations.
+* **Constraints**: $1 \le \text{nums.length} \le 10^5$, $1 \le \text{nums}[i] \le 10^5$, $1 \le k \le 10^5$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [1, 2, 4], k = 5
+Sort nums: [1, 2, 4]
+Window [L...R]:
+To make all elements in [L...R] equal to nums[R], total target sum = (R - L + 1) * nums[R].
+Actual current sum of window = sum.
+Operations required = (R - L + 1) * nums[R] - sum.
+R=0 (val=1): ops = 1*1 - 1 = 0 <= 5. Window len = 1.
+R=1 (val=2): ops = 2*2 - (1+2) = 4 - 3 = 1 <= 5. Window len = 2.
+R=2 (val=4): ops = 3*4 - (1+2+4) = 12 - 7 = 5 <= 5. Window len = 3.
+Max Frequency = 3 (all elements can be made 4 with 5 ops: 1+3=4, 2+2=4).
+```
+
+##### 3. ⚡ Optimal Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+import java.util.Arrays;
+
+public class FrequencyOfMostFrequentElement {
+    public int maxFrequency(int[] nums, int k) {
+        Arrays.sort(nums); // O(N log N)
+        int left = 0;
+        int maxFreq = 0;
+        long windowSum = 0; // Use long to prevent integer overflow
+
+        for (int right = 0; right < nums.length; right++) {
+            windowSum += nums[right];
+
+            // If cost to make all elements equal to nums[right] exceeds k, shrink window
+            while ((long) nums[right] * (right - left + 1) - windowSum > k) {
+                windowSum -= nums[left];
+                left++;
+            }
+
+            maxFreq = Math.max(maxFreq, right - left + 1);
+        }
+
+        return maxFreq;
+    }
+}
+// Time Complexity: O(N log N) for sorting, O(N) for sliding window. Space Complexity: O(log N).
+```
+
+---
+
+#### Problem 2.13: Subarray Sums Divisible by K (LeetCode #974) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums` and an integer `k`, return the number of non-empty subarrays that have a sum divisible by `k`. A subarray is a contiguous part of an array.
+* **Constraints**: $1 \le \text{nums.length} \le 3 \times 10^4$, $-10^4 \le \text{nums}[i] \le 10^4$, $2 \le k \le 10^4$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [4, 5, 0, -2, -3, 1], k = 5
+Prefix sums: [4, 9, 9, 7, 4, 5]
+Modulo k (normalized for negative values: (rem % k + k) % k):
+Prefix 0: rem = 0 (count=1 initially for empty prefix)
+i=0 (4):  rem = 4 % 5 = 4 -> seen count for 4 was 0 -> count += 0, remMap[4] = 1
+i=1 (5):  rem = 9 % 5 = 4 -> seen count for 4 was 1 -> count += 1, remMap[4] = 2
+i=2 (0):  rem = 9 % 5 = 4 -> seen count for 4 was 2 -> count += 2, remMap[4] = 3
+i=3 (-2): rem = 7 % 5 = 2 -> remMap[2] = 1
+i=4 (-3): rem = 4 % 5 = 4 -> seen count for 4 was 3 -> count += 3, remMap[4] = 4
+i=5 (1):  rem = 5 % 5 = 0 -> seen count for 0 was 1 -> count += 1, remMap[0] = 2
+Total Divisible Subarrays = 1 + 2 + 3 + 1 = 7.
+```
+
+##### 3. ⚡ Optimal Prefix Modulo Frequency Solution
+```java
+package com.leetcode.slidingwindow;
+
+public class SubarraysDivisibleByK {
+    public int subarraysDivByK(int[] nums, int k) {
+        int[] modCounts = new int[k];
+        modCounts[0] = 1; // Base case: prefix sum of 0 has remainder 0
+
+        int prefixMod = 0;
+        int totalSubarrays = 0;
+
+        for (int num : nums) {
+            // (num % k + k) % k handles negative integers cleanly in Java
+            prefixMod = (prefixMod + (num % k) + k) % k;
+
+            // Every previous prefix with the exact same remainder forms a subarray divisible by k
+            totalSubarrays += modCounts[prefixMod];
+            modCounts[prefixMod]++;
+        }
+
+        return totalSubarrays;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(K) for modulo bucket array.
+```
+
+---
+
+#### Problem 2.14: Count Number of Nice Subarrays (LeetCode #1248) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of integers `nums` and an integer `k`. A continuous subarray is called nice if there are `k` odd numbers on it. Return the number of nice sub-arrays.
+* **Constraints**: $1 \le \text{nums.length} \le 5 \times 10^4$, $1 \le \text{nums}[i] \le 10^5$, $1 \le k \le \text{nums.length}$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+Reduction Principle:
+Exact(K) = AtMost(K) - AtMost(K - 1).
+Counting "at most K odd numbers" is straightforward with standard sliding window!
+```
+
+##### 3. ⚡ Optimal AtMost-Reduction Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+public class CountNiceSubarrays {
+    public int numberOfSubarrays(int[] nums, int k) {
+        return atMost(nums, k) - atMost(nums, k - 1);
+    }
+
+    private int atMost(int[] nums, int k) {
+        if (k < 0) return 0;
+        int left = 0;
+        int oddCount = 0;
+        int subarrays = 0;
+
+        for (int right = 0; right < nums.length; right++) {
+            if (nums[right] % 2 != 0) {
+                oddCount++;
+            }
+
+            while (oddCount > k) {
+                if (nums[left] % 2 != 0) {
+                    oddCount--;
+                }
+                left++;
+            }
+
+            subarrays += (right - left + 1);
+        }
+
+        return subarrays;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 2.15: Subarrays with K Different Integers (LeetCode #992) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums` and an integer `k`, return the number of good subarrays of `nums`. A good array is an array where the number of different integers in that array is exactly `k`.
+* **Constraints**: $1 \le \text{nums.length} \le 2 \times 10^4$, $1 \le \text{nums}[i], k \le \text{nums.length}$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+Exact(K distinct) = AtMost(K distinct) - AtMost(K - 1 distinct).
+Why this works:
+AtMost(K) counts all subarrays with <= K distinct integers.
+AtMost(K-1) counts all subarrays with <= K-1 distinct integers.
+Subtracting leaves ONLY subarrays with exactly K distinct integers!
+```
+
+##### 3. ⚡ Optimal Two-Pass AtMost Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class SubarraysWithKDistinct {
+    public int subarraysWithKDistinct(int[] nums, int k) {
+        return atMostKDistinct(nums, k) - atMostKDistinct(nums, k - 1);
+    }
+
+    private int atMostKDistinct(int[] nums, int k) {
+        if (k == 0) return 0;
+        Map<Integer, Integer> freq = new HashMap<>();
+        int left = 0;
+        int count = 0;
+
+        for (int right = 0; right < nums.length; right++) {
+            freq.put(nums[right], freq.getOrDefault(nums[right], 0) + 1);
+
+            while (freq.size() > k) {
+                freq.put(nums[left], freq.get(nums[left]) - 1);
+                if (freq.get(nums[left]) == 0) {
+                    freq.remove(nums[left]);
+                }
+                left++;
+            }
+
+            count += (right - left + 1);
+        }
+
+        return count;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(K).
+```
+
+---
+
+#### Problem 2.16: Minimum Window Subsequence (LeetCode #727) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given strings `s1` and `s2`, return the minimum contiguous substring `part` of `s1`, so that `s2` is a subsequence of `part`. If there is no such substring in `s1` that satisfies the condition, return the empty string `""`.
+* **Constraints**: $1 \le s1.\text{length} \le 2 \times 10^4$, $1 \le s2.\text{length} \le 100$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s1 = "abcdebdde", s2 = "bde"
+Forward scan: find first window containing "bde" as subsequence -> "bcde" (len 4).
+Backward scan: shrink from the rightmost matching 'e' back to find optimal start 'b'.
+Record shortest window. Resume search from start + 1.
+```
+
+##### 3. ⚡ Optimal Bidirectional Two Pointers Solution
+```java
+package com.leetcode.slidingwindow;
+
+public class MinimumWindowSubsequence {
+    public String minWindow(String s1, String s2) {
+        int m = s1.length(), n = s2.length();
+        int s1Idx = 0, s2Idx = 0;
+        int minLen = Integer.MAX_VALUE;
+        int startIdx = -1;
+
+        while (s1Idx < m) {
+            // Forward pass: check if s2 matches as subsequence
+            if (s1.charAt(s1Idx) == s2.charAt(s2Idx)) {
+                s2Idx++;
+                if (s2Idx == n) {
+                    // Match found! Backward pass: optimize window from right to left
+                    int right = s1Idx;
+                    s2Idx--; // Move to last char of s2
+                    while (s2Idx >= 0) {
+                        if (s1.charAt(s1Idx) == s2.charAt(s2Idx)) {
+                            s2Idx--;
+                        }
+                        s1Idx--;
+                    }
+                    s1Idx++; // Move back to the start of this optimized window
+
+                    // Update minimal window if shorter
+                    if (right - s1Idx + 1 < minLen) {
+                        minLen = right - s1Idx + 1;
+                        startIdx = s1Idx;
+                    }
+                    s2Idx = 0; // Reset s2 search
+                }
+            }
+            s1Idx++;
+        }
+
+        return startIdx == -1 ? "" : s1.substring(startIdx, startIdx + minLen);
+    }
+}
+// Time Complexity: O(M * N) worst case, O(M) average. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 2.17: Longest Repeating Character Replacement (LeetCode #424) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given a string `s` and an integer `k`. You can choose any character of the string and change it to any other uppercase English character. You can perform this operation at most `k` times. Return the length of the longest substring containing the same letter you can get after performing the above operations.
+* **Constraints**: $1 \le s.\text{length} \le 10^5$, `s` consists of only uppercase English letters, $0 \le k \le s.\text{length}$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "AABABBA", k = 1
+Window condition: (windowLength - maxFreq) <= k.
+If (windowLength - maxFreq) > k, we don't have enough operations -> shrink left.
+```
+
+##### 3. ⚡ Optimal Sliding Window with Max Frequency Optimization
+```java
+package com.leetcode.slidingwindow;
+
+public class CharacterReplacement {
+    public int characterReplacement(String s, int k) {
+        int[] count = new int[26];
+        int left = 0;
+        int maxFreq = 0;
+        int maxLength = 0;
+
+        for (int right = 0; right < s.length(); right++) {
+            count[s.charAt(right) - 'A']++;
+            maxFreq = Math.max(maxFreq, count[s.charAt(right) - 'A']);
+
+            // Number of characters to replace = (right - left + 1) - maxFreq
+            if ((right - left + 1) - maxFreq > k) {
+                count[s.charAt(left) - 'A']--;
+                left++;
+            }
+
+            maxLength = Math.max(maxLength, right - left + 1);
+        }
+
+        return maxLength;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) (fixed 26-element array).
+```
+
+---
+
+#### Problem 2.18: Sliding Window Maximum (LeetCode #239) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array of integers `nums`, there is a sliding window of size `k` which is moving from the very left of the array to the very right. You can only see the `k` numbers in the window. Each time the sliding window moves right by one position. Return the max sliding window.
+* **Constraints**: $1 \le \text{nums.length} \le 10^5$, $-10^4 \le \text{nums}[i] \le 10^4$, $1 \le k \le \text{nums.length}$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+nums = [1, 3, -1, -3, 5, 3, 6, 7], k = 3
+Maintain Monotonic Decreasing Deque of INDICES:
+i=0 (1):  deque=[0]
+i=1 (3):  nums[1] > nums[0] -> pop 0. deque=[1] (val=3)
+i=2 (-1): nums[2] < nums[1] -> push 2. deque=[1, 2]. Max = nums[deque.peekFirst()] = 3.
+i=3 (-3): deque=[1, 2, 3]. Max = 3.
+i=4 (5):  nums[4] > all -> pop all. deque=[4] (val=5). Max = 5.
+...
+Result = [3, 3, 5, 5, 6, 7].
+```
+
+##### 3. ⚡ Optimal Monotonic Deque Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class SlidingWindowMaximum {
+    public int[] maxSlidingWindow(int[] nums, int k) {
+        int n = nums.length;
+        int[] result = new int[n - k + 1];
+        Deque<Integer> deque = new ArrayDeque<>(); // Stores indices in strictly decreasing order of values
+
+        for (int i = 0; i < n; i++) {
+            // 1. Remove indices that are out of the current window boundary [i - k + 1, i]
+            while (!deque.isEmpty() && deque.peekFirst() < i - k + 1) {
+                deque.pollFirst();
+            }
+
+            // 2. Maintain monotonic decreasing invariant: remove smaller elements from the tail
+            while (!deque.isEmpty() && nums[deque.peekLast()] < nums[i]) {
+                deque.pollLast();
+            }
+
+            // 3. Add current element index
+            deque.offerLast(i);
+
+            // 4. The head of the deque always holds the maximum value for the current window
+            if (i >= k - 1) {
+                result[i - k + 1] = nums[deque.peekFirst()];
+            }
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N) because each index is added and polled at most once. Space Complexity: O(K).
+```
+
+---
+
+#### Problem 2.19: Grumpy Bookstore Owner (LeetCode #1052) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: There is a bookstore owner that has a store open for `n` minutes. You are given an integer array `customers` and an integer array `grumpy`. When grumpy, customers are not satisfied. The owner has a secret technique to not be grumpy for `minutes` consecutive minutes. Return the maximum number of customers that can be satisfied throughout the day.
+* **Constraints**: $1 \le \text{minutes} \le n \le 2 \times 10^4$, $0 \le \text{customers}[i] \le 1000$, $\text{grumpy}[i] \in \{0, 1\}$.
+
+##### 2. 👁️ Visual Execution Trace
+```
+customers = [1, 0, 1, 2, 1, 1, 7, 5], grumpy = [0, 1, 0, 1, 0, 1, 0, 1], minutes = 3
+Baseline satisfied (grumpy=0): 1 + 1 + 1 + 7 = 10.
+Fixed sliding window of size 3 to maximize EXTRA satisfied customers where grumpy=1:
+Window [1, 2, 1] (minutes 3 to 5): recovers 2 + 0 + 1 = 3 extra.
+Window [1, 7, 5] (minutes 5 to 7): recovers 1 + 0 + 5 = 6 extra!
+Max Total = Baseline (10) + Max Extra (6) = 16.
+```
+
+##### 3. ⚡ Optimal Fixed Sliding Window Solution
+```java
+package com.leetcode.slidingwindow;
+
+public class GrumpyBookstoreOwner {
+    public int maxSatisfied(int[] customers, int[] grumpy, int minutes) {
+        int totalSatisfied = 0;
+        int n = customers.length;
+
+        // Step 1: Count already satisfied customers without any secret technique
+        for (int i = 0; i < n; i++) {
+            if (grumpy[i] == 0) {
+                totalSatisfied += customers[i];
+            }
+        }
+
+        // Step 2: Use a fixed window of size 'minutes' to maximize recovered customers
+        int extraSatisfied = 0;
+        int currentExtra = 0;
+
+        for (int i = 0; i < minutes; i++) {
+            if (grumpy[i] == 1) {
+                currentExtra += customers[i];
+            }
+        }
+        extraSatisfied = currentExtra;
+
+        // Step 3: Slide the fixed window across the rest of the array
+        for (int i = minutes; i < n; i++) {
+            if (grumpy[i] == 1) {
+                currentExtra += customers[i];
+            }
+            if (grumpy[i - minutes] == 1) {
+                currentExtra -= customers[i - minutes];
+            }
+            extraSatisfied = Math.max(extraSatisfied, currentExtra);
+        }
+
+        return totalSatisfied + extraSatisfied;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 2.20: Find All Anagrams in a String (LeetCode #438) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given two strings `s` and `p`, return an array of all the start indices of `p`'s anagrams in `s`. An Anagram is a word or phrase formed by rearranging the letters of a different word or phrase, using all the original letters exactly once.
+* **Constraints**: $1 \le s.\text{length}, p.\text{length} \le 3 \times 10^4$. Both consist of lowercase English letters.
+
+##### 2. 👁️ Visual Execution Trace
+```
+s = "cbaebabacd", p = "abc"
+Pattern p length = 3.
+Window [0...2] "cba": matches freq of "abc"! -> index 0 added.
+Slide window: drop 'c', add 'e' -> "bae" -> mismatch.
+Slide window: drop 'b', add 'b' -> "aeb" -> mismatch.
+...
+Window [6...8] "bac": matches freq of "abc"! -> index 6 added.
+Result = [0, 6].
+```
+
+##### 3. ⚡ Optimal Fixed Window Array Frequency Solution
+```java
+package com.leetcode.slidingwindow;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class FindAllAnagrams {
+    public List<Integer> findAnagrams(String s, String p) {
+        List<Integer> result = new ArrayList<>();
+        if (s.length() < p.length()) return result;
+
+        int[] pCount = new int[26];
+        int[] sCount = new int[26];
+
+        // Populate pattern frequency and initial window
+        for (int i = 0; i < p.length(); i++) {
+            pCount[p.charAt(i) - 'a']++;
+            sCount[s.charAt(i) - 'a']++;
+        }
+
+        if (Arrays.equals(pCount, sCount)) {
+            result.add(0);
+        }
+
+        int windowSize = p.length();
+        for (int i = windowSize; i < s.length(); i++) {
+            sCount[s.charAt(i) - 'a']++;               // Add new incoming character
+            sCount[s.charAt(i - windowSize) - 'a']--;   // Remove outgoing character
+
+            if (Arrays.equals(pCount, sCount)) {
+                result.add(i - windowSize + 1);
+            }
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N * 26) = O(N). Space Complexity: O(1) auxiliary (two 26-int arrays).
+```
+
+---
 
 ### Pattern 3: Fast & Slow Pointers (Floyd's Tortoise and Hare)
 
@@ -2136,6 +3252,520 @@ public class SplitLinkedListInParts {
 // Time Complexity: O(N + K). Space Complexity: O(1) auxiliary space (excluding result array).
 ```
 
+---
+
+#### Problem 3.11: Swapping Nodes in a Linked List (LeetCode #1721) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `head` of a linked list, and an integer `k`. Return the head of the linked list after swapping the values of the $k^{\text{th}}$ node from the beginning and the $k^{\text{th}}$ node from the end (the list is 1-indexed).
+* **Constraints**:
+  - The number of nodes in the list is $n$.
+  - $1 \le k \le n \le 10^5$.
+  - $0 \le \text{Node.val} \le 100$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Fast & Slow Pointer Insight**:
+  - We do not need two separate passes or storing nodes in an array.
+  - Advance a `fast` pointer $k - 1$ steps from `head`. It lands exactly on the $k^{\text{th}}$ node from the beginning (`firstNode = fast`).
+  - Initialize `slow = head`. Now both `fast` and `slow` advance one step at a time until `fast.next == null`.
+  - Because `fast` was $k$ nodes ahead of `slow`, when `fast` reaches the last node, `slow` lands precisely on the $k^{\text{th}}$ node from the end (`secondNode = slow`)!
+  - Swap `firstNode.val` and `secondNode.val`.
+
+```
+Visual Trace (k = 2):
+List: [1 -> 2 -> 3 -> 4 -> 5]
+1. Advance fast k-1 = 1 step: fast is at node 2 (firstNode = 2)
+2. slow = head (1)
+3. Step fast and slow together:
+   fast at 3, slow at 2
+   fast at 4, slow at 3
+   fast at 5 (tail), slow at 4 (secondNode = 4, which is 2nd from end)
+4. Swap values of firstNode(2) and secondNode(4) -> [1 -> 4 -> 3 -> 2 -> 5]
+```
+
+```java
+package com.leetcode.fastslow;
+
+public class SwappingNodesInLinkedList {
+    public ListNode swapNodes(ListNode head, int k) {
+        ListNode fast = head;
+        ListNode slow = head;
+        ListNode firstNode = null;
+
+        // 1. Advance fast pointer to the k-th node from beginning
+        for (int i = 1; i < k; i++) {
+            fast = fast.next;
+        }
+        firstNode = fast;
+
+        // 2. Advance fast to tail while advancing slow from head
+        while (fast.next != null) {
+            fast = fast.next;
+            slow = slow.next;
+        }
+        ListNode secondNode = slow;
+
+        // 3. Swap the values of the two target nodes
+        int temp = firstNode.val;
+        firstNode.val = secondNode.val;
+        secondNode.val = temp;
+
+        return head;
+    }
+}
+// Time Complexity: O(N) single pass. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.12: Maximum Twin Sum of a Linked List (LeetCode #2130) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: In a linked list of size $n$ (where $n$ is even), the $i^{\text{th}}$ node ($0$-indexed) of the linked list is known as the twin of the $(n - 1 - i)^{\text{th}}$ node. The twin sum is defined as the sum of a node and its twin. Return the maximum twin sum of the linked list.
+* **Constraints**:
+  - $n$ is an even integer in range $[2, 10^5]$.
+  - $1 \le \text{Node.val} \le 10^5$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Algorithmic Strategy (Find Midpoint + Reverse Second Half + Twin Traversal)**:
+  1. **Find Middle**: Use Fast & Slow pointers (`slow = head, fast = head`). When `fast` reaches `null`, `slow` is at the beginning of the second half ($n/2$).
+  2. **In-place Reversal**: Reverse the second half starting at `slow`.
+  3. **Twin Sum Evaluation**: Traverse first half (`p1 = head`) and reversed second half (`p2 = reversedHead`) in parallel. Maintain `maxSum = Math.max(maxSum, p1.val + p2.val)`.
+
+```java
+package com.leetcode.fastslow;
+
+public class MaximumTwinSum {
+    public int pairSum(ListNode head) {
+        // 1. Find midpoint of even-length list
+        ListNode slow = head;
+        ListNode fast = head;
+        while (fast != null && fast.next != null) {
+            slow = slow.next;
+            fast = fast.next.next;
+        }
+
+        // 2. Reverse second half starting from slow
+        ListNode prev = null;
+        ListNode curr = slow;
+        while (curr != null) {
+            ListNode nextTemp = curr.next;
+            curr.next = prev;
+            prev = curr;
+            curr = nextTemp;
+        }
+
+        // 3. Compare pairs from first half and reversed second half
+        int maxTwinSum = 0;
+        ListNode p1 = head;
+        ListNode p2 = prev; // Head of reversed second half
+        while (p2 != null) {
+            maxTwinSum = Math.max(maxTwinSum, p1.val + p2.val);
+            p1 = p1.next;
+            p2 = p2.next;
+        }
+
+        return maxTwinSum;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) in-place pointer manipulation.
+```
+
+---
+
+#### Problem 3.13: Odd Even Linked List (LeetCode #328) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a singly linked list, group all the nodes with odd indices together followed by the nodes with even indices, and return the reordered list. The first node is considered odd (index 1), the second node even (index 2), and so on. Relative order inside both odd and even groups must remain preserved. Must run in $O(1)$ extra space and $O(N)$ time.
+* **Constraints**: Number of nodes in $[0, 10^4]$, $-10^6 \le \text{Node.val} \le 10^6$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Two-Pointer Interweaving**:
+  - Maintain `odd = head`, `even = head.next`, and save `evenHead = even`.
+  - While `even != null && even.next != null`:
+    - `odd.next = even.next; odd = odd.next;`
+    - `even.next = odd.next; even = even.next;`
+  - Finally, connect the tail of the odd list to `evenHead`: `odd.next = evenHead;`.
+
+```java
+package com.leetcode.fastslow;
+
+public class OddEvenLinkedList {
+    public ListNode oddEvenList(ListNode head) {
+        if (head == null || head.next == null) return head;
+
+        ListNode odd = head;
+        ListNode even = head.next;
+        ListNode evenHead = even; // Save start of even chain to attach at end
+
+        while (even != null && even.next != null) {
+            odd.next = even.next;
+            odd = odd.next;
+            even.next = odd.next;
+            even = even.next;
+        }
+
+        // Splice even chain onto tail of odd chain
+        odd.next = evenHead;
+        return head;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.14: Delete the Middle Node of a Linked List (LeetCode #2095) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `head` of a linked list. Delete the middle node, and return the `head` of the modified linked list. The middle node of a size $n$ list is the $\lfloor n / 2 \rfloor^{\text{th}}$ node from the start using 0-based indexing.
+* **Constraints**: The number of nodes is in range $[1, 10^5]$, $1 \le \text{Node.val} \le 10^5$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Pointer Positioning**:
+  - If `head.next == null`, deleting the sole node leaves `null`.
+  - To delete node $\lfloor n / 2 \rfloor$, we need the pointer to stop at node $\lfloor n / 2 \rfloor - 1$.
+  - Initialize `slow = head`, `fast = head.next.next`.
+  - When `fast` reaches null or the tail, `slow` is stationed right before the middle node!
+  - Delete middle node: `slow.next = slow.next.next`.
+
+```java
+package com.leetcode.fastslow;
+
+public class DeleteMiddleNode {
+    public ListNode deleteMiddle(ListNode head) {
+        if (head == null || head.next == null) return null;
+
+        // Offset fast by 2 steps so slow stops strictly ONE node before the middle
+        ListNode slow = head;
+        ListNode fast = head.next.next;
+
+        while (fast != null && fast.next != null) {
+            slow = slow.next;
+            fast = fast.next.next;
+        }
+
+        // Bypass the middle node
+        slow.next = slow.next.next;
+        return head;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.15: Rotate List (LeetCode #61) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a linked list, rotate the list to the right by $k$ places.
+* **Constraints**: Number of nodes in $[0, 500]$, $0 \le k \le 2 \times 10^9$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Circular Ring Connection + Break Point**:
+  1. Traverse list to find its length $L$ and locate tail pointer.
+  2. If $k \pmod L == 0$, rotating returns the original list.
+  3. Form a ring by setting `tail.next = head`.
+  4. The new tail will be at position $(L - (k \pmod L))$ from the original head.
+  5. Traverse to the new tail, save `newHead = newTail.next`, and sever the ring with `newTail.next = null`.
+
+```java
+package com.leetcode.fastslow;
+
+public class RotateList {
+    public ListNode rotateRight(ListNode head, int k) {
+        if (head == null || head.next == null || k == 0) return head;
+
+        // 1. Compute length and find existing tail
+        int length = 1;
+        ListNode tail = head;
+        while (tail.next != null) {
+            tail = tail.next;
+            length++;
+        }
+
+        // 2. Reduce k modulo length
+        k = k % length;
+        if (k == 0) return head;
+
+        // 3. Connect tail to head to form circular list
+        tail.next = head;
+
+        // 4. Find new tail at (length - k) steps from head
+        int stepsToNewTail = length - k;
+        ListNode newTail = head;
+        for (int i = 1; i < stepsToNewTail; i++) {
+            newTail = newTail.next;
+        }
+
+        ListNode newHead = newTail.next;
+        newTail.next = null; // Break circular ring
+
+        return newHead;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.16: Partition List (LeetCode #86) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a linked list and a value $x$, partition it such that all nodes less than $x$ come before nodes greater than or equal to $x$. Preserve the original relative order of the nodes in each of the two partitions.
+* **Constraints**: Number of nodes in $[0, 200]$, $-100 \le \text{Node.val}, x \le 100$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Two-List Sentinel Pointer Splitting**:
+  - Maintain two independent linked chains: `lessHead` (for nodes $< x$) and `greaterHead` (for nodes $\ge x$).
+  - Walk the input list with a single pointer. If `curr.val < x`, append to `less`; else append to `greater`.
+  - At the end, set `greater.next = null` (crucial to prevent cycle), and splice `less.next = greaterHead.next`.
+
+```java
+package com.leetcode.fastslow;
+
+public class PartitionList {
+    public ListNode partition(ListNode head, int x) {
+        ListNode lessHead = new ListNode(0);
+        ListNode greaterHead = new ListNode(0);
+
+        ListNode less = lessHead;
+        ListNode greater = greaterHead;
+        ListNode curr = head;
+
+        while (curr != null) {
+            if (curr.val < x) {
+                less.next = curr;
+                less = less.next;
+            } else {
+                greater.next = curr;
+                greater = greater.next;
+            }
+            curr = curr.next;
+        }
+
+        greater.next = null; // Terminate greater list to prevent cycle
+        less.next = greaterHead.next; // Concatenate two partitions
+
+        return lessHead.next;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.17: Intersection of Two Linked Lists (LeetCode #160) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the heads of two singly linked-lists `headA` and `headB`, return the node at which the two lists intersect. If the two linked lists have no intersection at all, return `null`.
+* **Constraints**: Number of nodes in range $[1, 3 \times 10^4]$, $1 \le \text{Node.val} \le 10^5$. Memory must be $O(1)$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Equi-Distance Two Pointer Wrap**:
+  - Pointer `pA` starts at `headA`, `pB` starts at `headB`.
+  - When `pA` hits end of list A (`pA == null`), redirect `pA = headB`.
+  - When `pB` hits end of list B (`pB == null`), redirect `pB = headA`.
+  - In the second iteration, both pointers have traversed exactly $L_A + L_B$ nodes.
+  - They will collide at the exact intersection node, or both hit `null` simultaneously if no intersection exists.
+
+```java
+package com.leetcode.fastslow;
+
+public class IntersectionOfTwoLinkedLists {
+    public ListNode getIntersectionNode(ListNode headA, ListNode headB) {
+        if (headA == null || headB == null) return null;
+
+        ListNode pA = headA;
+        ListNode pB = headB;
+
+        // Traverse combined paths: A+B vs B+A
+        while (pA != pB) {
+            pA = (pA == null) ? headB : pA.next;
+            pB = (pB == null) ? headA : pB.next;
+        }
+
+        return pA; // Either intersection node or null
+    }
+}
+// Time Complexity: O(M + N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.18: Reverse Nodes in k-Group (LeetCode #25) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a linked list, reverse the nodes of the list $k$ at a time, and return the modified list. If the number of nodes is not a multiple of $k$ then left-out nodes, in the end, should remain as it is. You may not alter the values in the list's nodes, only nodes themselves may be changed.
+* **Constraints**: The number of nodes is $n$ in $[1, 5000]$, $1 \le k \le n$. Extra memory must be $O(1)$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Fast Look-Ahead + Iterative In-Place Reversal**:
+  1. Use a dummy node pointing to `head`. Maintain `groupPrev = dummy`.
+  2. For each group, advance a `fast` pointer $k$ steps to find `groupEnd`. If fewer than $k$ nodes remain, break.
+  3. Record `groupNext = groupEnd.next`.
+  4. Reverse the $k$ nodes between `groupPrev.next` and `groupNext`.
+  5. Reconnect pointers and shift `groupPrev` to the end of the newly reversed group.
+
+```java
+package com.leetcode.fastslow;
+
+public class ReverseNodesInKGroup {
+    public ListNode reverseKGroup(ListNode head, int k) {
+        if (head == null || k == 1) return head;
+
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode groupPrev = dummy;
+
+        while (true) {
+            // 1. Check if at least k nodes remain
+            ListNode kth = getKthNode(groupPrev, k);
+            if (kth == null) break;
+
+            ListNode groupNext = kth.next;
+
+            // 2. Reverse k nodes
+            ListNode prev = groupNext;
+            ListNode curr = groupPrev.next;
+            while (curr != groupNext) {
+                ListNode temp = curr.next;
+                curr.next = prev;
+                prev = curr;
+                curr = temp;
+            }
+
+            // 3. Connect reversed group into main list
+            ListNode newGroupTail = groupPrev.next;
+            groupPrev.next = kth;
+            groupPrev = newGroupTail;
+        }
+
+        return dummy.next;
+    }
+
+    private ListNode getKthNode(ListNode curr, int k) {
+        while (curr != null && k > 0) {
+            curr = curr.next;
+            k--;
+        }
+        return curr;
+    }
+}
+// Time Complexity: O(N) single pass. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 3.19: Sort List (LeetCode #148) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a linked list, return the list after sorting it in ascending order. Must achieve $O(N \log N)$ time complexity and $O(1)$ auxiliary space.
+* **Constraints**: Number of nodes in $[0, 5 \times 10^4]$, $-10^5 \le \text{Node.val} \le 10^5$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Merge Sort on Linked List**:
+  - **Divide (Fast & Slow)**: Use `fast` and `slow` pointers to locate the middle of the linked list. Disconnect `prev.next = null` to sever into two separate linked lists.
+  - **Conquer**: Recursively call `sortList(left)` and `sortList(right)`.
+  - **Combine**: Merge two sorted lists into one using a two-pointer merge subroutine.
+
+```java
+package com.leetcode.fastslow;
+
+public class SortListMergeSort {
+    public ListNode sortList(ListNode head) {
+        if (head == null || head.next == null) return head;
+
+        // 1. Split list into two halves using Fast & Slow pointers
+        ListNode prev = null;
+        ListNode slow = head;
+        ListNode fast = head;
+
+        while (fast != null && fast.next != null) {
+            prev = slow;
+            slow = slow.next;
+            fast = fast.next.next;
+        }
+
+        prev.next = null; // Sever left half from right half
+
+        // 2. Recursively sort each half
+        ListNode left = sortList(head);
+        ListNode right = sortList(slow);
+
+        // 3. Merge sorted halves
+        return merge(left, right);
+    }
+
+    private ListNode merge(ListNode l1, ListNode l2) {
+        ListNode dummy = new ListNode(0);
+        ListNode curr = dummy;
+
+        while (l1 != null && l2 != null) {
+            if (l1.val <= l2.val) {
+                curr.next = l1;
+                l1 = l1.next;
+            } else {
+                curr.next = l2;
+                l2 = l2.next;
+            }
+            curr = curr.next;
+        }
+
+        curr.next = (l1 != null) ? l1 : l2;
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N log N). Space Complexity: O(log N) stack frames.
+```
+
+---
+
+#### Problem 3.20: Remove Duplicates from Sorted List II (LeetCode #82) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a sorted linked list, delete all nodes that have duplicate numbers, leaving only distinct numbers from the original list. Return the linked list sorted as well.
+* **Constraints**: The number of nodes in list is in $[0, 300]$, $-100 \le \text{Node.val} \le 100$. List is guaranteed to be sorted.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Sentinel Predecessor + Fast Duplicate Skipping**:
+  - Create `dummy` where `dummy.next = head`.
+  - `prev` starts at `dummy`.
+  - While `head != null`:
+    - If `head.next != null && head.val == head.next.val`, scan ahead with `head` until `head.next == null || head.val != head.next.val`. Link `prev.next = head.next` to eliminate all occurrences of the duplicate.
+    - If no duplicate detected at current node: advance `prev = prev.next`.
+    - Advance `head = head.next`.
+
+```java
+package com.leetcode.fastslow;
+
+public class RemoveDuplicatesFromSortedListII {
+    public ListNode deleteDuplicates(ListNode head) {
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode prev = dummy; // Points to last verified distinct node
+
+        while (head != null) {
+            // Detect duplicate subsegment
+            if (head.next != null && head.val == head.next.val) {
+                // Skip all consecutive duplicates with matching value
+                while (head.next != null && head.val == head.next.val) {
+                    head = head.next;
+                }
+                // Exclude entire duplicate block
+                prev.next = head.next;
+            } else {
+                prev = prev.next;
+            }
+            head = head.next;
+        }
+
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N) single pass. Space Complexity: O(1).
+```
+
 ### Pattern 4: Merge Intervals Pattern
 
 ```
@@ -2627,6 +4257,519 @@ public class MyCalendar {
 // Time Complexity: O(log N) per booking. Space Complexity: O(N).
 ```
 
+---
+
+#### Problem 4.11: My Calendar II (LeetCode #731) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Implement a `MyCalendarTwo` class to store events. A new event can be added if adding the event will not cause a **triple booking** (a triple booking happens when three events have some non-empty intersection). Return `true` if the event can be added without causing a triple booking, otherwise return `false`.
+* **Constraints**:
+  - $0 \le \text{start} < \text{end} \le 10^9$.
+  - At most $1000$ calls will be made to `book`.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Dual Interval List (Bookings vs Double Overlaps)**:
+  - Maintain two lists of intervals: `bookings` (all successfully booked single events) and `overlaps` (sub-intervals where two events overlap).
+  - When `book(start, end)` is invoked:
+    1. First check if `[start, end)` intersects with **any** interval in `overlaps`. If an intersection exists, adding this event would cause a triple booking: return `false` immediately.
+    2. If no collision with `overlaps`, check intersections between `[start, end)` and all existing `bookings`. For every intersection $[\max(\text{start}, b.\text{start}), \min(\text{end}, b.\text{end}))$, add it to `overlaps`.
+    3. Add `[start, end)` to `bookings` and return `true`.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyCalendarTwo {
+    private final List<int[]> bookings;
+    private final List<int[]> overlaps;
+
+    public MyCalendarTwo() {
+        bookings = new ArrayList<>();
+        overlaps = new ArrayList<>();
+    }
+
+    public boolean book(int start, int end) {
+        // 1. Check if new interval collides with an existing double-overlap
+        for (int[] overlap : overlaps) {
+            if (Math.max(start, overlap[0]) < Math.min(end, overlap[1])) {
+                return false; // Triple booking detected!
+            }
+        }
+
+        // 2. Compute new pairwise overlaps with existing bookings
+        for (int[] b : bookings) {
+            int overlapStart = Math.max(start, b[0]);
+            int overlapEnd = Math.min(end, b[1]);
+            if (overlapStart < overlapEnd) {
+                overlaps.add(new int[]{overlapStart, overlapEnd});
+            }
+        }
+
+        bookings.add(new int[]{start, end});
+        return true;
+    }
+}
+// Time Complexity: O(N) per booking, O(N^2) total for N bookings. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 4.12: My Calendar III (LeetCode #732) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: A $k$-booking happens when $k$ events have some non-empty intersection. Implement `MyCalendarThree` to track events and return an integer $k$ representing the largest integer such that there exists a $k$-booking in the calendar after adding the new event.
+* **Constraints**:
+  - $0 \le \text{start} < \text{end} \le 10^9$.
+  - At most $400$ calls will be made to `book`.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Boundary Count Sweep-Line with TreeMap**:
+  - Each event `[start, end)` can be modeled as two boundary events:
+    - $+1$ at `time = start` (an event begins).
+    - $-1$ at `time = end` (an event concludes).
+  - Use a `TreeMap<Integer, Integer>` to maintain chronologically ordered time points.
+  - When `book(start, end)` is called:
+    - Increment count at `start`: `timeline.put(start, timeline.getOrDefault(start, 0) + 1)`.
+    - Decrement count at `end`: `timeline.put(end, timeline.getOrDefault(end, 0) - 1)`.
+    - Perform a linear scan over values in sorted order, maintaining a prefix sum of active concurrent events. The peak prefix sum is the answer $k$.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.TreeMap;
+
+public class MyCalendarThree {
+    private final TreeMap<Integer, Integer> timeline;
+
+    public MyCalendarThree() {
+        timeline = new TreeMap<>();
+    }
+
+    public int book(int startTime, int endTime) {
+        timeline.put(startTime, timeline.getOrDefault(startTime, 0) + 1);
+        timeline.put(endTime, timeline.getOrDefault(endTime, 0) - 1);
+
+        int maxConcurrent = 0;
+        int activeEvents = 0;
+
+        for (int delta : timeline.values()) {
+            activeEvents += delta;
+            maxConcurrent = Math.max(maxConcurrent, activeEvents);
+        }
+
+        return maxConcurrent;
+    }
+}
+// Time Complexity: O(N) per booking where N <= 400. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 4.13: Car Pooling (LeetCode #1094) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: There is a car with `capacity` empty seats. The vehicle only drives east (cannot turn around). Given an integer `capacity` and an array `trips` where $\text{trips}[i] = [\text{numPassengers}_i, \text{from}_i, \text{to}_i]$, return `true` if it is possible to pick up and drop off all passengers for all given trips, or `false` otherwise.
+* **Constraints**:
+  - $1 \le \text{trips.length} \le 1000$.
+  - $\text{trips}[i] = [\text{passengers}, \text{from}, \text{to}]$, $0 \le \text{from} < \text{to} \le 1000$.
+  - $1 \le \text{capacity} \le 10^5$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Difference Array / Sweep-Line**:
+  - Passengers board at `from` and alight at `to`.
+  - Since coordinate bounds are small ($0 \le \text{location} \le 1000$), we can use a direct difference array `delta[1001]`.
+  - For each trip:
+    - `delta[from] += numPassengers`
+    - `delta[to] -= numPassengers`
+  - Iterate through `delta` from location $0$ to $1000$, accumulating `currentPassengers += delta[i]`. If at any point `currentPassengers > capacity`, return `false`.
+
+```java
+package com.leetcode.mergeintervals;
+
+public class CarPooling {
+    public boolean carPooling(int[][] trips, int capacity) {
+        int[] passengerChanges = new int[1001];
+
+        for (int[] trip : trips) {
+            int count = trip[0];
+            int from = trip[1];
+            int to = trip[2];
+
+            passengerChanges[from] += count;
+            passengerChanges[to] -= count;
+        }
+
+        int currentPassengers = 0;
+        for (int change : passengerChanges) {
+            currentPassengers += change;
+            if (currentPassengers > capacity) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+// Time Complexity: O(N + D) where N is trips and D = 1001. Space Complexity: O(D) = O(1).
+```
+
+---
+
+#### Problem 4.14: Corporate Flight Bookings (LeetCode #1109) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: There are $n$ flights labeled from $1$ to $n$. You are given an array of flight bookings `bookings` where $\text{bookings}[i] = [\text{first}_i, \text{last}_i, \text{seats}_i]$ represents a booking for flights $\text{first}_i$ through $\text{last}_i$ inclusive with $\text{seats}_i$ seats reserved for each flight. Return an array `answer` of length $n$, where $\text{answer}[i]$ is the total number of seats reserved for flight $i + 1$.
+* **Constraints**:
+  - $1 \le n \le 2 \times 10^4$.
+  - $1 \le \text{bookings.length} \le 2 \times 10^4$.
+  - $1 \le \text{first}_i \le \text{last}_i \le n$.
+  - $1 \le \text{seats}_i \le 10^4$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Difference Array (Prefix Sum Sweep)**:
+  - Applying each range update $[L, R]$ naively takes $O(N)$ per booking, leading to $O(M \times N) \approx 4 \times 10^8$ operations (TLE).
+  - Using a difference array:
+    - Add seats at index $L - 1$: `diff[L - 1] += seats`.
+    - Subtract seats right after range at index $R$: `if (R < n) diff[R] -= seats`.
+  - Perform a single pass cumulative sum to reconstruct actual flight bookings in $O(N)$ time.
+
+```java
+package com.leetcode.mergeintervals;
+
+public class CorporateFlightBookings {
+    public int[] corpFlightBookings(int[][] bookings, int n) {
+        int[] diff = new int[n];
+
+        for (int[] b : bookings) {
+            int first = b[0] - 1; // Convert 1-based index to 0-based
+            int last = b[1] - 1;
+            int seats = b[2];
+
+            diff[first] += seats;
+            if (last + 1 < n) {
+                diff[last + 1] -= seats;
+            }
+        }
+
+        // Compute prefix sums in-place
+        for (int i = 1; i < n; i++) {
+            diff[i] += diff[i - 1];
+        }
+
+        return diff;
+    }
+}
+// Time Complexity: O(M + N). Space Complexity: O(1) auxiliary (excluding return array).
+```
+
+---
+
+#### Problem 4.15: Range Addition (LeetCode #370) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an integer `length` and an array `updates` where $\text{updates}[i] = [\text{startIndex}_i, \text{endIndex}_i, \text{inc}_i]$. You have an array `arr` of size `length` initialized with all $0$'s. Return `arr` after applying all operations.
+* **Constraints**:
+  - $1 \le \text{length} \le 10^5$.
+  - $0 \le \text{updates.length} \le 10^4$.
+  - $0 \le \text{startIndex}_i \le \text{endIndex}_i < \text{length}$.
+  - $-1000 \le \text{inc}_i \le 1000$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Classic Difference Array**:
+  - For each update $[s, e, val]$:
+    - Mark range initiation: `arr[s] += val`.
+    - Mark range termination: `if (e + 1 < length) arr[e + 1] -= val`.
+  - Compute prefix sum across `arr`:
+    - `arr[i] += arr[i - 1]`.
+
+```java
+package com.leetcode.mergeintervals;
+
+public class RangeAddition {
+    public int[] getModifiedArray(int length, int[][] updates) {
+        int[] result = new int[length];
+
+        // 1. Mark interval boundaries
+        for (int[] update : updates) {
+            int start = update[0];
+            int end = update[1];
+            int inc = update[2];
+
+            result[start] += inc;
+            if (end + 1 < length) {
+                result[end + 1] -= inc;
+            }
+        }
+
+        // 2. Accumulate prefix sum
+        for (int i = 1; i < length; i++) {
+            result[i] += result[i - 1];
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(K + N) where K = updates.length, N = length. Space Complexity: O(1) auxiliary.
+```
+
+---
+
+#### Problem 4.16: Teemo Attacking (LeetCode #495) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Our hero Teemo attacks an enemy Ashe with poison. Given a non-decreasing integer array `timeSeries` where `timeSeries[i]` denotes the second Teemo attacks, and an integer `duration`, return the total number of seconds that Ashe is poisoned.
+* **Constraints**:
+  - $1 \le \text{timeSeries.length} \le 10^4$.
+  - $0 \le \text{timeSeries}[i] \le 10^7$.
+  - $1 \le \text{duration} \le 10^7$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Interval Overlap Accumulation**:
+  - If the gap between two consecutive attacks $\Delta = \text{timeSeries}[i] - \text{timeSeries}[i - 1]$ is smaller than `duration`, the poisoned interval overlaps, contributing only $\Delta$ seconds.
+  - Otherwise, the full `duration` expires before the next attack.
+  - For the final attack, the poison always lasts for the entire `duration`.
+
+```java
+package com.leetcode.mergeintervals;
+
+public class TeemoAttacking {
+    public int findPoisonedDuration(int[] timeSeries, int duration) {
+        if (timeSeries == null || timeSeries.length == 0) return 0;
+
+        int totalPoisonedTime = 0;
+        for (int i = 0; i < timeSeries.length - 1; i++) {
+            int gap = timeSeries[i + 1] - timeSeries[i];
+            totalPoisonedTime += Math.min(gap, duration);
+        }
+
+        // Add duration for the last attack
+        totalPoisonedTime += duration;
+        return totalPoisonedTime;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 4.17: Summary Ranges (LeetCode #228) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given a sorted unique integer array `nums`. A range $[a, b]$ is the set of all integers from $a$ to $b$ inclusive. Return the smallest sorted list of ranges that cover all the numbers in the array exactly.
+* **Constraints**:
+  - $0 \le \text{nums.length} \le 20$.
+  - $-2^{31} \le \text{nums}[i] \le 2^{31} - 1$.
+  - All values in `nums` are unique and sorted in ascending order.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Two-Pointer Range Identification**:
+  - Maintain `start = nums[i]`.
+  - While $i + 1 < \text{nums.length}$ and $\text{nums}[i + 1] == \text{nums}[i] + 1$, advance $i$.
+  - If `start == nums[i]`, format as `"start"`. Else format as `"start->nums[i]"`.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SummaryRanges {
+    public List<String> summaryRanges(int[] nums) {
+        List<String> result = new ArrayList<>();
+        if (nums == null || nums.length == 0) return result;
+
+        int i = 0;
+        while (i < nums.length) {
+            int start = nums[i];
+
+            // Scan consecutive numbers
+            while (i + 1 < nums.length && nums[i + 1] == nums[i] + 1) {
+                i++;
+            }
+
+            if (start == nums[i]) {
+                result.add(String.valueOf(start));
+            } else {
+                result.add(start + "->" + nums[i]);
+            }
+            i++;
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) auxiliary (excluding output).
+```
+
+---
+
+#### Problem 4.18: Missing Ranges (LeetCode #163) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an inclusive range $[lower, upper]$ and a sorted unique integer array `nums`, where all elements are within the inclusive range. A number $x$ is considered missing if $x$ is in the range $[lower, upper]$ and $x$ is not in `nums`. Return the shortest sorted list of ranges that exactly covers all the missing numbers.
+* **Constraints**:
+  - $-10^9 \le lower \le upper \le 10^9$.
+  - $0 \le \text{nums.length} \le 100$.
+  - $lower \le \text{nums}[i] \le upper$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Consecutive Boundary Comparison**:
+  - Maintain expected next number `next = lower`.
+  - For each number `curr` in `nums`:
+    - If `curr > next`, missing gap exists from `[next, curr - 1]`. Add to result.
+    - Set `next = curr + 1`.
+  - After loop, if `next <= upper`, final missing gap exists from `[next, upper]`.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class MissingRanges {
+    public List<List<Integer>> findMissingRanges(int[] nums, int lower, int upper) {
+        List<List<Integer>> missing = new ArrayList<>();
+        int next = lower;
+
+        for (int num : nums) {
+            if (num > next) {
+                missing.add(Arrays.asList(next, num - 1));
+            }
+            next = num + 1;
+        }
+
+        if (next <= upper) {
+            missing.add(Arrays.asList(next, upper));
+        }
+
+        return missing;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) auxiliary.
+```
+
+---
+
+#### Problem 4.19: Data Stream as Disjoint Intervals (LeetCode #352) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a data stream input of non-negative integers $a_1, a_2, \dots, a_n$, summarize the numbers seen so far as a list of disjoint intervals. Implement the `SummaryRanges` class with `addNum(int value)` and `int[][] getIntervals()`.
+* **Constraints**:
+  - $0 \le value \le 10^4$.
+  - At most $3 \times 10^4$ calls will be made to `addNum` and `getIntervals`.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **TreeMap Interval Coalescence**:
+  - Store intervals in `TreeMap<Integer, int[]>` keyed by interval start.
+  - When `addNum(val)` is called:
+    - If interval already covers `val`, return early.
+    - Query `floorKey(val)` (`prev`) and `ceilingKey(val)` (`next`).
+    - **Case 1 (Bridge both)**: `prev.end + 1 == val` AND `val + 1 == next.start`. Merge `prev` and `next` into single interval `[prev.start, next.end]`, delete `next`.
+    - **Case 2 (Extend prev)**: `prev.end + 1 == val`. Update `prev.end = val`.
+    - **Case 3 (Extend next)**: `val + 1 == next.start`. Update `next.start = val` (re-key in map).
+    - **Case 4 (Isolated singleton)**: Insert new interval `[val, val]`.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.TreeMap;
+
+public class SummaryRangesStream {
+    private final TreeMap<Integer, int[]> intervalMap;
+
+    public SummaryRangesStream() {
+        intervalMap = new TreeMap<>();
+    }
+
+    public void addNum(int value) {
+        if (intervalMap.containsKey(value)) return;
+
+        Integer lowKey = intervalMap.lowerKey(value);
+        Integer highKey = intervalMap.higherKey(value);
+
+        boolean connectsToLow = lowKey != null && intervalMap.get(lowKey)[1] + 1 >= value;
+        boolean connectsToHigh = highKey != null && highKey - 1 == value;
+
+        if (connectsToLow && connectsToHigh) {
+            // Merge lower interval and higher interval together
+            intervalMap.get(lowKey)[1] = intervalMap.get(highKey)[1];
+            intervalMap.remove(highKey);
+        } else if (connectsToLow) {
+            // Extend lower interval
+            intervalMap.get(lowKey)[1] = Math.max(intervalMap.get(lowKey)[1], value);
+        } else if (connectsToHigh) {
+            // Prepend to higher interval
+            int[] highInterval = intervalMap.remove(highKey);
+            highInterval[0] = value;
+            intervalMap.put(value, highInterval);
+        } else {
+            // Insert brand new singleton interval
+            intervalMap.put(value, new int[]{value, value});
+        }
+    }
+
+    public int[][] getIntervals() {
+        return intervalMap.values().toArray(new int[intervalMap.size()][]);
+    }
+}
+// Time Complexity: O(log N) for addNum, O(N) for getIntervals. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 4.20: Divide Intervals Into Minimum Number of Groups (LeetCode #2406) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given a 2D integer array `intervals` where $\text{intervals}[i] = [\text{left}_i, \text{right}_i]$ represents the inclusive interval $[\text{left}_i, \text{right}_i]$. You have to divide the intervals into one or more groups such that each interval is in exactly one group, and no two intervals that are in the same group intersect each other. Return the minimum number of groups you need to make.
+* **Constraints**:
+  - $1 \le \text{intervals.length} \le 10^5$.
+  - $1 \le \text{left}_i \le \text{right}_i \le 10^6$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Meeting Rooms II Analogy (Min-Heap of End Times)**:
+  - Two intervals can be in the same group if and only if they do **not** intersect ($\text{prevEnd} < \text{nextStart}$).
+  - Sort intervals by start time.
+  - Maintain a min-heap storing end times of existing groups.
+  - For each interval:
+    - If `minHeap.peek() < interval[0]`, the earliest group has freed up; poll it and assign the current interval to that group (update end time).
+    - Otherwise, a new group must be opened: push `interval[1]` to the heap.
+  - The final size of the heap is the minimum number of groups required.
+
+```java
+package com.leetcode.mergeintervals;
+
+import java.util.Arrays;
+import java.util.PriorityQueue;
+
+public class DivideIntervalsIntoGroups {
+    public int minGroups(int[][] intervals) {
+        // Sort intervals by start time ascending
+        Arrays.sort(intervals, (a, b) -> Integer.compare(a[0], b[0]));
+
+        // Min-heap tracking earliest available end time among groups
+        PriorityQueue<Integer> endTimesMinHeap = new PriorityQueue<>();
+
+        for (int[] interval : intervals) {
+            int start = interval[0];
+            int end = interval[1];
+
+            // If the earliest finishing group is free before this interval starts
+            if (!endTimesMinHeap.isEmpty() && endTimesMinHeap.peek() < start) {
+                endTimesMinHeap.poll(); // Reuse existing group
+            }
+
+            endTimesMinHeap.offer(end); // Push new finish time for group
+        }
+
+        return endTimesMinHeap.size();
+    }
+}
+// Time Complexity: O(N log N). Space Complexity: O(N).
+```
+
 ### Pattern 5: Cyclic Sort Pattern
 
 ```
@@ -3072,6 +5215,528 @@ public class FindDuplicateSignNegation {
     }
 }
 // Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 5.11: Sort Colors - Dutch National Flag (LeetCode #75) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array `nums` with $n$ objects colored red, white, or blue, sort them in-place so that objects of the same color are adjacent, with the colors in the order red, white, and blue. We will use the integers $0$, $1$, and $2$ to represent red, white, and blue respectively. Must solve without library sorting and in a single pass using $O(1)$ space.
+* **Constraints**:
+  - $n == \text{nums.length}$, $1 \le n \le 300$.
+  - $\text{nums}[i]$ is either $0$, $1$, or $2$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Three-Way Cyclic Partitioning**:
+  - Maintain three pointers:
+    - `low`: Boundary for $0$'s (everything before `low` is strictly $0$).
+    - `mid`: Current inspecting pointer.
+    - `high`: Boundary for $2$'s (everything after `high` is strictly $2$).
+  - If `nums[mid] == 0`: Swap `nums[mid]` and `nums[low]`, increment `low++`, `mid++`.
+  - If `nums[mid] == 1`: Already in correct middle section, increment `mid++`.
+  - If `nums[mid] == 2`: Swap `nums[mid]` and `nums[high]`, decrement `high--`. (Do NOT increment `mid` yet, as swapped element from `high` must be evaluated!).
+
+```java
+package com.leetcode.cyclicsort;
+
+public class SortColors {
+    public void sortColors(int[] nums) {
+        int low = 0;
+        int mid = 0;
+        int high = nums.length - 1;
+
+        while (mid <= high) {
+            if (nums[mid] == 0) {
+                swap(nums, low, mid);
+                low++;
+                mid++;
+            } else if (nums[mid] == 1) {
+                mid++;
+            } else { // nums[mid] == 2
+                swap(nums, mid, high);
+                high--;
+            }
+        }
+    }
+
+    private void swap(int[] nums, int i, int j) {
+        int temp = nums[i];
+        nums[i] = nums[j];
+        nums[j] = temp;
+    }
+}
+// Time Complexity: O(N) single pass. Space Complexity: O(1).
+```
+
+---
+
+#### Problem 5.12: Minimum Swaps to Sort Array (Classic GCC / Tier-1 Interview) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of $n$ distinct elements, find the minimum number of swaps required to sort the array in strictly ascending order.
+* **Constraints**:
+  - $1 \le n \le 10^5$.
+  - $1 \le \text{nums}[i] \le 10^9$. All elements distinct.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Graph Cycle Decomposition of Permutations**:
+  - A permutation of an array can be visualized as a set of disjoint directed cycles.
+  - Pair each value with its original index, then sort by value to determine each element's target destination index.
+  - If a cycle has $k$ nodes, exactly $k - 1$ swaps are required to restore all elements in that cycle to their correct positions.
+  - Sum $(k - 1)$ across all disjoint cycles to get the global minimum swap count.
+
+```java
+package com.leetcode.cyclicsort;
+
+import java.util.Arrays;
+
+public class MinimumSwapsToSort {
+    public int minSwaps(int[] nums) {
+        int n = nums.length;
+        int[][] pair = new int[n][2]; // [value, originalIndex]
+
+        for (int i = 0; i < n; i++) {
+            pair[i][0] = nums[i];
+            pair[i][1] = i;
+        }
+
+        // Sort by value to find target index for each element
+        Arrays.sort(pair, (a, b) -> Integer.compare(a[0], b[0]));
+
+        boolean[] visited = new boolean[n];
+        int totalSwaps = 0;
+
+        for (int i = 0; i < n; i++) {
+            // If already visited or already in correct sorted position
+            if (visited[i] || pair[i][1] == i) {
+                continue;
+            }
+
+            // Trace the permutation cycle
+            int cycleSize = 0;
+            int curr = i;
+            while (!visited[curr]) {
+                visited[curr] = true;
+                curr = pair[curr][1];
+                cycleSize++;
+            }
+
+            if (cycleSize > 0) {
+                totalSwaps += (cycleSize - 1);
+            }
+        }
+
+        return totalSwaps;
+    }
+}
+// Time Complexity: O(N log N) due to sorting. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 5.13: Missing Two Numbers (In-Place Cyclic & Math Strategy) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array of size $N - 2$ containing distinct integers from $1$ to $N$. Two numbers are missing. Find both missing numbers in $O(N)$ time and $O(1)$ auxiliary space.
+* **Constraints**:
+  - $3 \le N \le 10^5$.
+  - Array elements are in range $[1, N]$ with exactly two distinct numbers missing.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Sum and Pivot Partitioning ($O(1)$ Space)**:
+  - Expected total sum: $S_{\text{total}} = \frac{N(N + 1)}{2}$.
+  - Actual array sum: $S_{\text{actual}} = \sum \text{nums}[i]$.
+  - The sum of the two missing numbers is: $\text{sumMissing} = S_{\text{total}} - S_{\text{actual}} = x + y$.
+  - Since $x \ne y$, their average $\text{pivot} = \lfloor \frac{\text{sumMissing}}{2} \rfloor$ guarantees that one missing number $x \le \text{pivot}$ and the other $y > \text{pivot}$.
+  - Sum elements $\le \text{pivot}$ from input vs expected sum from $1 \dots \text{pivot}$ to isolate $x$.
+  - Then $y = \text{sumMissing} - x$.
+
+```java
+package com.leetcode.cyclicsort;
+
+public class MissingTwoNumbers {
+    public int[] findMissingTwo(int[] nums, int n) {
+        long totalExpectedSum = (long) n * (n + 1) / 2;
+        long actualSum = 0;
+        for (int num : nums) {
+            actualSum += num;
+        }
+
+        long sumMissing = totalExpectedSum - actualSum;
+        int pivot = (int) (sumMissing / 2);
+
+        // Compute expected vs actual sum for elements <= pivot
+        long expectedSumLeft = (long) pivot * (pivot + 1) / 2;
+        long actualSumLeft = 0;
+        for (int num : nums) {
+            if (num <= pivot) {
+                actualSumLeft += num;
+            }
+        }
+
+        int missing1 = (int) (expectedSumLeft - actualSumLeft);
+        int missing2 = (int) (sumMissing - missing1);
+
+        return new int[]{missing1, missing2};
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 5.14: Maximum Gap (LeetCode #164) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums`, return the maximum difference between two successive elements in its sorted form. If the array contains less than two elements, return `0`. You must write an algorithm that runs in $O(N)$ linear time and uses $O(N)$ extra space.
+* **Constraints**:
+  - $1 \le \text{nums.length} \le 10^5$.
+  - $0 \le \text{nums}[i] \le 10^9$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Pigeonhole Principle Bucket Allocation**:
+  - If $N$ numbers span range $[\min, \max]$, the average gap between successive sorted numbers is $\text{bucketSize} = \max(1, \lfloor \frac{\max - \min}{N - 1} \rfloor)$.
+  - By Pigeonhole Principle, the maximum gap **cannot** occur between two elements within the same bucket!
+  - Therefore, we only need to record the `min` and `max` of each bucket.
+  - The maximum gap will be the difference between the minimum of a non-empty bucket and the maximum of the previous non-empty bucket.
+
+```java
+package com.leetcode.cyclicsort;
+
+import java.util.Arrays;
+
+public class MaximumGap {
+    public int maximumGap(int[] nums) {
+        if (nums == null || nums.length < 2) return 0;
+
+        int min = nums[0];
+        int max = nums[0];
+        for (int num : nums) {
+            min = Math.min(min, num);
+            max = Math.max(max, num);
+        }
+
+        if (min == max) return 0;
+
+        int n = nums.length;
+        int bucketSize = Math.max(1, (max - min) / (n - 1));
+        int bucketCount = (max - min) / bucketSize + 1;
+
+        int[] bucketMin = new int[bucketCount];
+        int[] bucketMax = new int[bucketCount];
+        Arrays.fill(bucketMin, Integer.MAX_VALUE);
+        Arrays.fill(bucketMax, Integer.MIN_VALUE);
+
+        // Place elements in buckets
+        for (int num : nums) {
+            int bIdx = (num - min) / bucketSize;
+            bucketMin[bIdx] = Math.min(bucketMin[bIdx], num);
+            bucketMax[bIdx] = Math.max(bucketMax[bIdx], num);
+        }
+
+        // Measure gaps between consecutive non-empty buckets
+        int maxGap = 0;
+        int prevMax = min;
+
+        for (int i = 0; i < bucketCount; i++) {
+            if (bucketMin[i] == Integer.MAX_VALUE) continue; // Empty bucket
+            maxGap = Math.max(maxGap, bucketMin[i] - prevMax);
+            prevMax = bucketMax[i];
+        }
+
+        return maxGap;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 5.15: H-Index (LeetCode #274) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of integers `citations` where `citations[i]` is the number of citations a researcher received for their $i^{\text{th}}$ paper, compute the researcher's $h$-index. A scientist has an index $h$ if $h$ of their $n$ papers have at least $h$ citations each, and the other $n - h$ papers have no more than $h$ citations each.
+* **Constraints**:
+  - $n == \text{citations.length}$, $1 \le n \le 5000$.
+  - $0 \le \text{citations}[i] \le 1000$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Bucket Sort / Cyclic Index Frequency Array**:
+  - Since $h$ can never exceed $n$, any citation count $\ge n$ can be treated as $n$.
+  - Build a bucket array `count` of size $n + 1$.
+  - Scan citations: if `c >= n`, increment `count[n]++`; else `count[c]++`.
+  - Traverse from $n$ down to $0$, accumulating `totalPapers += count[i]`. As soon as `totalPapers >= i`, return $i$ as the valid $h$-index.
+
+```java
+package com.leetcode.cyclicsort;
+
+public class HIndex {
+    public int hIndex(int[] citations) {
+        int n = citations.length;
+        int[] buckets = new int[n + 1];
+
+        for (int c : citations) {
+            if (c >= n) {
+                buckets[n]++;
+            } else {
+                buckets[c]++;
+            }
+        }
+
+        int totalPapers = 0;
+        for (int i = n; i >= 0; i--) {
+            totalPapers += buckets[i];
+            if (totalPapers >= i) {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 5.16: Top K Frequent Elements - Bucket Sort (LeetCode #347) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums` and an integer `k`, return the $k$ most frequent elements. You may return the answer in any order. Solve in better than $O(N \log N)$ time (strictly $O(N)$).
+* **Constraints**:
+  - $1 \le \text{nums.length} \le 10^5$.
+  - $-10^4 \le \text{nums}[i] \le 10^4$.
+  - $k$ is in range $[1, \text{number of unique elements}]$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Frequency Index as Bucket**:
+  - Count frequencies using a HashMap.
+  - The maximum frequency an element can have is $N$.
+  - Create an array of lists: `List<Integer>[] buckets = new List[n + 1]`, where index represents frequency!
+  - Place elements into buckets corresponding to their frequency.
+  - Iterate from bucket $N$ down to $1$, collecting elements until $k$ elements are gathered.
+
+```java
+package com.leetcode.cyclicsort;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class TopKFrequentBucketSort {
+    public int[] topKFrequent(int[] nums, int k) {
+        Map<Integer, Integer> freqMap = new HashMap<>();
+        for (int num : nums) {
+            freqMap.put(num, freqMap.getOrDefault(num, 0) + 1);
+        }
+
+        // Buckets index = frequency, value = list of numbers with that frequency
+        List<Integer>[] buckets = new List[nums.length + 1];
+        for (Map.Entry<Integer, Integer> entry : freqMap.entrySet()) {
+            int freq = entry.getValue();
+            if (buckets[freq] == null) {
+                buckets[freq] = new ArrayList<>();
+            }
+            buckets[freq].add(entry.getKey());
+        }
+
+        int[] result = new int[k];
+        int idx = 0;
+        for (int freq = buckets.length - 1; freq >= 0 && idx < k; freq--) {
+            if (buckets[freq] != null) {
+                for (int val : buckets[freq]) {
+                    result[idx++] = val;
+                    if (idx == k) break;
+                }
+            }
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 5.17: Check If Array Pairs Are Divisible by k (LeetCode #1497) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an array of integers `arr` of even length $n$ and an integer $k$. We want to divide the array into exactly $n / 2$ pairs such that the sum of each pair is divisible by $k$. Return `true` if you can find a way to do that, or `false` otherwise.
+* **Constraints**:
+  - $\text{arr.length} == n$, $1 \le n \le 10^5$, $n$ is even.
+  - $-10^9 \le \text{arr}[i] \le 10^9$.
+  - $1 \le k \le 10^5$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Cyclic Modulo Remainder Buckets**:
+  - Two numbers sum to a multiple of $k$ if and only if their remainders modulo $k$ sum to $k$ (or both are $0$).
+  - Maintain a frequency array `remainderCount[k]` for remainders in $[0, k - 1]$ (handling negative modulo using `(num % k + k) % k`).
+  - Validation rules:
+    - Remainder $0$ must have an **even** count (`remainderCount[0] % 2 == 0`).
+    - For every remainder $r \in [1, k - 1]$, count of remainder $r$ must match remainder $k - r$: `remainderCount[r] == remainderCount[k - r]`.
+
+```java
+package com.leetcode.cyclicsort;
+
+public class CheckArrayPairsDivisibleByK {
+    public boolean canArrange(int[] arr, int k) {
+        int[] remainderCount = new int[k];
+
+        for (int num : arr) {
+            int rem = ((num % k) + k) % k; // Safe modulo handling negative integers
+            remainderCount[rem]++;
+        }
+
+        // Remainder 0 elements must pair amongst themselves
+        if (remainderCount[0] % 2 != 0) return false;
+
+        // Pair remainder r with remainder (k - r)
+        for (int r = 1; r <= k / 2; r++) {
+            if (r == k - r) {
+                if (remainderCount[r] % 2 != 0) return false;
+            } else {
+                if (remainderCount[r] != remainderCount[k - r]) return false;
+            }
+        }
+
+        return true;
+    }
+}
+// Time Complexity: O(N + K). Space Complexity: O(K).
+```
+
+---
+
+#### Problem 5.18: Contiguous Array (LeetCode #525) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a binary array `nums`, return the maximum length of a contiguous subarray with an equal number of $0$ and $1$.
+* **Constraints**:
+  - $1 \le \text{nums.length} \le 10^5$.
+  - $\text{nums}[i]$ is either $0$ or $1$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Index Mapping via Prefix Difference Transformation**:
+  - Replace $0$ with $-1$. An equal number of $0$'s and $1$'s now corresponds to a subarray sum of $0$.
+  - Maintain a running prefix sum.
+  - Store the earliest index where each prefix sum occurred in a map (or array offset by $N$).
+  - If a prefix sum repeats at index $i$, the subarray between the first occurrence and $i$ has sum $0$! Length is $i - \text{firstIndex}$.
+
+```java
+package com.leetcode.cyclicsort;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class ContiguousArray {
+    public int findMaxLength(int[] nums) {
+        Map<Integer, Integer> sumToIndex = new HashMap<>();
+        sumToIndex.put(0, -1); // Base case for prefix starting from index 0
+
+        int maxLen = 0;
+        int runningSum = 0;
+
+        for (int i = 0; i < nums.length; i++) {
+            runningSum += (nums[i] == 1 ? 1 : -1);
+
+            if (sumToIndex.containsKey(runningSum)) {
+                maxLen = Math.max(maxLen, i - sumToIndex.get(runningSum));
+            } else {
+                sumToIndex.put(runningSum, i);
+            }
+        }
+
+        return maxLen;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 5.19: Subarray Sums Divisible by K (LeetCode #974) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an integer array `nums` and an integer `k`, return the number of non-empty subarrays that have a sum divisible by $k$.
+* **Constraints**:
+  - $1 \le \text{nums.length} \le 3 \times 10^4$.
+  - $-10^4 \le \text{nums}[i] \le 10^4$.
+  - $2 \le k \le 10^4$.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Prefix Sum Remainder Combinatorics**:
+  - If prefix sums at indices $i$ and $j$ have the identical remainder modulo $k$, then the subarray $\text{nums}[i+1 \dots j]$ has sum divisible by $k$.
+  - Use a cyclic remainder count array of size $k$: `remainderFreq[k]`.
+  - Initialize `remainderFreq[0] = 1`.
+  - For each element, update `prefixSum`, normalize remainder `rem = (prefixSum % k + k) % k`.
+  - Add existing count `count += remainderFreq[rem]`, then increment `remainderFreq[rem]++`.
+
+```java
+package com.leetcode.cyclicsort;
+
+public class SubarraySumsDivisibleByK {
+    public int subarraysDivByK(int[] nums, int k) {
+        int[] remainderFreq = new int[k];
+        remainderFreq[0] = 1; // Empty prefix sum has remainder 0
+
+        int totalCount = 0;
+        int prefixSum = 0;
+
+        for (int num : nums) {
+            prefixSum += num;
+            int rem = ((prefixSum % k) + k) % k; // Normalize negative remainders
+            totalCount += remainderFreq[rem];
+            remainderFreq[rem]++;
+        }
+
+        return totalCount;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(K).
+```
+
+---
+
+#### Problem 5.20: First Unique Character in a String (LeetCode #387) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a string `s`, find the first non-repeating character in it and return its index. If it does not exist, return `-1`.
+* **Constraints**:
+  - $1 \le s.\text{length} \le 10^5$.
+  - $s$ consists of only lowercase English letters.
+
+##### 2. ⚡ Optimal Solution & Step-by-Step Logic
+* **Direct Fixed-Size Alphabet Index Array**:
+  - Since character set is bounded ($26$ lowercase ASCII letters), allocate a fixed frequency array `count[26]`.
+  - Pass 1: Increment frequency count at `s.charAt(i) - 'a'`.
+  - Pass 2: Inspect characters in original string order; the first character with `count == 1` is returned immediately.
+
+```java
+package com.leetcode.cyclicsort;
+
+public class FirstUniqueCharacter {
+    public int firstUniqChar(String s) {
+        int[] freq = new int[26];
+
+        // Pass 1: Build frequency table
+        for (int i = 0; i < s.length(); i++) {
+            freq[s.charAt(i) - 'a']++;
+        }
+
+        // Pass 2: Find first character with count 1
+        for (int i = 0; i < s.length(); i++) {
+            if (freq[s.charAt(i) - 'a'] == 1) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) (fixed 26-element array).
 ```
 
 ### Pattern 6: In-place Reversal of a Linked List Pattern
@@ -3554,6 +6219,589 @@ public class PartitionList {
     }
 }
 // Time Complexity: O(N). Space Complexity: O(1) auxiliary space.
+```
+
+---
+
+#### Problem 6.11: Palindrome Linked List (LeetCode #234) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a singly linked list, return `true` if it is a palindrome or `false` otherwise. Solve in $O(N)$ time and $O(1)$ extra space.
+* **Constraints**: Number of nodes in $[1, 10^5]$, $0 \le \text{Node.val} \le 9$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on List `[1 -> 2 -> 2 -> 1]`**:
+
+| Phase / Step | Pointers / Variables State | Action Taken | Node Link Mutations | Reason & Goal |
+| :--- | :--- | :--- | :--- | :--- |
+| **Phase 1: Find Mid** | `slow = head (1)`, `fast = head (1)` | `slow = slow.next`, `fast = fast.next.next` | None (traversing) | Fast advances at $2\times$ speed; when fast hits end, slow is at midpoint. |
+| **Mid Located** | `slow = node(2) [index 2]`, `fast = null` | Stop fast/slow traversal | None | `slow` marks the start of the second half of the list. |
+| **Phase 2: Reverse 2nd Half** | `curr = slow (2)`, `prev = null` | Reverse second half in-place | `curr.next = prev`, `prev = curr`, advance | Standard 3-pointer in-place reversal of the back half. |
+| **Reversal Done** | `prev = node(1) [tail]`, `p1 = head (1)` | Prepare comparison pointers | Second half is now `[1 -> 2 -> null]` | Pointers `p1` (from start) and `p2` (from reversed tail) are aligned. |
+| **Step 1 Compare** | `p1.val = 1`, `p2.val = 1` | `1 == 1` -> Match! | Advance `p1 = p1.next`, `p2 = p2.next` | Palindrome invariant holds for outermost nodes. |
+| **Step 2 Compare** | `p1.val = 2`, `p2.val = 2` | `2 == 2` -> Match! | Advance `p1 = p1.next`, `p2 = p2.next` | Palindrome invariant holds for middle nodes. |
+| **Termination** | `p2 == null` | All pairs matched successfully | Return `true` | All corresponding symmetric nodes matched identically. |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class PalindromeLinkedList {
+    public boolean isPalindrome(ListNode head) {
+        if (head == null || head.next == null) return true;
+
+        // 1. Locate midpoint using Fast & Slow pointers
+        ListNode slow = head;
+        ListNode fast = head;
+        while (fast != null && fast.next != null) {
+            slow = slow.next;
+            fast = fast.next.next;
+        }
+
+        // 2. In-place reverse the second half
+        ListNode prev = null;
+        ListNode curr = slow;
+        while (curr != null) {
+            ListNode nextTemp = curr.next;
+            curr.next = prev;
+            prev = curr;
+            curr = nextTemp;
+        }
+
+        // 3. Compare first half and reversed second half
+        ListNode p1 = head;
+        ListNode p2 = prev;
+        boolean isPalindrome = true;
+        while (p2 != null) {
+            if (p1.val != p2.val) {
+                isPalindrome = false;
+                break;
+            }
+            p1 = p1.next;
+            p2 = p2.next;
+        }
+
+        return isPalindrome;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1) in-place.
+```
+
+---
+
+#### Problem 6.12: Reorder List (LeetCode #143) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the head of a singly linked-list. The list can be represented as: $L_0 \to L_1 \to \dots \to L_{n - 1} \to L_n$. Reorder the list to be on the following form: $L_0 \to L_n \to L_1 \to L_{n - 1} \to L_2 \to L_{n - 2} \to \dots$. You may not modify the values in the list's nodes, only node pointers may be changed.
+* **Constraints**: Number of nodes in $[1, 5 \times 10^4]$, $1 \le \text{Node.val} \le 1000$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on List `[1 -> 2 -> 3 -> 4 -> 5]`**:
+
+| Step | First Half `p1` | Second Half `p2` (Reversed) | Linked Actions & Pointer Re-wiring | Resulting Chain Progress |
+| :--- | :--- | :--- | :--- | :--- |
+| **Initial** | `1 -> 2 -> 3 -> null` | `5 -> 4 -> null` | Split at middle `3`, severed `3.next = null`, reversed `[4 -> 5]` into `[5 -> 4]` | Ready for zipper merge |
+| **1** | `1` (next is `2`) | `5` (next is `4`) | Wire `1.next = 5`, wire `5.next = 2`, advance `p1 = 2`, `p2 = 4` | `1 -> 5 -> 2 ...` |
+| **2** | `2` (next is `3`) | `4` (next is `null`) | Wire `2.next = 4`, wire `4.next = 3`, advance `p1 = 3`, `p2 = null` | `1 -> 5 -> 2 -> 4 -> 3` |
+| **End** | `3` (next is `null`) | `p2 == null` | `p2` exhausted, loop terminates | `1 -> 5 -> 2 -> 4 -> 3 -> null` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class ReorderList {
+    public void reorderList(ListNode head) {
+        if (head == null || head.next == null) return;
+
+        // 1. Find midpoint
+        ListNode slow = head;
+        ListNode fast = head;
+        while (fast != null && fast.next != null) {
+            slow = slow.next;
+            fast = fast.next.next;
+        }
+
+        // 2. Reverse second half
+        ListNode prev = null;
+        ListNode curr = slow.next;
+        slow.next = null; // Sever first half from second half
+
+        while (curr != null) {
+            ListNode nextTemp = curr.next;
+            curr.next = prev;
+            prev = curr;
+            curr = nextTemp;
+        }
+
+        // 3. Interweave / zipper merge two halves
+        ListNode p1 = head;
+        ListNode p2 = prev;
+
+        while (p2 != null) {
+            ListNode temp1 = p1.next;
+            ListNode temp2 = p2.next;
+
+            p1.next = p2;
+            p2.next = temp1;
+
+            p1 = temp1;
+            p2 = temp2;
+        }
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.13: Merge Two Sorted Lists (LeetCode #21) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the heads of two sorted linked lists `list1` and `list2`. Merge the two lists into one sorted list. The list should be made by splicing together the nodes of the first two lists. Return the head of the merged linked list.
+* **Constraints**: Number of nodes in both lists in $[0, 50]$, $-100 \le \text{Node.val} \le 100$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on `list1 = [1 -> 2 -> 4]`, `list2 = [1 -> 3 -> 4]`**:
+
+| Step | `list1.val` | `list2.val` | Evaluated Comparison | Action & Pointer Attachment | Merged List State |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Init** | `1` | `1` | Sentinel dummy head initialized | `curr = dummy` | `dummy -> null` |
+| **1** | `1` | `1` | `1 <= 1` (Take list1) | `curr.next = list1`, `list1 = list1.next` | `dummy -> 1(L1)` |
+| **2** | `2` | `1` | `1 < 2` (Take list2) | `curr.next = list2`, `list2 = list2.next` | `dummy -> 1 -> 1(L2)` |
+| **3** | `2` | `3` | `2 < 3` (Take list1) | `curr.next = list1`, `list1 = list1.next` | `dummy -> 1 -> 1 -> 2(L1)` |
+| **4** | `4` | `3` | `3 < 4` (Take list2) | `curr.next = list2`, `list2 = list2.next` | `dummy -> 1 -> 1 -> 2 -> 3(L2)` |
+| **5** | `4` | `4` | `4 <= 4` (Take list1) | `curr.next = list1`, `list1 = null` | `dummy -> 1 -> 1 -> 2 -> 3 -> 4(L1)` |
+| **Splice** | `null` | `4` | `list1 == null` | Directly link remaining: `curr.next = list2` | `dummy -> 1 -> 1 -> 2 -> 3 -> 4 -> 4(L2)` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class MergeTwoSortedLists {
+    public ListNode mergeTwoLists(ListNode list1, ListNode list2) {
+        ListNode dummy = new ListNode(0);
+        ListNode curr = dummy;
+
+        while (list1 != null && list2 != null) {
+            if (list1.val <= list2.val) {
+                curr.next = list1;
+                list1 = list1.next;
+            } else {
+                curr.next = list2;
+                list2 = list2.next;
+            }
+            curr = curr.next;
+        }
+
+        curr.next = (list1 != null) ? list1 : list2;
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N + M). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.14: Merge k Sorted Lists (LeetCode #23) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array of $k$ linked-lists `lists`, each linked-list is sorted in ascending order. Merge all the linked-lists into one sorted linked-list and return it.
+* **Constraints**: $k == \text{lists.length}$, $0 \le k \le 10^4$, $0 \le \text{total nodes} \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Divide-and-Conquer Tournament Tree (Pairwise Merging)**:
+
+| Round | Input Lists Count | Action Performed | Pairs Merged | Remaining Lists | Time per Round |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Round 1** | $k = 8$ lists ($L_0 \dots L_7$) | Merge pairs with interval $1$ | $(L_0, L_1), (L_2, L_3), (L_4, L_5), (L_6, L_7)$ | $4$ sorted lists | $O(N)$ |
+| **Round 2** | $4$ lists ($L_0, L_2, L_4, L_6$) | Merge pairs with interval $2$ | $(L_0, L_2), (L_4, L_6)$ | $2$ sorted lists | $O(N)$ |
+| **Round 3** | $2$ lists ($L_0, L_4$) | Merge final pair with interval $4$ | $(L_0, L_4)$ | $1$ completely merged list | $O(N)$ |
+| **Total** | $\log_2(k) = 3$ rounds | Tournament Tree Reduction | All $k$ lists consolidated | $1$ unified list | $O(N \log k)$ |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class MergeKSortedLists {
+    public ListNode mergeKLists(ListNode[] lists) {
+        if (lists == null || lists.length == 0) return null;
+
+        int interval = 1;
+        while (interval < lists.length) {
+            for (int i = 0; i + interval < lists.length; i += interval * 2) {
+                lists[i] = mergeTwoLists(lists[i], lists[i + interval]);
+            }
+            interval *= 2;
+        }
+
+        return lists[0];
+    }
+
+    private ListNode mergeTwoLists(ListNode l1, ListNode l2) {
+        ListNode dummy = new ListNode(0);
+        ListNode curr = dummy;
+
+        while (l1 != null && l2 != null) {
+            if (l1.val <= l2.val) {
+                curr.next = l1;
+                l1 = l1.next;
+            } else {
+                curr.next = l2;
+                l2 = l2.next;
+            }
+            curr = curr.next;
+        }
+
+        curr.next = (l1 != null) ? l1 : l2;
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N log K) where N is total nodes. Space Complexity: O(1) in-place.
+```
+
+---
+
+#### Problem 6.15: Remove Duplicates from Sorted List (LeetCode #83) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a sorted linked list, delete all duplicates such that each element appears only once. Return the linked list sorted as well.
+* **Constraints**: Number of nodes in $[0, 300]$, $-100 \le \text{Node.val} \le 100$. List is guaranteed to be sorted.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on `[1 -> 1 -> 2 -> 3 -> 3]`**:
+
+| Step | `curr` Node Val | `curr.next` Node Val | Condition Checked | Action / Pointer Re-assignment | Modified List State |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | `1` | `1` | `1 == 1` (Duplicate!) | Sever duplicate: `curr.next = curr.next.next` | `[1 -> 2 -> 3 -> 3]` |
+| **2** | `1` | `2` | `1 != 2` (Distinct) | Advance: `curr = curr.next` | `curr` now at `node(2)` |
+| **3** | `2` | `3` | `2 != 3` (Distinct) | Advance: `curr = curr.next` | `curr` now at first `node(3)` |
+| **4** | `3` | `3` | `3 == 3` (Duplicate!) | Sever duplicate: `curr.next = curr.next.next` | `[1 -> 2 -> 3 -> null]` |
+| **5** | `3` | `null` | `curr.next == null` | Traversal completes | Clean single-occurrence list returned |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class RemoveDuplicatesFromSortedList {
+    public ListNode deleteDuplicates(ListNode head) {
+        ListNode curr = head;
+
+        while (curr != null && curr.next != null) {
+            if (curr.val == curr.next.val) {
+                curr.next = curr.next.next; // Bypass duplicate node
+            } else {
+                curr = curr.next; // Advance to next distinct node
+            }
+        }
+
+        return head;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.16: Remove Duplicates from Sorted List II (LeetCode #82) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a sorted linked list, delete all nodes that have duplicate numbers, leaving only distinct numbers from the original list. Return the linked list sorted as well.
+* **Constraints**: Number of nodes in $[0, 300]$, $-100 \le \text{Node.val} \le 100$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on `[1 -> 2 -> 3 -> 3 -> 4 -> 4 -> 5]`**:
+
+| Step | Predecessor `prev` | Inspecting `head` | Subsegment Detected | Pointer Re-wiring Action | Active List |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Init** | `dummy (0)` | `node(1)` | Distinct element | `prev = prev.next`, `head = head.next` | `dummy -> 1` |
+| **1** | `node(1)` | `node(2)` | Distinct element | `prev = prev.next`, `head = head.next` | `dummy -> 1 -> 2` |
+| **2** | `node(2)` | `node(3)` | Duplicates (`3 == 3`) | Fast scan skips all 3s; `prev.next = node(4)` | `dummy -> 1 -> 2 -> 4` |
+| **3** | `node(2)` | `node(4)` | Duplicates (`4 == 4`) | Fast scan skips all 4s; `prev.next = node(5)` | `dummy -> 1 -> 2 -> 5` |
+| **4** | `node(2)` | `node(5)` | Distinct (`5.next == null`) | `prev = prev.next`, `head = null` | `dummy -> 1 -> 2 -> 5 -> null` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class RemoveDuplicatesFromSortedListII {
+    public ListNode deleteDuplicates(ListNode head) {
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode prev = dummy;
+
+        while (head != null) {
+            if (head.next != null && head.val == head.next.val) {
+                // Advance head until the end of the duplicate sequence
+                while (head.next != null && head.val == head.next.val) {
+                    head = head.next;
+                }
+                prev.next = head.next; // Sever all duplicate nodes at once
+            } else {
+                prev = prev.next;
+            }
+            head = head.next;
+        }
+
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.17: Copy List with Random Pointer (LeetCode #138) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: A linked list of length $n$ is given such that each node contains an additional random pointer, which could point to any node in the list, or `null`. Construct a deep copy of the list. Must run in $O(1)$ auxiliary space (excluding copy nodes).
+* **Constraints**: $0 \le n \le 1000$, $-10^4 \le \text{Node.val} \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Three-Pass In-Place Interweaving Strategy**:
+
+| Pass # | Goal | Pointer Logic & Condition | Pointer Mutation Formula | Visual State |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pass 1** | Interweave Clones | Create clone for each node and insert immediately behind original | `clone.next = curr.next; curr.next = clone;` | `A -> A' -> B -> B' -> C -> C'` |
+| **Pass 2** | Copy Random Pointers | Map original `random` to clone `random` | `if (curr.random != null) curr.next.random = curr.random.next` | `A'.random` points to `C'` because `A.random` points to `C` |
+| **Pass 3** | Unweave Chains | Decouple cloned list from original list | `curr.next = clone.next; if (clone.next != null) clone.next = clone.next.next;` | Restores original `A -> B -> C` and extracts clone `A' -> B' -> C'` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+class Node {
+    int val;
+    Node next;
+    Node random;
+    public Node(int val) { this.val = val; }
+}
+
+public class CopyListWithRandomPointer {
+    public Node copyRandomList(Node head) {
+        if (head == null) return null;
+
+        // Pass 1: Clone nodes and interweave: A -> A' -> B -> B'
+        Node curr = head;
+        while (curr != null) {
+            Node clone = new Node(curr.val);
+            clone.next = curr.next;
+            curr.next = clone;
+            curr = clone.next;
+        }
+
+        // Pass 2: Assign random pointers for cloned nodes
+        curr = head;
+        while (curr != null) {
+            if (curr.random != null) {
+                curr.next.random = curr.random.next;
+            }
+            curr = curr.next.next;
+        }
+
+        // Pass 3: Unweave and separate the two lists
+        curr = head;
+        Node cloneHead = head.next;
+        Node cloneCurr = cloneHead;
+
+        while (curr != null) {
+            curr.next = curr.next.next;
+            cloneCurr.next = (cloneCurr.next != null) ? cloneCurr.next.next : null;
+
+            curr = curr.next;
+            cloneCurr = cloneCurr.next;
+        }
+
+        return cloneHead;
+    }
+}
+// Time Complexity: O(N) three-pass. Space Complexity: O(1) auxiliary.
+```
+
+---
+
+#### Problem 6.18: Flatten a Multilevel Doubly Linked List (LeetCode #430) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given a doubly linked list, which in addition to the `next` and `prev` pointers, has a `child` pointer, which may or may not point to a separate doubly linked list. Flatten the list so that all the nodes appear in a single-level, doubly linked list.
+* **Constraints**: Number of nodes in $[0, 1000]$, $1 \le \text{Node.val} \le 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+
+| Step | State of `curr` | Condition Checked | Action / Pointer Reconnection | Reason & Effect |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | `curr.child == null` | No child branch | Simply advance: `curr = curr.next` | Move along existing level. |
+| **2** | `curr.child != null` | Child branch detected! | Locate child tail: `while (tail.next != null) tail = tail.next;` | Must find where child list terminates to wire back to `curr.next`. |
+| **3** | Child tail located | Splice child between `curr` and `curr.next` | `tail.next = curr.next; if (curr.next != null) curr.next.prev = tail;` | Bridges end of child chain back to original upper chain. |
+| **4** | Splicing Head | Connect `curr` to child head | `curr.next = curr.child; curr.child.prev = curr; curr.child = null;` | Flattens child level into main level; sets `child = null`. |
+| **5** | Continue | Advance `curr = curr.next` | Continues linear traversal | Seamlessly continues into newly spliced nodes. |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+class NodeDLL {
+    public int val;
+    public NodeDLL prev;
+    public NodeDLL next;
+    public NodeDLL child;
+}
+
+public class FlattenMultilevelDoublyLinkedList {
+    public NodeDLL flatten(NodeDLL head) {
+        if (head == null) return null;
+
+        NodeDLL curr = head;
+        while (curr != null) {
+            if (curr.child != null) {
+                NodeDLL next = curr.next;
+
+                // Find the tail of the child branch
+                NodeDLL childTail = curr.child;
+                while (childTail.next != null) {
+                    childTail = childTail.next;
+                }
+
+                // Connect child branch between curr and next
+                curr.next = curr.child;
+                curr.child.prev = curr;
+                curr.child = null; // Important: nullify child pointer
+
+                if (next != null) {
+                    childTail.next = next;
+                    next.prev = childTail;
+                }
+            }
+            curr = curr.next;
+        }
+
+        return head;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.19: Insertion Sort List (LeetCode #147) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `head` of a singly linked list, sort the list using insertion sort, and return the sorted list's head.
+* **Constraints**: Number of nodes in $[1, 5000]$, $-5000 \le \text{Node.val} \le 5000$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on `[4 -> 2 -> 1 -> 3]`**:
+
+| Step | Sorted Sublist Boundary | Next Node to Insert `curr` | Insertion Position Search | Pointer Splice Action | Sorted Chain State |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Init** | `dummy -> 4` | `curr = 2` | `prev = dummy` (`dummy.next.val (4) > 2`) | Splice `2` before `4`: `curr.next = 4; dummy.next = 2;` | `dummy -> 2 -> 4` |
+| **1** | `dummy -> 2 -> 4` | `curr = 1` | `prev = dummy` (`dummy.next.val (2) > 1`) | Splice `1` before `2`: `curr.next = 2; dummy.next = 1;` | `dummy -> 1 -> 2 -> 4` |
+| **2** | `dummy -> 1 -> 2 -> 4` | `curr = 3` | `prev` moves to `node(2)` (`2 < 3 <= 4`) | Splice `3` between `2` and `4` | `dummy -> 1 -> 2 -> 3 -> 4` |
+| **End** | Entire list sorted | `curr == null` | Insertion sort completes | Return `dummy.next` | `1 -> 2 -> 3 -> 4 -> null` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class InsertionSortList {
+    public ListNode insertionSortList(ListNode head) {
+        if (head == null || head.next == null) return head;
+
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode curr = head.next;
+        ListNode lastSorted = head;
+
+        while (curr != null) {
+            if (lastSorted.val <= curr.val) {
+                lastSorted = lastSorted.next;
+            } else {
+                // Locate insertion point from dummy
+                ListNode prev = dummy;
+                while (prev.next.val <= curr.val) {
+                    prev = prev.next;
+                }
+
+                // Splice curr into sorted chain
+                lastSorted.next = curr.next;
+                curr.next = prev.next;
+                prev.next = curr;
+            }
+            curr = lastSorted.next;
+        }
+
+        return dummy.next;
+    }
+}
+// Time Complexity: O(N^2). Space Complexity: O(1).
+```
+
+---
+
+#### Problem 6.20: Add Two Numbers II (LeetCode #445) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given two non-empty linked lists representing two non-negative integers. The most significant digit comes first and each of their nodes contains a single digit. Add the two numbers and return the sum as a linked list. (You may not modify the lists directly without in-place reversal, or use stacks).
+* **Constraints**: Number of nodes in range $[1, 100]$, $0 \le \text{Node.val} \le 9$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on `l1 = [7 -> 2 -> 4 -> 3]`, `l2 = [5 -> 6 -> 4]`**:
+
+| Step | Reversal & Alignment | Digits Added | Sum & Carry | Node Prepended to Result | Result List Head |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pre** | In-place reverse both inputs | `rev1: 3 -> 4 -> 2 -> 7`, `rev2: 4 -> 6 -> 5` | Alignment for column-wise addition | None | `carry = 0` |
+| **1** | Ones Column | `3 + 4 + 0` | `sum = 7`, `carry = 0` | Create `node(7)`, prepend to head | `7 -> null` |
+| **2** | Tens Column | `4 + 6 + 0` | `sum = 10`, `carry = 1` | Create `node(0)`, prepend to head | `0 -> 7` |
+| **3** | Hundreds Column | `2 + 5 + 1` | `sum = 8`, `carry = 0` | Create `node(8)`, prepend to head | `8 -> 0 -> 7` |
+| **4** | Thousands Column | `7 + 0 + 0` | `sum = 7`, `carry = 0` | Create `node(7)`, prepend to head | `7 -> 8 -> 0 -> 7` |
+| **End** | Reversal of output avoided by prepending | Final result is already in MSB-first order! | None | Direct return | `[7 -> 8 -> 0 -> 7]` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.inplacereversal;
+
+public class AddTwoNumbersII {
+    public ListNode addTwoNumbers(ListNode l1, ListNode l2) {
+        // 1. Reverse both input lists in-place
+        l1 = reverseList(l1);
+        l2 = reverseList(l2);
+
+        ListNode head = null;
+        int carry = 0;
+
+        // 2. Add column-by-column prepending to result
+        while (l1 != null || l2 != null || carry != 0) {
+            int sum = carry;
+            if (l1 != null) {
+                sum += l1.val;
+                l1 = l1.next;
+            }
+            if (l2 != null) {
+                sum += l2.val;
+                l2 = l2.next;
+            }
+
+            carry = sum / 10;
+            ListNode newNode = new ListNode(sum % 10);
+            newNode.next = head; // Prepend to automatically maintain MSB order
+            head = newNode;
+        }
+
+        return head;
+    }
+
+    private ListNode reverseList(ListNode head) {
+        ListNode prev = null;
+        ListNode curr = head;
+        while (curr != null) {
+            ListNode nextTemp = curr.next;
+            curr.next = prev;
+            prev = curr;
+            curr = nextTemp;
+        }
+        return prev;
+    }
+}
+// Time Complexity: O(M + N). Space Complexity: O(1) auxiliary space (in-place reversal).
 ```
 
 ---
@@ -4121,6 +7369,674 @@ public class SnakesAndLadders {
 // Time Complexity: O(N^2). Space Complexity: O(N^2).
 ```
 
+---
+
+#### Problem 7.11: Deepest Leaves Sum (LeetCode #1302) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, return the sum of values of its deepest leaves.
+* **Constraints**: The number of nodes in the tree is in the range $[1, 10^4]$, $1 \le \text{Node.val} \le 100$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on Tree**: `[1, 2, 3, 4, 5, null, 6, 7, null, null, null, null, 8]`
+
+| Level # | Queue Contents at Start | `levelSize` | Nodes Processed & Running Sum | Reset Action | Level Sum |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **0** | `[1]` | `1` | Dequeue `1`, sum = $1$. Push children: `[2, 3]` | `levelSum = 0` | $1$ |
+| **1** | `[2, 3]` | `2` | Dequeue `2, 3`, sum = $2 + 3 = 5$. Push: `[4, 5, 6]` | `levelSum = 0` | $5$ |
+| **2** | `[4, 5, 6]` | `3` | Dequeue `4, 5, 6`, sum = $4 + 5 + 6 = 15$. Push: `[7, 8]` | `levelSum = 0` | $15$ |
+| **3 (Deepest)** | `[7, 8]` | `2` | Dequeue `7, 8`, sum = $7 + 8 = 15$. No children left! | `levelSum = 0` | **$15$** |
+| **End** | `[]` (Queue empty) | `0` | BFS terminates | Retain last computed level sum | **Result: 15** |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class DeepestLeavesSum {
+    public int deepestLeavesSum(TreeNode root) {
+        if (root == null) return 0;
+
+        Queue<TreeNode> queue = new LinkedList<>();
+        queue.offer(root);
+        int deepestSum = 0;
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+            deepestSum = 0; // Reset sum at each level; the final iteration holds deepest leaves
+
+            for (int i = 0; i < levelSize; i++) {
+                TreeNode curr = queue.poll();
+                deepestSum += curr.val;
+
+                if (curr.left != null) queue.offer(curr.left);
+                if (curr.right != null) queue.offer(curr.right);
+            }
+        }
+
+        return deepestSum;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(W) where W is max tree width.
+```
+
+---
+
+#### Problem 7.12: Find Largest Value in Each Tree Row (LeetCode #515) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, return an array of the largest value in each row of the tree (0-indexed).
+* **Constraints**: Number of nodes in $[0, 10^4]$, $-2^{31} \le \text{Node.val} \le 2^{31} - 1$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on Tree `[1, 3, 2, 5, 3, null, 9]`**:
+
+| Level # | Queue Elements | Evaluated Node Values | Running `maxVal` Comparison | Level Maximum Recorded |
+| :--- | :--- | :--- | :--- | :--- |
+| **Row 0** | `[1]` | `[1]` | `Math.max(MIN, 1) = 1` | `1` |
+| **Row 1** | `[3, 2]` | `[3, 2]` | `Math.max(MIN, 3) = 3`, then `Math.max(3, 2) = 3` | `3` |
+| **Row 2** | `[5, 3, 9]` | `[5, 3, 9]` | `Math.max(MIN, 5) = 5`, `Math.max(5, 3) = 5`, `Math.max(5, 9) = 9` | `9` |
+| **Output** | All levels processed | None | Collect results into list: `[1, 3, 9]` | `[1, 3, 9]` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+
+public class FindLargestValueInEachTreeRow {
+    public List<Integer> largestValues(TreeNode root) {
+        List<Integer> largestValues = new ArrayList<>();
+        if (root == null) return largestValues;
+
+        Queue<TreeNode> queue = new LinkedList<>();
+        queue.offer(root);
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+            long maxVal = Long.MIN_VALUE;
+
+            for (int i = 0; i < levelSize; i++) {
+                TreeNode curr = queue.poll();
+                maxVal = Math.max(maxVal, curr.val);
+
+                if (curr.left != null) queue.offer(curr.left);
+                if (curr.right != null) queue.offer(curr.right);
+            }
+
+            largestValues.add((int) maxVal);
+        }
+
+        return largestValues;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(W).
+```
+
+---
+
+#### Problem 7.13: Binary Tree Level Order Traversal II - Bottom-Up (LeetCode #107) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, return the bottom-up level order traversal of its nodes' values (i.e., from left to right, level by level from leaf to root).
+* **Constraints**: Number of nodes in $[0, 2000]$, $-1000 \le \text{Node.val} \le 1000$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace using `LinkedList.addFirst()`**:
+
+| Traversal Step | BFS Level Explored | Values in Current Level | List Insertion Action | Result State (`LinkedList`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Level 0** | Root level | `[3]` | `result.addFirst([3])` | `[[3]]` |
+| **Level 1** | Middle level | `[9, 20]` | `result.addFirst([9, 20])` | `[[9, 20], [3]]` |
+| **Level 2** | Leaf level | `[15, 7]` | `result.addFirst([15, 7])` | `[[15, 7], [9, 20], [3]]` |
+| **Final** | Traversal finishes | All levels inverted | No post-reversal required | Leaf level naturally ends up at index $0$! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+
+public class LevelOrderTraversalBottomUp {
+    public List<List<Integer>> levelOrderBottom(TreeNode root) {
+        LinkedList<List<Integer>> result = new LinkedList<>();
+        if (root == null) return result;
+
+        Queue<TreeNode> queue = new LinkedList<>();
+        queue.offer(root);
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+            List<Integer> currentLevel = new ArrayList<>(levelSize);
+
+            for (int i = 0; i < levelSize; i++) {
+                TreeNode curr = queue.poll();
+                currentLevel.add(curr.val);
+
+                if (curr.left != null) queue.offer(curr.left);
+                if (curr.right != null) queue.offer(curr.right);
+            }
+
+            // Prepend current level to head of linked list for bottom-up order
+            result.addFirst(currentLevel);
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 7.14: Cousins in Binary Tree (LeetCode #993) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Two nodes of a binary tree are cousins if they have the **same depth** with **different parents**. Given the `root` of a binary tree with unique values and two integers $x$ and $y$, return `true` if the nodes corresponding to $x$ and $y$ are cousins, or `false` otherwise.
+* **Constraints**: Number of nodes in $[2, 100]$, $1 \le \text{Node.val} \le 100$. All node values are unique.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+
+| Level Event | Condition Evaluated | Outcome | Cousin Invariant Result |
+| :--- | :--- | :--- | :--- |
+| **Sibling Check** | `curr.left.val == x && curr.right.val == y` (or vice-versa) | Same parent detected! | **False** (Siblings are NOT cousins) |
+| **Level Check 1** | Node $x$ found at level $L$, node $y$ found at level $L$ with different parents | Same depth, different parents | **True** (Confirmed Cousins) |
+| **Level Check 2** | Node $x$ found at level $L$, but node $y$ not present at level $L$ | Different depths | **False** (Cannot be cousins across different levels) |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class CousinsInBinaryTree {
+    public boolean isCousins(TreeNode root, int x, int y) {
+        if (root == null) return false;
+
+        Queue<TreeNode> queue = new LinkedList<>();
+        queue.offer(root);
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+            boolean foundX = false;
+            boolean foundY = false;
+
+            for (int i = 0; i < levelSize; i++) {
+                TreeNode curr = queue.poll();
+
+                if (curr.val == x) foundX = true;
+                if (curr.val == y) foundY = true;
+
+                // Check if x and y are immediate siblings (share identical parent)
+                if (curr.left != null && curr.right != null) {
+                    if ((curr.left.val == x && curr.right.val == y) ||
+                        (curr.left.val == y && curr.right.val == x)) {
+                        return false; // Siblings cannot be cousins
+                    }
+                }
+
+                if (curr.left != null) queue.offer(curr.left);
+                if (curr.right != null) queue.offer(curr.right);
+            }
+
+            // Both found on same level
+            if (foundX && foundY) return true;
+            // One found on this level, the other must be on a deeper level
+            if (foundX || foundY) return false;
+        }
+
+        return false;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(W).
+```
+
+---
+
+#### Problem 7.15: Symmetric Tree (LeetCode #101) - [Easy]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, check whether it is a mirror of itself (i.e., symmetric around its center). Solve iteratively using BFS.
+* **Constraints**: Number of nodes in $[1, 1000]$, $-100 \le \text{Node.val} \le 100$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace Pairing Symmetric Counterparts**:
+
+| Pair Enqueued | Pair Dequeued `(t1, t2)` | Null & Value Symmetry Checks | Children Enqueued Mirror-wise | Symmetry Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Root** | `(root.left, root.right)` | Both non-null, `t1.val == t2.val` | Enqueue `(t1.left, t2.right)` & `(t1.right, t2.left)` | Valid |
+| **Outer Pair** | `(left.left, right.right)` | Both non-null, `t1.val == t2.val` | Enqueue symmetric opposite outer children | Valid |
+| **Inner Pair** | `(left.right, right.left)` | Both non-null, `t1.val == t2.val` | Enqueue symmetric opposite inner children | Valid |
+| **Null Mismatch** | `(non-null, null)` | One node exists, mirror counterpart missing | Immediately terminate with `false` | Violation |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class SymmetricTreeBFS {
+    public boolean isSymmetric(TreeNode root) {
+        if (root == null) return true;
+
+        Queue<TreeNode> queue = new LinkedList<>();
+        queue.offer(root.left);
+        queue.offer(root.right);
+
+        while (!queue.isEmpty()) {
+            TreeNode t1 = queue.poll();
+            TreeNode t2 = queue.poll();
+
+            if (t1 == null && t2 == null) continue;
+            if (t1 == null || t2 == null) return false;
+            if (t1.val != t2.val) return false;
+
+            // Enqueue symmetric outer and inner counterparts
+            queue.offer(t1.left);
+            queue.offer(t2.right);
+            queue.offer(t1.right);
+            queue.offer(t2.left);
+        }
+
+        return true;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(W).
+```
+
+---
+
+#### Problem 7.16: All Nodes Distance K in Binary Tree (LeetCode #863) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, the value of a target node `target`, and an integer `k`, return an array of the values of all nodes that have a distance `k` from the target node in any direction (including upwards through parent).
+* **Constraints**: Number of nodes in $[1, 500]$, $0 \le \text{Node.val} \le 500$. All values unique. $0 \le k \le 1000$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Radial BFS Radiating from Target**:
+
+| Radial Step `dist` | Nodes at Current Radius | Expansion Directions | Visited Set Tracking | Target `k` Check |
+| :--- | :--- | :--- | :--- | :--- |
+| **Radius 0** | `[target]` | Left child, Right child, Parent node | Mark `target` visited | If $k = 0$, return `[target.val]` |
+| **Radius 1** | Immediate neighbors | Unvisited left, right, parent nodes | Add all 3 neighbors to visited | `dist == 1` |
+| **Radius k** | Nodes at exact distance $k$ | Stop further expansions | Contains all perimeter nodes | Extract all node values in queue and return! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.*;
+
+public class AllNodesDistanceKInBinaryTree {
+    public List<Integer> distanceK(TreeNode root, TreeNode target, int k) {
+        List<Integer> result = new ArrayList<>();
+        if (root == null || target == null) return result;
+
+        // 1. Build parent pointer map using BFS
+        Map<TreeNode, TreeNode> parentMap = new HashMap<>();
+        Queue<TreeNode> buildQueue = new LinkedList<>();
+        buildQueue.offer(root);
+
+        while (!buildQueue.isEmpty()) {
+            TreeNode curr = buildQueue.poll();
+            if (curr.left != null) {
+                parentMap.put(curr.left, curr);
+                buildQueue.offer(curr.left);
+            }
+            if (curr.right != null) {
+                parentMap.put(curr.right, curr);
+                buildQueue.offer(curr.right);
+            }
+        }
+
+        // 2. Radial BFS starting from target node
+        Queue<TreeNode> radialQueue = new LinkedList<>();
+        Set<TreeNode> visited = new HashSet<>();
+
+        radialQueue.offer(target);
+        visited.add(target);
+        int currentDistance = 0;
+
+        while (!radialQueue.isEmpty()) {
+            if (currentDistance == k) {
+                for (TreeNode node : radialQueue) {
+                    result.add(node.val);
+                }
+                return result;
+            }
+
+            int levelSize = radialQueue.size();
+            for (int i = 0; i < levelSize; i++) {
+                TreeNode curr = radialQueue.poll();
+
+                // Check left child
+                if (curr.left != null && visited.add(curr.left)) {
+                    radialQueue.offer(curr.left);
+                }
+                // Check right child
+                if (curr.right != null && visited.add(curr.right)) {
+                    radialQueue.offer(curr.right);
+                }
+                // Check parent
+                TreeNode parent = parentMap.get(curr);
+                if (parent != null && visited.add(parent)) {
+                    radialQueue.offer(parent);
+                }
+            }
+            currentDistance++;
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 7.17: Shortest Path in Binary Matrix (LeetCode #1091) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an $n \times n$ binary matrix `grid`, return the length of the shortest clear path in the matrix from $(0, 0)$ to $(n - 1, n - 1)$. If no such path exists, return `-1`. A clear path consists of cells with value $0$ and can traverse in all **8 directions**.
+* **Constraints**: $n == \text{grid.length} == \text{grid}[i].\text{length}$, $1 \le n \le 100$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **8-Directional Level-by-Level Expansion**:
+
+| Step / Level | Queue Contents `(r, c)` | Direction Offsets (8-way) | Wall / Bounds Check | Action Taken | Path Length |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Start** | `(0, 0)` | Initial start | `grid[0][0] == 0` | Mark `grid[0][0] = 1` (visited) | $1$ |
+| **Wave 1** | Adjacent valid $0$ cells | $\Delta r \in [-1, 1], \Delta c \in [-1, 1]$ | Within $[0, n-1]$, `grid[nr][nc] == 0` | Enqueue neighbor, overwrite to $1$ | $2$ |
+| **Destination Reach** | Target `(n-1, n-1)` dequeued | Any 8-way neighbor hits target | Reaches destination! | Return current `pathLength` | Shortest path guaranteed by BFS |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class ShortestPathInBinaryMatrix {
+    private static final int[][] DIRECTIONS = {
+        {-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}
+    };
+
+    public int shortestPathBinaryMatrix(int[][] grid) {
+        int n = grid.length;
+        if (grid[0][0] != 0 || grid[n - 1][n - 1] != 0) return -1;
+        if (n == 1) return 1;
+
+        Queue<int[]> queue = new LinkedList<>();
+        queue.offer(new int[]{0, 0});
+        grid[0][0] = 1; // Mark visited in-place
+
+        int pathLength = 1;
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+
+            for (int i = 0; i < levelSize; i++) {
+                int[] curr = queue.poll();
+                int r = curr[0];
+                int c = curr[1];
+
+                if (r == n - 1 && c == n - 1) {
+                    return pathLength;
+                }
+
+                for (int[] dir : DIRECTIONS) {
+                    int nr = r + dir[0];
+                    int nc = c + dir[1];
+
+                    if (nr >= 0 && nr < n && nc >= 0 && nc < n && grid[nr][nc] == 0) {
+                        grid[nr][nc] = 1; // Mark visited immediately upon enqueue
+                        queue.offer(new int[]{nr, nc});
+                    }
+                }
+            }
+            pathLength++;
+        }
+
+        return -1;
+    }
+}
+// Time Complexity: O(N^2). Space Complexity: O(N^2).
+```
+
+---
+
+#### Problem 7.18: Open the Lock (LeetCode #752) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You have a lock in front of you with 4 circular wheels. Each wheel has 10 slots: `'0'` through `'9'`. The wheels rotate freely and wrap around: `'9'` turns to `'0'`, `'0'` turns to `'9'`. You are given a list of `deadends` and a `target`. Return the minimum total number of turns required to open the lock from `"0000"`, or `-1` if it is impossible.
+* **Constraints**: $1 \le \text{deadends.length} \le 500$, `target` not initially in `deadends`.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **8 Branch State Space per Lock Combination**:
+
+| Level / Step | State Inspected | 8-State Generation Formula | Deadend / Visited Check | Queue Insertion |
+| :--- | :--- | :--- | :--- | :--- |
+| **Root** | `"0000"` | Spin wheel $i \in [0, 3]$ $+1$ or $-1$ | If in deadends, abort immediately | Push `"0000"`, mark visited |
+| **Level 1** | 8 direct neighbors | `+1`: `"1000", "0100", "0010", "0001"`<br>`-1`: `"9000", "0900", "0090", "0009"` | Filter out deadends and visited states | Add unvisited valid combinations, turns = 1 |
+| **Match** | Current == `target` | Equality condition satisfied | Minimum turns achieved | Return `turns` count |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.*;
+
+public class OpenTheLock {
+    public int openLock(String[] deadends, String target) {
+        Set<String> deadSet = new HashSet<>(Arrays.asList(deadends));
+        if (deadSet.contains("0000")) return -1;
+        if ("0000".equals(target)) return 0;
+
+        Queue<String> queue = new LinkedList<>();
+        Set<String> visited = new HashSet<>();
+
+        queue.offer("0000");
+        visited.add("0000");
+        int turns = 0;
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+
+            for (int i = 0; i < levelSize; i++) {
+                String curr = queue.poll();
+                if (curr.equals(target)) return turns;
+
+                for (String nextState : getNextStates(curr)) {
+                    if (!deadSet.contains(nextState) && visited.add(nextState)) {
+                        queue.offer(nextState);
+                    }
+                }
+            }
+            turns++;
+        }
+
+        return -1;
+    }
+
+    private List<String> getNextStates(String s) {
+        List<String> nextStates = new ArrayList<>(8);
+        char[] chars = s.toCharArray();
+
+        for (int i = 0; i < 4; i++) {
+            char original = chars[i];
+
+            // Turn wheel clockwise
+            chars[i] = (original == '9') ? '0' : (char) (original + 1);
+            nextStates.add(new String(chars));
+
+            // Turn wheel counter-clockwise
+            chars[i] = (original == '0') ? '9' : (char) (original - 1);
+            nextStates.add(new String(chars));
+
+            chars[i] = original; // Backtrack character
+        }
+
+        return nextStates;
+    }
+}
+// Time Complexity: O(10^4 * 8) = O(1) bounded. Space Complexity: O(10^4) = O(1) bounded.
+```
+
+---
+
+#### Problem 7.19: Minimum Genetic Mutation (LeetCode #433) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: A gene string can be represented by an 8-character string, with choices from `'A'`, `'C'`, `'G'`, and `'T'`. A genetic mutation is a change of one character in the gene string. Given two gene strings `startGene` and `endGene` and a gene bank `bank`, return the minimum number of mutations needed to mutate from `startGene` to `endGene`. If no such mutation exists, return `-1`.
+* **Constraints**: `startGene.length == endGene.length == 8`, $0 \le \text{bank.length} \le 10$, all characters in `['A', 'C', 'G', 'T']`.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+
+| Level / Step | Current Gene String | Generated 1-char Mutations | Bank Validation Check | Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **0** | `startGene` | Change each of 8 characters to remaining 3 letters ($8 \times 3 = 24$ mutations) | Must exist in `bankSet` and not in `visited` | Enqueue valid mutant |
+| **k** | Any gene $g$ | Reaches `endGene` | `g.equals(endGene)` | Return `mutations` step count |
+| **Exhaustion** | Queue empty | Target gene unreachable via bank | No valid path | Return `-1` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.*;
+
+public class MinimumGeneticMutation {
+    private static final char[] GENES = {'A', 'C', 'G', 'T'};
+
+    public int minMutation(String startGene, String endGene, String[] bank) {
+        Set<String> bankSet = new HashSet<>(Arrays.asList(bank));
+        if (!bankSet.contains(endGene)) return -1;
+
+        Queue<String> queue = new LinkedList<>();
+        Set<String> visited = new HashSet<>();
+
+        queue.offer(startGene);
+        visited.add(startGene);
+        int mutations = 0;
+
+        while (!queue.isEmpty()) {
+            int levelSize = queue.size();
+
+            for (int i = 0; i < levelSize; i++) {
+                String curr = queue.poll();
+                if (curr.equals(endGene)) return mutations;
+
+                char[] chars = curr.toCharArray();
+                for (int j = 0; j < chars.length; j++) {
+                    char originalChar = chars[j];
+
+                    for (char g : GENES) {
+                        if (g == originalChar) continue;
+                        chars[j] = g;
+                        String mutant = new String(chars);
+
+                        if (bankSet.contains(mutant) && visited.add(mutant)) {
+                            queue.offer(mutant);
+                        }
+                    }
+                    chars[j] = originalChar; // Restore original character
+                }
+            }
+            mutations++;
+        }
+
+        return -1;
+    }
+}
+// Time Complexity: O(B) where B = bank.length. Space Complexity: O(B).
+```
+
+---
+
+#### Problem 7.20: As Far from Land as Possible (LeetCode #1162) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an $n \times n$ `grid` containing only values $0$ (water) and $1$ (land), find a water cell such that its distance to the nearest land cell is maximized, and return the distance. If no land or water exists in the grid, return `-1`. The distance used is the Manhattan distance.
+* **Constraints**: $n == \text{grid.length} == \text{grid}[i].\text{length}$, $1 \le n \le 100$, $\text{grid}[i][j] \in \{0, 1\}$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Multi-Source BFS (Simultaneous Flood Fill from All Land Cells)**:
+
+| Step / Wave | Queue State | Source Cells | Action on Water Cells | Max Distance Reached |
+| :--- | :--- | :--- | :--- | :--- |
+| **Init** | All land cells `(r, c)` where `grid[r][c] == 1` | All lands simultaneously | Enqueue all $1$'s at wave 0 | If queue size is $0$ or $n^2$, return `-1` |
+| **Wave 1** | Water cells adjacent to land | Shorelines | Mark `grid[nr][nc] = 1`, enqueue | Distance = $1$ |
+| **Wave k** | Deepest interior water cells | Distant lakes/oceans | Flood fill wave propagates outwards | Distance = $k$ |
+| **Final Wave** | Last water cell reached | Furthest point from all land | Loop finishes | Final wave count is the maximum distance! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treebfs;
+
+import java.util.LinkedList;
+import java.util.Queue;
+
+public class AsFarFromLandAsPossible {
+    private static final int[][] DIRS = {{-1,0}, {1,0}, {0,-1}, {0,1}};
+
+    public int maxDistance(int[][] grid) {
+        int n = grid.length;
+        Queue<int[]> queue = new LinkedList<>();
+
+        // Multi-source BFS: enqueue all land cells at once
+        for (int r = 0; r < n; r++) {
+            for (int c = 0; c < n; c++) {
+                if (grid[r][c] == 1) {
+                    queue.offer(new int[]{r, c});
+                }
+            }
+        }
+
+        // If grid contains only land or only water, no valid pair exists
+        if (queue.isEmpty() || queue.size() == n * n) {
+            return -1;
+        }
+
+        int distance = -1;
+
+        while (!queue.isEmpty()) {
+            int size = queue.size();
+            distance++;
+
+            for (int i = 0; i < size; i++) {
+                int[] curr = queue.poll();
+                int r = curr[0];
+                int c = curr[1];
+
+                for (int[] dir : DIRS) {
+                    int nr = r + dir[0];
+                    int nc = c + dir[1];
+
+                    if (nr >= 0 && nr < n && nc >= 0 && nc < n && grid[nr][nc] == 0) {
+                        grid[nr][nc] = 1; // Mark visited in-place
+                        queue.offer(new int[]{nr, nc});
+                    }
+                }
+            }
+        }
+
+        return distance;
+    }
+}
+// Time Complexity: O(N^2). Space Complexity: O(N^2).
+```
+
+---
+
 ### Pattern 8: Tree Depth-First Search (DFS / Backtracking on Trees)
 
 ```
@@ -4560,6 +8476,510 @@ public class ConstructTreeFromPreInOrder {
 }
 // Time Complexity: O(N) linear time via HashMap index lookup. Space Complexity: O(N) map + recursion stack.
 ```
+
+---
+
+#### Problem 8.11: Count Good Nodes in Binary Tree (LeetCode #1448) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a binary tree `root`, a node $X$ in the tree is named **good** if in the path from the root to $X$ there are no nodes with a value greater than $X$. Return the number of good nodes in the binary tree.
+* **Constraints**: Number of nodes in $[1, 10^5]$, $-10^4 \le \text{Node.val} \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on Tree `[3, 1, 4, 3, null, 1, 5]`**:
+
+| Call Stack Frame | Current Node `curr.val` | Inherited `maxSoFar` | Condition Checked (`curr.val >= maxSoFar`) | Good Node? | Updated `maxSoFar` for Subtrees |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`dfs(root)`** | `3` | `-INF` | `3 >= -INF` -> **True** | **Yes (+1)** | `maxSoFar = 3` |
+| **`dfs(left)`** | `1` | `3` | `1 >= 3` -> **False** | No (+0) | `maxSoFar = 3` |
+| **`dfs(left.left)`** | `3` | `3` | `3 >= 3` -> **True** | **Yes (+1)** | `maxSoFar = 3` |
+| **`dfs(right)`** | `4` | `3` | `4 >= 3` -> **True** | **Yes (+1)** | `maxSoFar = 4` |
+| **`dfs(right.left)`** | `1` | `4` | `1 >= 4` -> **False** | No (+0) | `maxSoFar = 4` |
+| **`dfs(right.right)`**| `5` | `4` | `5 >= 4` -> **True** | **Yes (+1)** | `maxSoFar = 5` |
+| **Total** | All 6 nodes evaluated | Final tally: $1 + 0 + 1 + 1 + 0 + 1 = 4$ | Global Good Nodes Count = **4** |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class CountGoodNodesInBinaryTree {
+    public int goodNodes(TreeNode root) {
+        return dfs(root, root.val);
+    }
+
+    private int dfs(TreeNode node, int maxSoFar) {
+        if (node == null) return 0;
+
+        int count = 0;
+        if (node.val >= maxSoFar) {
+            count = 1;
+            maxSoFar = node.val;
+        }
+
+        count += dfs(node.left, maxSoFar);
+        count += dfs(node.right, maxSoFar);
+
+        return count;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H) where H is tree height.
+```
+
+---
+
+#### Problem 8.12: Sum Root to Leaf Numbers (LeetCode #129) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `root` of a binary tree containing digits from $0$ to $9$ only. Each root-to-leaf path in the tree represents a number (e.g. path $1 \to 2 \to 3$ represents $123$). Return the total sum of all root-to-leaf numbers.
+* **Constraints**: Number of nodes in $[1, 1000]$, $0 \le \text{Node.val} \le 9$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on Tree `[4, 9, 0, 5, 1]`**:
+
+| Call Stack Frame | Path Traversed | Number Formula: `currNum * 10 + val` | Leaf Check | Value Returned |
+| :--- | :--- | :--- | :--- | :--- |
+| **`dfs(4)`** | `[4]` | `0 * 10 + 4 = 4` | Internal Node | Sum of left + right subtrees |
+| **`dfs(9)`** | `[4, 9]` | `4 * 10 + 9 = 49` | Internal Node | Sum of left + right subtrees |
+| **`dfs(5)`** | `[4, 9, 5]` | `49 * 10 + 5 = 495` | **Leaf Node!** | Returns **`495`** |
+| **`dfs(1)`** | `[4, 9, 1]` | `49 * 10 + 1 = 491` | **Leaf Node!** | Returns **`491`** |
+| **`dfs(0)`** | `[4, 0]` | `4 * 10 + 0 = 40` | **Leaf Node!** | Returns **`40`** |
+| **Total Sum** | `495 + 491 + 40` | Sum all completed leaf paths | All paths accounted | **`1026`** |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class SumRootToLeafNumbers {
+    public int sumNumbers(TreeNode root) {
+        return dfs(root, 0);
+    }
+
+    private int dfs(TreeNode node, int currentSum) {
+        if (node == null) return 0;
+
+        currentSum = currentSum * 10 + node.val;
+
+        // Leaf node reached: return full accumulated path number
+        if (node.left == null && node.right == null) {
+            return currentSum;
+        }
+
+        return dfs(node.left, currentSum) + dfs(node.right, currentSum);
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.13: Binary Search Tree Iterator (LeetCode #173) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Implement the `BSTIterator` class that represents an iterator over the in-order traversal of a binary search tree (BST). `next()` returns the next smallest number, and `hasNext()` returns whether there is a next number. Must achieve $O(1)$ amortized time for `next()` and $O(H)$ memory.
+* **Constraints**: Number of nodes in $[1, 10^5]$, $0 \le \text{Node.val} \le 10^6$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Execution Trace on BST `[7, 3, 15, null, null, 9, 20]`**:
+
+| Operation Called | Action on Explicit Stack | Stack Contents (Top $\to$ Bottom) | Returned Value | Amortized Cost |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Constructor`** | Push left spine from root ($7 \to 3$) | `[3, 7]` | None | $O(H)$ setup |
+| **`next()`** | Pop `3`. `3.right` is null | `[7]` | **`3`** | $O(1)$ |
+| **`next()`** | Pop `7`. `7.right = 15`. Push left spine of 15 ($15 \to 9$) | `[9, 15]` | **`7`** | $O(H)$ worst, $O(1)$ amortized |
+| **`next()`** | Pop `9`. `9.right` is null | `[15]` | **`9`** | $O(1)$ |
+| **`next()`** | Pop `15`. `15.right = 20`. Push left spine of 20 | `[20]` | **`15`** | $O(1)$ |
+| **`next()`** | Pop `20`. No right child | `[]` (Empty) | **`20`** | $O(1)$ |
+| **`hasNext()`** | Check `!stack.isEmpty()` | `[]` | **`false`** | $O(1)$ |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class BSTIterator {
+    private final Deque<TreeNode> stack;
+
+    public BSTIterator(TreeNode root) {
+        this.stack = new ArrayDeque<>();
+        pushLeftSpine(root);
+    }
+
+    public int next() {
+        TreeNode smallestNode = stack.pop();
+        if (smallestNode.right != null) {
+            pushLeftSpine(smallestNode.right);
+        }
+        return smallestNode.val;
+    }
+
+    public boolean hasNext() {
+        return !stack.isEmpty();
+    }
+
+    private void pushLeftSpine(TreeNode node) {
+        while (node != null) {
+            stack.push(node);
+            node = node.left;
+        }
+    }
+}
+// Time Complexity: O(1) amortized per next() call. Space Complexity: O(H) stack memory.
+```
+
+---
+
+#### Problem 8.14: Kth Smallest Element in a BST (LeetCode #230) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary search tree, and an integer $k$, return the $k^{\text{th}}$ smallest value (1-indexed) of all the values of the nodes in the tree.
+* **Constraints**: The number of nodes in the tree is $n$, $1 \le k \le n \le 10^4$, $0 \le \text{Node.val} \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **In-Order Traversal Invariant**: In-order traversal (`Left -> Root -> Right`) of a BST visits nodes in strictly ascending numerical order.
+
+| Node Visited in In-Order | Running Counter `count` | Target $k = 3$ Check | Action Taken |
+| :--- | :--- | :--- | :--- |
+| **1st smallest** | `1` | `1 != 3` | Continue in-order traversal |
+| **2nd smallest** | `2` | `2 != 3` | Continue in-order traversal |
+| **3rd smallest** | `3` | `3 == 3` -> **Match!** | Save `result = curr.val`; stop further recursion immediately! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class KthSmallestElementInBST {
+    private int count = 0;
+    private int result = -1;
+
+    public int kthSmallest(TreeNode root, int k) {
+        count = 0;
+        result = -1;
+        inorder(root, k);
+        return result;
+    }
+
+    private void inorder(TreeNode node, int k) {
+        if (node == null || result != -1) return;
+
+        inorder(node.left, k);
+
+        count++;
+        if (count == k) {
+            result = node.val;
+            return; // Early exit pruning
+        }
+
+        inorder(node.right, k);
+    }
+}
+// Time Complexity: O(H + K). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.15: Lowest Common Ancestor of a Binary Search Tree (LeetCode #235) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given a binary search tree (BST), find the lowest common ancestor (LCA) node of two given nodes $p$ and $q$.
+* **Constraints**: Number of nodes in $[2, 10^5]$, $-10^9 \le \text{Node.val} \le 10^9$. All node values are unique, and $p \ne q$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **BST Directed Walk Logic**:
+
+| Current Node `curr` | Evaluated Condition | Decision & Pointer Action | Why this is mathematically certain |
+| :--- | :--- | :--- | :--- |
+| **Case 1** | `p.val < curr.val && q.val < curr.val` | Walk Left: `curr = curr.left` | Both target nodes reside strictly in the left subtree. |
+| **Case 2** | `p.val > curr.val && q.val > curr.val` | Walk Right: `curr = curr.right` | Both target nodes reside strictly in the right subtree. |
+| **Case 3 (Split)** | One target on left, other on right (or `curr == p` or `curr == q`) | **Return `curr`!** | The path diverges here: `curr` is the Lowest Common Ancestor! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class LCABinarySearchTree {
+    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {
+        TreeNode curr = root;
+
+        while (curr != null) {
+            if (p.val < curr.val && q.val < curr.val) {
+                curr = curr.left; // Both targets in left subtree
+            } else if (p.val > curr.val && q.val > curr.val) {
+                curr = curr.right; // Both targets in right subtree
+            } else {
+                return curr; // Split point or one target is ancestor of the other
+            }
+        }
+
+        return null;
+    }
+}
+// Time Complexity: O(H) where H is tree height. Space Complexity: O(1) iterative.
+```
+
+---
+
+#### Problem 8.16: House Robber III (LeetCode #337) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: The thief has found himself a new place for his thievery again: a binary tree. If two directly-linked nodes are broken into on the same night, police will be automatically alerted. Return the maximum amount of money the thief can rob without alerting the police.
+* **Constraints**: Number of nodes in $[1, 10^4]$, $0 \le \text{Node.val} \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Tree DP Post-Order Vector: `[robThisNode, notRobThisNode]`**:
+
+| Node Being Evaluated | Option 1: Rob Current Node | Option 2: Do NOT Rob Current Node | Return Vector |
+| :--- | :--- | :--- | :--- |
+| **Leaf Node `L`** | `L.val` (cannot rob children) | `0` (children empty) | `[L.val, 0]` |
+| **Parent Node `P`** | `P.val + left[1] + right[1]` (Must skip children) | `max(left[0], left[1]) + max(right[0], right[1])` (Can freely choose for each child) | `[robP, notRobP]` |
+| **Root Resolution** | Compare choices at root | Maximum of `Math.max(rootResult[0], rootResult[1])` | Global Max Robbed |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class HouseRobberIII {
+    public int rob(TreeNode root) {
+        int[] result = robSub(root);
+        return Math.max(result[0], result[1]);
+    }
+
+    // Returns int[2]: [max money robbing node, max money NOT robbing node]
+    private int[] robSub(TreeNode node) {
+        if (node == null) return new int[]{0, 0};
+
+        int[] left = robSub(node.left);
+        int[] right = robSub(node.right);
+
+        int[] current = new int[2];
+        // 1. If we rob this node, we CANNOT rob its immediate children
+        current[0] = node.val + left[1] + right[1];
+
+        // 2. If we do NOT rob this node, we are free to rob or skip children
+        current[1] = Math.max(left[0], left[1]) + Math.max(right[0], right[1]);
+
+        return current;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.17: Binary Tree Cameras (LeetCode #968) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `root` of a binary tree. We install cameras on the tree nodes where each camera at a node can monitor its parent, itself, and its immediate children. Return the minimum number of cameras needed to monitor all nodes of the tree.
+* **Constraints**: Number of nodes in $[1, 1000]$, $\text{Node.val} == 0$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Greedy Post-Order State Machine (Bottom-Up Leaves to Root)**:
+  - `0`: Node is **uncovered** (needs camera coverage from parent).
+  - `1`: Node **has a camera**.
+  - `2`: Node is **covered** (monitored by child/camera, has no camera).
+
+| Child States `(left, right)` | Parent Decision & State | Action Taken | Reason |
+| :--- | :--- | :--- | :--- |
+| Any child is `0` (Uncovered) | Parent **MUST install a camera** (State `1`) | `cameraCount++` | Greedy optimal: placing camera on parent covers child, parent, and sibling! |
+| Any child is `1` (Has Camera) | Parent is **covered** (State `2`) | None | Protected by camera installed on child. |
+| Both children are `2` (Covered) | Parent remains **uncovered** (State `0`) | None | Defer camera installation to grandparent for larger coverage. |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class BinaryTreeCameras {
+    private int cameras = 0;
+
+    public int minCameraCover(TreeNode root) {
+        cameras = 0;
+        // If root itself remains uncovered after post-order traversal, install camera on root
+        if (dfs(root) == 0) {
+            cameras++;
+        }
+        return cameras;
+    }
+
+    // 0: Uncovered, 1: Has Camera, 2: Covered without camera
+    private int dfs(TreeNode node) {
+        if (node == null) return 2; // Null nodes are considered covered
+
+        int left = dfs(node.left);
+        int right = dfs(node.right);
+
+        // If either child is uncovered, current node MUST have a camera
+        if (left == 0 || right == 0) {
+            cameras++;
+            return 1;
+        }
+
+        // If either child has a camera, current node is covered
+        if (left == 1 || right == 1) {
+            return 2;
+        }
+
+        // Both children are covered; current node is uncovered (let parent cover it)
+        return 0;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.18: Distribute Coins in Binary Tree (LeetCode #979) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `root` of a binary tree with $n$ nodes where each node in the tree has `node.val` coins. There are $n$ coins in total throughout the whole tree. In one move, we may choose two adjacent nodes and move one coin from one node to another. Return the minimum number of moves required to make every node have exactly $1$ coin.
+* **Constraints**: Number of nodes is $n$ in $[2, 100]$, $0 \le \text{Node.val} \le n$, sum of all `Node.val` is $n$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Subtree Net Coin Balance: $\text{Balance} = \text{node.val} + \text{leftBalance} + \text{rightBalance} - 1$**:
+
+| Node Evaluated | Subtree Left Balance | Subtree Right Balance | Net Balance Calculation | Moves Contributed to Total |
+| :--- | :--- | :--- | :--- | :--- |
+| **Node with 3 coins (Leaf)** | $0$ | $0$ | $3 + 0 + 0 - 1 = \mathbf{+2}$ (2 excess coins) | $|+2| = 2$ coins must travel through edge to parent |
+| **Node with 0 coins (Leaf)** | $0$ | $0$ | $0 + 0 + 0 - 1 = \mathbf{-1}$ (1 deficit coin) | $|-1| = 1$ coin must travel through edge from parent |
+| **Parent Node** | $+2$ | $-1$ | $\text{parent.val} + 2 - 1 - 1$ | $|+2| + |-1| = 3$ moves accumulated |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class DistributeCoinsInBinaryTree {
+    private int totalMoves = 0;
+
+    public int distributeCoins(TreeNode root) {
+        totalMoves = 0;
+        dfs(root);
+        return totalMoves;
+    }
+
+    private int dfs(TreeNode node) {
+        if (node == null) return 0;
+
+        int leftBalance = dfs(node.left);
+        int rightBalance = dfs(node.right);
+
+        // Total moves across edges connecting to left and right children
+        totalMoves += Math.abs(leftBalance) + Math.abs(rightBalance);
+
+        // Return net balance of coins for current subtree
+        return node.val + leftBalance + rightBalance - 1;
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.19: Maximum Difference Between Node and Ancestor (LeetCode #1026) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given the `root` of a binary tree, find the maximum value $v$ for which there exist different nodes $a$ and $b$ where $v = |a.\text{val} - b.\text{val}|$ and $a$ is an ancestor of $b$.
+* **Constraints**: Number of nodes in $[2, 5000]$, $0 \le \text{Node.val} \le 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Top-Down Path Min/Max Propagation**:
+
+| Path Traversed | Running `minVal` on Path | Running `maxVal` on Path | At Leaf Node | Maximum Difference on Path |
+| :--- | :--- | :--- | :--- | :--- |
+| `[8 -> 3 -> 1]` | `1` | `8` | Leaf `1` | $|8 - 1| = \mathbf{7}$ |
+| `[8 -> 3 -> 6 -> 7]` | `3` | `8` | Leaf `7` | $|8 - 3| = \mathbf{5}$ |
+| `[8 -> 10 -> 14 -> 13]` | `8` | `14` | Leaf `13` | $|14 - 8| = \mathbf{6}$ |
+| **Global Max** | Max across all paths | $\max(7, 5, 6)$ | Evaluated at tree leaves | **Answer: 7** |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class MaxDiffNodeAndAncestor {
+    public int maxAncestorDiff(TreeNode root) {
+        if (root == null) return 0;
+        return dfs(root, root.val, root.val);
+    }
+
+    private int dfs(TreeNode node, int minVal, int maxVal) {
+        if (node == null) {
+            return maxVal - minVal;
+        }
+
+        minVal = Math.min(minVal, node.val);
+        maxVal = Math.max(maxVal, node.val);
+
+        int leftDiff = dfs(node.left, minVal, maxVal);
+        int rightDiff = dfs(node.right, minVal, maxVal);
+
+        return Math.max(leftDiff, rightDiff);
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
+
+#### Problem 8.20: Recover Binary Search Tree (LeetCode #99) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given the `root` of a binary search tree (BST), where the values of **exactly two nodes** of the tree were swapped by mistake. Recover the tree without changing its structure.
+* **Constraints**: Number of nodes in $[2, 1000]$, $-2^{31} \le \text{Node.val} \le 2^{31} - 1$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **In-Order Inversion Identification**:
+  - In a valid BST, in-order traversal values must strictly increase: $A_0 < A_1 < A_2 \dots$
+  - Two swapped nodes cause either **one** or **two** inversions where `prev.val >= curr.val`.
+
+| In-Order Sequence | Anomaly Identified | Inversion 1 Assignment | Inversion 2 Assignment | Swap Action |
+| :--- | :--- | :--- | :--- | :--- |
+| `[1, 3, 2, 4]` (One adjacent inversion) | `3 > 2` | `first = 3`, `second = 2` | None | Swap `3` and `2` -> `[1, 2, 3, 4]` |
+| `[3, 2, 1]` (Two separated inversions) | `3 > 2` and `2 > 1` | `first = 3`, `second = 2` | `second = 1` (Overwrites second) | Swap `3` and `1` -> `[1, 2, 3]` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.treedfs;
+
+public class RecoverBinarySearchTree {
+    private TreeNode first = null;
+    private TreeNode second = null;
+    private TreeNode prev = null;
+
+    public void recoverTree(TreeNode root) {
+        first = null;
+        second = null;
+        prev = null;
+
+        inorder(root);
+
+        // Swap back the values of the two mismatched nodes
+        if (first != null && second != null) {
+            int temp = first.val;
+            first.val = second.val;
+            second.val = temp;
+        }
+    }
+
+    private void inorder(TreeNode node) {
+        if (node == null) return;
+
+        inorder(node.left);
+
+        // Detect out-of-order inversion: prev.val >= node.val
+        if (prev != null && prev.val >= node.val) {
+            if (first == null) {
+                first = prev; // First mismatch is always the predecessor
+            }
+            second = node; // Second mismatch is the current successor
+        }
+        prev = node;
+
+        inorder(node.right);
+    }
+}
+// Time Complexity: O(N). Space Complexity: O(H).
+```
+
+---
 
 ### Pattern 9: Two Heaps Pattern (Dynamic Median & Priority Scheduling)
 
@@ -5149,6 +9569,627 @@ public class SingleThreadedCPU {
 }
 // Time Complexity: O(N log N). Space Complexity: O(N).
 ```
+
+---
+
+#### Problem 9.11: Seat Reservation Manager (LeetCode #1845) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Design a system that manages the reservation state of $n$ seats numbered from $1$ to $n$. Implement the `SeatManager` class:
+  - `SeatManager(int n)`: Initializes object with $n$ unreserved seats.
+  - `int reserve()`: Fetches the smallest-numbered unreserved seat, reserves it, and returns its number.
+  - `void unreserve(int seatNumber)`: Unreserves the seat with the given `seatNumber`.
+* **Constraints**: $1 \le n \le 10^5$, $1 \le \text{seatNumber} \le n$, at most $10^5$ calls to `reserve` and `unreserve`.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Min-Heap / Sequential Pointer Optimization**:
+
+| Operation Called | Running Seat Pointer `marker` | Min-Heap (`unreservedHeap`) | Action & Seat Allocated | Reason / Invariant |
+| :--- | :--- | :--- | :--- | :--- |
+| **`SeatManager(5)`** | `marker = 1` | `[]` | Ready | Defer heap insertion until seats are explicitly unreserved ($O(1)$ startup). |
+| **`reserve()`** | `marker = 1 -> 2` | `[]` | Returns seat **`1`** | Heap empty: allocate current smallest unseen seat from `marker`. |
+| **`reserve()`** | `marker = 2 -> 3` | `[]` | Returns seat **`2`** | Allocate seat `2`. |
+| **`unreserve(2)`** | `marker = 3` | Push `2` $\to$ `[2]` | Seat `2` returned to pool | Heap now holds reusable low-numbered seat `2`. |
+| **`reserve()`** | `marker = 3` | Poll `2` $\to$ `[]` | Returns seat **`2`** | Always prioritize smallest reusable seat from heap before advancing `marker`! |
+| **`reserve()`** | `marker = 3 -> 4` | `[]` | Returns seat **`3`** | Heap empty: allocate next available seat from `marker`. |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.PriorityQueue;
+
+public class SeatManager {
+    private int marker;
+    private final PriorityQueue<Integer> unreservedHeap;
+
+    public SeatManager(int n) {
+        this.marker = 1;
+        this.unreservedHeap = new PriorityQueue<>();
+    }
+
+    public int reserve() {
+        // Prioritize returning previously unreserved smaller seat IDs
+        if (!unreservedHeap.isEmpty()) {
+            return unreservedHeap.poll();
+        }
+        return marker++;
+    }
+
+    public void unreserve(int seatNumber) {
+        unreservedHeap.offer(seatNumber);
+    }
+}
+// Time Complexity: O(log K) for reserve/unreserve where K is unreserved count. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 9.12: Meeting Rooms III (LeetCode #2402) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an integer $n$ (number of rooms numbered $0$ to $n - 1$) and a 2D integer array `meetings` where `meetings[i] = [starti, endi]`. When a meeting starts, assign it to the unused room with the **lowest number**. If no room is free, delay the meeting until a room becomes free; duration remains unchanged. Return the number of the room that held the most meetings.
+* **Constraints**: $1 \le n \le 100$, $1 \le \text{meetings.length} \le 10^5$, $0 \le \text{start}_i < \text{end}_i \le 5 \times 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Dual-Heap Architecture**:
+  - `freeRooms`: Min-heap storing available room IDs ($0 \dots n - 1$).
+  - `busyRooms`: Min-heap storing `[endTime, roomId]` pairs.
+
+| Meeting Event `[start, end]` | Step 1: Drain `busyRooms` (`endTime <= start`) | Step 2: Room Selection Decision | Heap Mutation | Meeting Counter Update |
+| :--- | :--- | :--- | :--- | :--- |
+| **Meeting 1** | Free up rooms whose meetings concluded before `start` | If `freeRooms` has rooms $\to$ pick smallest room ID | Pop `roomId` from `freeRooms`, push `[end, roomId]` to `busyRooms` | `count[roomId]++` |
+| **Delayed Meeting** | All rooms busy (`freeRooms.isEmpty()`) | Wait for earliest finishing room in `busyRooms` | Pop earliest `[freeTime, roomId]` from `busyRooms`, schedule at `[freeTime + duration, roomId]` | `count[roomId]++` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.Arrays;
+import java.util.PriorityQueue;
+
+public class MeetingRoomsIII {
+    public int mostBooked(int n, int[][] meetings) {
+        // 1. Sort meetings chronologically by original start time
+        Arrays.sort(meetings, (a, b) -> Integer.compare(a[0], b[0]));
+
+        // Min-heap for available room IDs
+        PriorityQueue<Integer> freeRooms = new PriorityQueue<>();
+        for (int i = 0; i < n; i++) freeRooms.offer(i);
+
+        // Min-heap for active meetings: ordered by [endTime, roomId]
+        PriorityQueue<long[]> busyRooms = new PriorityQueue<>((a, b) -> {
+            if (a[0] != b[0]) return Long.compare(a[0], b[0]);
+            return Long.compare(a[1], b[1]);
+        });
+
+        int[] meetingCount = new int[n];
+
+        for (int[] meeting : meetings) {
+            long start = meeting[0];
+            long duration = meeting[1] - meeting[0];
+
+            // Release rooms that have finished before current meeting starts
+            while (!busyRooms.isEmpty() && busyRooms.peek()[0] <= start) {
+                freeRooms.offer((int) busyRooms.poll()[1]);
+            }
+
+            if (!freeRooms.isEmpty()) {
+                // Assign to smallest available room ID immediately
+                int roomId = freeRooms.poll();
+                meetingCount[roomId]++;
+                busyRooms.offer(new long[]{start + duration, roomId});
+            } else {
+                // Delay meeting until earliest room frees up
+                long[] earliest = busyRooms.poll();
+                long finishTime = earliest[0];
+                int roomId = (int) earliest[1];
+
+                meetingCount[roomId]++;
+                busyRooms.offer(new long[]{finishTime + duration, roomId});
+            }
+        }
+
+        // Identify room with maximum meetings (tie-breaker: lowest room index)
+        int maxMeetings = 0;
+        int bestRoom = 0;
+        for (int i = 0; i < n; i++) {
+            if (meetingCount[i] > maxMeetings) {
+                maxMeetings = meetingCount[i];
+                bestRoom = i;
+            }
+        }
+
+        return bestRoom;
+    }
+}
+// Time Complexity: O(M log M + M log N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 9.13: Maximum Number of Events That Can Be Attended (LeetCode #1353) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array of `events` where `events[i] = [startDayi, endDayi]`. You can attend event $i$ on any day $d$ where $\text{startDay}_i \le d \le \text{endDay}_i$. You can only attend one event at any given day. Return the maximum number of events you can attend.
+* **Constraints**: $1 \le \text{events.length} \le 10^5$, $1 \le \text{startDay}_i \le \text{endDay}_i \le 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Greedy Day-by-Day Sweeping with Min-Heap of End Times**:
+
+| Simulation Day $d$ | Add Available Events (`startDay <= d`) | Expire Dead Events (`endDay < d`) | Greedy Choice Picked | Total Attended |
+| :--- | :--- | :--- | :--- | :--- |
+| **Day $d$** | Push `endDay` of all events starting on day $d$ into min-heap | Pop all events whose `endDay` has already passed | Poll earliest expiring event from heap: attend it today! | `attendedCount++` |
+| **Day $d + 1$** | Advance to next calendar day | Clean expired events | Greedily pick next earliest expiration date | `attendedCount++` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.Arrays;
+import java.util.PriorityQueue;
+
+public class MaximumEventsAttended {
+    public int maxEvents(int[][] events) {
+        // Sort events by start day ascending
+        Arrays.sort(events, (a, b) -> Integer.compare(a[0], b[0]));
+
+        // Min-heap tracking end days of all currently available events
+        PriorityQueue<Integer> endDayHeap = new PriorityQueue<>();
+
+        int attended = 0;
+        int i = 0, n = events.length;
+        int currentDay = 1;
+
+        while (i < n || !endDayHeap.isEmpty()) {
+            // If heap is empty and no event starts today, jump directly to next event's start day
+            if (endDayHeap.isEmpty() && currentDay < events[i][0]) {
+                currentDay = events[i][0];
+            }
+
+            // Enqueue all events that have become active by currentDay
+            while (i < n && events[i][0] <= currentDay) {
+                endDayHeap.offer(events[i][1]);
+                i++;
+            }
+
+            // Discard events that have already expired before or on currentDay
+            while (!endDayHeap.isEmpty() && endDayHeap.peek() < currentDay) {
+                endDayHeap.poll();
+            }
+
+            // Attend the event that expires earliest
+            if (!endDayHeap.isEmpty()) {
+                endDayHeap.poll();
+                attended++;
+                currentDay++;
+            }
+        }
+
+        return attended;
+    }
+}
+// Time Complexity: O(N log N + D log N) where D = maxDay. Space Complexity: O(N).
+```
+
+---
+
+#### Problem 9.14: Maximum Subsequence Score (LeetCode #2542) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given two 0-indexed integer arrays `nums1` and `nums2` of equal length $n$ and a positive integer $k$. You must choose a subsequence of indices of length $k$. The score is defined as: $\left( \sum_{i=1}^{k} \text{nums1}[i] \right) \times \min_{i=1}^{k}(\text{nums2}[i])$. Return the maximum possible score.
+* **Constraints**: $n == \text{nums1.length} == \text{nums2.length}$, $1 \le k \le n \le 10^5$, $1 \le \text{nums1}[i], \text{nums2}[i] \le 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Sort Descending by `nums2` + Min-Heap of Size $k$ for `nums1`**:
+
+| Iteration Step | Pair `(nums1[i], nums2[i])` | Min-Heap Size | Heap Action & Top Element | Running `sum1` | Score Evaluated: `sum1 * nums2[i]` |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **First $k$ pairs** | Pairs with largest `nums2` | Size grows to $k$ | Push `nums1[i]` | `sum1 += nums1[i]` | Candidate score computed when size hits $k$ |
+| **Subsequent pairs** | Pair with smaller `nums2[i]` | Size $> k$ | Pop smallest `nums1` element from heap | `sum1 -= minElement; sum1 += nums1[i];` | New score compared: `maxScore = Math.max(maxScore, sum1 * nums2[i])` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.Arrays;
+import java.util.PriorityQueue;
+
+public class MaximumSubsequenceScore {
+    public long maxScore(int[] nums1, int[] nums2, int k) {
+        int n = nums1.length;
+        int[][] pairs = new int[n][2];
+
+        for (int i = 0; i < n; i++) {
+            pairs[i][0] = nums1[i];
+            pairs[i][1] = nums2[i];
+        }
+
+        // Sort descending by nums2 so current pair's nums2 is always the minimum of visited elements
+        Arrays.sort(pairs, (a, b) -> Integer.compare(b[1], a[1]));
+
+        PriorityQueue<Integer> minHeap = new PriorityQueue<>(k);
+        long sum1 = 0;
+        long maxScore = 0;
+
+        for (int[] pair : pairs) {
+            sum1 += pair[0];
+            minHeap.offer(pair[0]);
+
+            if (minHeap.size() > k) {
+                sum1 -= minHeap.poll(); // Evict smallest nums1 contribution
+            }
+
+            if (minHeap.size() == k) {
+                maxScore = Math.max(maxScore, sum1 * pair[1]);
+            }
+        }
+
+        return maxScore;
+    }
+}
+// Time Complexity: O(N log N). Space Complexity: O(N).
+```
+
+---
+
+#### Problem 9.15: Total Cost to Hire K Workers (LeetCode #2468) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array `costs` where `costs[i]` is the hiring cost of the $i^{\text{th}}$ worker. In each hiring session, choose the worker with the lowest cost from either the first `candidates` workers or the last `candidates` workers. Break ties by choosing the smallest index. Return the total cost to hire exactly $k$ workers.
+* **Constraints**: $1 \le \text{costs.length} \le 10^5$, $1 \le \text{costs}[i] \le 10^5$, $1 \le k, \text{candidates} \le \text{costs.length}$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Dual Frontier Min-Heaps (`headHeap` vs `tailHeap`)**:
+
+| Hiring Session | Compare `headHeap.peek()` vs `tailHeap.peek()` | Winning Worker Chosen | Pointer Adjustment & Heap Refill | Total Cost Accrued |
+| :--- | :--- | :--- | :--- | :--- |
+| **Session 1** | Lowest cost across both candidate frontiers | Pop cheapest worker | If head won, push `costs[nextHead++]`; if tail won, push `costs[nextTail--]` | `totalCost += cost` |
+| **Session 2** | Maintain candidate window sizes without overlap | Pop cheapest | Ensure `nextHead <= nextTail` | `totalCost += cost` |
+| **Completion** | Exactly $k$ workers hired | All sessions finish | Pointers converge smoothly | Return `totalCost` |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.PriorityQueue;
+
+public class TotalCostToHireKWorkers {
+    public long totalCost(int[] costs, int k, int candidates) {
+        PriorityQueue<Integer> headHeap = new PriorityQueue<>();
+        PriorityQueue<Integer> tailHeap = new PriorityQueue<>();
+
+        int nextHead = 0;
+        int nextTail = costs.length - 1;
+
+        // Initialize head heap
+        while (nextHead < candidates) {
+            headHeap.offer(costs[nextHead++]);
+        }
+
+        // Initialize tail heap ensuring no overlap with head
+        while (nextTail >= costs.length - candidates && nextTail >= nextHead) {
+            tailHeap.offer(costs[nextTail--]);
+        }
+
+        long totalHiringCost = 0;
+
+        for (int i = 0; i < k; i++) {
+            int headMin = headHeap.isEmpty() ? Integer.MAX_VALUE : headHeap.peek();
+            int tailMin = tailHeap.isEmpty() ? Integer.MAX_VALUE : tailHeap.peek();
+
+            if (headMin <= tailMin) {
+                totalHiringCost += headHeap.poll();
+                if (nextHead <= nextTail) {
+                    headHeap.offer(costs[nextHead++]);
+                }
+            } else {
+                totalHiringCost += tailHeap.poll();
+                if (nextHead <= nextTail) {
+                    tailHeap.offer(costs[nextTail--]);
+                }
+            }
+        }
+
+        return totalHiringCost;
+    }
+}
+// Time Complexity: O(K log(candidates)). Space Complexity: O(candidates).
+```
+
+---
+
+#### Problem 9.16: Smallest Range Covering Elements from K Lists (LeetCode #632) - [Hard]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You have $k$ lists of sorted integers in non-decreasing order. Find the smallest range $[a, b]$ that includes at least one number from each of the $k$ lists. Range $[a, b]$ is smaller than $[c, d]$ if $b - a < d - c$, or $a < c$ if $b - a == d - c$.
+* **Constraints**: $k == \text{nums.length}$, $1 \le k \le 3500$, $1 \le \text{nums}[i].\text{length} \le 50$, $-10^5 \le \text{nums}[i][j] \le 10^5$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Min-Heap of Size $k$ with Running `maxVal`**:
+
+| Iteration Step | Min-Heap Elements `[val, listIdx, elemIdx]` | `minVal` (Heap Top) | `maxVal` (Running Tracker) | Current Range `[minVal, maxVal]` | Action Taken |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Init** | First element of all $k$ lists | $\min(\text{heads})$ | $\max(\text{heads})$ | $[a, b] = [\text{minVal}, \text{maxVal}]$ | Best range recorded |
+| **Step 1** | Poll `minVal` from list $i$ | New min extracted | Unchanged (or updated) | Check if $(b - a) < \text{bestRange}$ | Push `nums[i][elemIdx + 1]`, update `maxVal` |
+| **Step k** | One list is completely exhausted | List reaches end | Cannot form range with all $k$ lists! | Final shortest range locked in | Terminate loop and return range! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.List;
+import java.util.PriorityQueue;
+
+public class SmallestRangeFromKLists {
+    public int[] smallestRange(List<List<Integer>> nums) {
+        // Min-heap ordered by value: stores int[]{val, listIndex, elementIndex}
+        PriorityQueue<int[]> minHeap = new PriorityQueue<>((a, b) -> Integer.compare(a[0], b[0]));
+
+        int maxVal = Integer.MIN_VALUE;
+
+        // Initialize heap with the 0-th element of every list
+        for (int i = 0; i < nums.size(); i++) {
+            int val = nums.get(i).get(0);
+            minHeap.offer(new int[]{val, i, 0});
+            maxVal = Math.max(maxVal, val);
+        }
+
+        int rangeStart = 0;
+        int rangeEnd = Integer.MAX_VALUE;
+
+        while (minHeap.size() == nums.size()) {
+            int[] curr = minHeap.poll();
+            int minVal = curr[0];
+            int listIdx = curr[1];
+            int elemIdx = curr[2];
+
+            // If current range [minVal, maxVal] is strictly tighter than best known range
+            if (maxVal - minVal < rangeEnd - rangeStart) {
+                rangeStart = minVal;
+                rangeEnd = maxVal;
+            }
+
+            // Advance pointer in the list that provided minVal
+            if (elemIdx + 1 < nums.get(listIdx).size()) {
+                int nextVal = nums.get(listIdx).get(elemIdx + 1);
+                minHeap.offer(new int[]{nextVal, listIdx, elemIdx + 1});
+                maxVal = Math.max(maxVal, nextVal);
+            }
+        }
+
+        return new int[]{rangeStart, rangeEnd};
+    }
+}
+// Time Complexity: O(N log K) where N is total numbers. Space Complexity: O(K) heap.
+```
+
+---
+
+#### Problem 9.17: Find K Pairs with Smallest Sums (LeetCode #373) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given two integer arrays `nums1` and `nums2` sorted in ascending order and an integer $k$. Return the $k$ pairs $(u_1, v_1), (u_2, v_2), \dots, (u_k, v_k)$ with the smallest sums.
+* **Constraints**: $1 \le \text{nums1.length}, \text{nums2.length} \le 10^5$, $-10^9 \le \text{nums1}[i], \text{nums2}[i] \le 10^9$, $1 \le k \le 10^4$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Dijkstra-Style Frontier Expansion**:
+
+| Step | Smallest Pair Polled from Heap | Pair Recorded | Successor Generated | Invariant Maintained |
+| :--- | :--- | :--- | :--- | :--- |
+| **Init** | Seed heap with pairs `(i, 0)` for $i \in [0, \min(k, \text{len1}) - 1]$ | None | `(0, 0), (1, 0), (2, 0) \dots` | Heap size bounded by $\min(k, \text{len1})$ |
+| **1** | `(nums1[i], nums2[j])` | Add to result | If $j + 1 < \text{len2}$, push `(i, j + 1)` | Next smallest sum from row $i$ queued |
+| **k** | Exactly $k$ pairs polled | Final pair added | Loop finishes | Guaranteed smallest $k$ pairs without Cartesian product |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.PriorityQueue;
+
+public class FindKPairsWithSmallestSums {
+    public List<List<Integer>> kSmallestPairs(int[] nums1, int[] nums2, int k) {
+        List<List<Integer>> result = new ArrayList<>();
+        if (nums1.length == 0 || nums2.length == 0 || k == 0) return result;
+
+        // Min-heap ordered by (nums1[i] + nums2[j]): stores [i, j]
+        PriorityQueue<int[]> minHeap = new PriorityQueue<>((a, b) ->
+            Integer.compare(nums1[a[0]] + nums2[a[1]], nums1[b[0]] + nums2[b[1]])
+        );
+
+        // Seed heap with pairs (i, 0)
+        for (int i = 0; i < Math.min(k, nums1.length); i++) {
+            minHeap.offer(new int[]{i, 0});
+        }
+
+        while (k-- > 0 && !minHeap.isEmpty()) {
+            int[] curr = minHeap.poll();
+            int i = curr[0];
+            int j = curr[1];
+
+            result.add(Arrays.asList(nums1[i], nums2[j]));
+
+            // Advance to next pair in nums2 for the same nums1[i]
+            if (j + 1 < nums2.length) {
+                minHeap.offer(new int[]{i, j + 1});
+            }
+        }
+
+        return result;
+    }
+}
+// Time Complexity: O(K log(min(K, N1))). Space Complexity: O(min(K, N1)).
+```
+
+---
+
+#### Problem 9.18: Kth Smallest Element in a Sorted Matrix (LeetCode #378) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: Given an $n \times n$ `matrix` where each of the rows and columns is sorted in ascending order, return the $k^{\text{th}}$ smallest element in the matrix.
+* **Constraints**: $n == \text{matrix.length} == \text{matrix}[i].\text{length}$, $1 \le n \le 300$, $-10^9 \le \text{matrix}[i][j] \le 10^9$, $1 \le k \le n^2$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Binary Search on Value Range with $O(N)$ Diagonal Count**:
+
+| Binary Search Step | Search Range `[low, high]` | `mid` Guess | $O(N)$ Staircase Count ($\le mid$) | Decision Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **Iteration 1** | `[matrix[0][0], matrix[n-1][n-1]]` | `(low + high) / 2` | If `count < k` | Target is strictly larger: `low = mid + 1` |
+| **Iteration 2** | Tightened search space | New `mid` | If `count >= k` | Target could be `mid` or smaller: `high = mid` |
+| **Convergence** | `low == high` | Exact element | Loop terminates | `low` lands exactly on the $k^{\text{th}}$ smallest element! |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+public class KthSmallestInSortedMatrix {
+    public int kthSmallest(int[][] matrix, int k) {
+        int n = matrix.length;
+        int low = matrix[0][0];
+        int high = matrix[n - 1][n - 1];
+
+        while (low < high) {
+            int mid = low + (high - low) / 2;
+            int count = countLessOrEqual(matrix, mid, n);
+
+            if (count < k) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+
+        return low;
+    }
+
+    // O(N) Staircase walk from bottom-left to top-right
+    private int countLessOrEqual(int[][] matrix, int target, int n) {
+        int count = 0;
+        int row = n - 1;
+        int col = 0;
+
+        while (row >= 0 && col < n) {
+            if (matrix[row][col] <= target) {
+                count += (row + 1); // All elements above this in the column are also <= target
+                col++;
+            } else {
+                row--;
+            }
+        }
+
+        return count;
+    }
+}
+// Time Complexity: O(N log(max - min)). Space Complexity: O(1) auxiliary.
+```
+
+---
+
+#### Problem 9.19: Furthest Building You Can Reach (LeetCode #1642) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an integer array `heights` representing the heights of buildings, some `bricks`, and some `ladders`. If the next building's height is greater than the current building's height, you can either use **one ladder** or $(h_{i+1} - h_i)$ **bricks**. Return the furthest building index (0-indexed) you can reach.
+* **Constraints**: $1 \le \text{heights.length} \le 10^5$, $1 \le \text{heights}[i] \le 10^6$, $0 \le \text{bricks} \le 10^9$, $0 \le \text{ladders} \le \text{heights.length}$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Min-Heap Strategy**: Always assign **ladders** to the largest vertical climbs encountered so far.
+
+| Building Jump $i \to i+1$ | Climb $\Delta h = h_{i+1} - h_i$ | Min-Heap of Ladder Climbs | Heap Size $> \text{ladders}$ Action | Bricks Deducted |
+| :--- | :--- | :--- | :--- | :--- |
+| $\Delta h \le 0$ (Downhill) | Jump down for free | Unchanged | No ladder used | $0$ |
+| $\Delta h > 0$ (Uphill) | Push $\Delta h$ to heap | Size grows | If size $> \text{ladders}$, poll smallest climb: pay with bricks | `bricks -= minClimb` |
+| $\text{bricks} < 0$ | Cannot afford smallest climb! | Reached limit | Traversal halts | Return index $i$ |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.PriorityQueue;
+
+public class FurthestBuildingYouCanReach {
+    public int furthestBuilding(int[] heights, int bricks, int ladders) {
+        // Min-heap tracking climbs allocated to ladders
+        PriorityQueue<Integer> ladderClimbs = new PriorityQueue<>();
+
+        for (int i = 0; i < heights.length - 1; i++) {
+            int climb = heights[i + 1] - heights[i];
+            if (climb <= 0) continue;
+
+            ladderClimbs.offer(climb);
+
+            // If we have more climbs than ladders, substitute the smallest climb with bricks
+            if (ladderClimbs.size() > ladders) {
+                bricks -= ladderClimbs.poll();
+            }
+
+            // Out of bricks: cannot proceed to building i + 1
+            if (bricks < 0) {
+                return i;
+            }
+        }
+
+        return heights.length - 1;
+    }
+}
+// Time Complexity: O(N log(ladders)). Space Complexity: O(ladders).
+```
+
+---
+
+#### Problem 9.20: Minimum Operations to Halve Array Sum (LeetCode #2208) - [Medium]
+
+##### 1. 📋 Problem Description & Constraints
+* **Problem Statement**: You are given an array `nums` of positive integers. In one operation, you can choose any number from `nums` and reduce it to exactly half the value. Return the minimum number of operations to reduce the sum of `nums` by at least half.
+* **Constraints**: $1 \le \text{nums.length} \le 10^5$, $1 \le \text{nums}[i] \le 10^7$.
+
+##### 2. 📊 Step-by-Step Tabular Execution & Logic Walkthrough
+* **Max-Heap Greedy Reduction**:
+
+| Operation Step | Max Element Polled `maxVal` | Halved Contribution `half = maxVal / 2` | Running Sum Reduced By | Termination Check |
+| :--- | :--- | :--- | :--- | :--- |
+| **Op 1** | Largest number in array | Halve it: push `half` back into heap | `reducedSum += half` | `if (reducedSum >= target) break;` |
+| **Op 2** | Next largest element | Halve it: push `half` back into heap | `reducedSum += half` | Track operation count |
+| **Op k** | Target halved sum reached | Target achieved in minimal moves | Operation count returned | Globally optimal |
+
+##### 3. ⚡ Optimal Solution
+```java
+package com.leetcode.twoheaps;
+
+import java.util.Collections;
+import java.util.PriorityQueue;
+
+public class MinimumOperationsToHalveArraySum {
+    public int halveArray(int[] nums) {
+        PriorityQueue<Double> maxHeap = new PriorityQueue<>(Collections.reverseOrder());
+        double originalSum = 0;
+
+        for (int num : nums) {
+            originalSum += num;
+            maxHeap.offer((double) num);
+        }
+
+        double targetToReduce = originalSum / 2.0;
+        double currentReduced = 0;
+        int operations = 0;
+
+        while (currentReduced < targetToReduce) {
+            double largest = maxHeap.poll();
+            double half = largest / 2.0;
+            currentReduced += half;
+            maxHeap.offer(half);
+            operations++;
+        }
+
+        return operations;
+    }
+}
+// Time Complexity: O(N log N). Space Complexity: O(N).
+```
+
+---
 
 ### Pattern 10: Subsets, Permutations & Backtracking Pattern
 
