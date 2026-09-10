@@ -218,212 +218,315 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-@Configuration
-@EnableWebSecurity
-public class EnterpriseSecurityConfig {
+# TRACK 2: MASTER SPRING SECURITY 6 FEATURE CATALOG
 
-    private final JwtAuthenticationFilter jwtAuthFilter;
+## Master Security Architecture Decision Matrix
 
-    public EnterpriseSecurityConfig(JwtAuthenticationFilter jwtAuthFilter) {
-        this.jwtAuthFilter = jwtAuthFilter;
-    }
+| Security Pattern | Primary Mechanism | Statefulness | Best Used For | Anti-Pattern For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Stateless JWT** | Signed Bearer Token | Zero (Stateless) | High-scale REST APIs, Mobile Apps | Immediate server-side token revocations |
+| **OAuth2 Resource Server** | JWKS Asymmetric Verification | Zero (Stateless) | Enterprise IdP (Keycloak, Okta, Entra)| Monolithic apps without an IdP |
+| **Method Security** | AOP CGLIB / Byte Buddy Proxy | ThreadLocal Context | Domain-level fine-grained ABAC | High-frequency inner loop iterations |
+| **CORS Configuration** | Preflight `OPTIONS` + Headers | Browser-enforced | Single-Page Apps (React, Angular) | Server-to-server internal microservices |
+| **CSRF Protection** | Synchronizer Token Pattern | Stateful Session | Browser-based forms with cookies | Pure stateless `Authorization: Bearer` APIs |
+| **Multi-Tenant Routing** | Dynamic TenantContextResolver | Stateless | Multi-tenant SaaS with isolated IdPs | Single-tenant monolithic applications |
+| **Session Fixation Defense**| `changeSessionId()` on login | Stateful | Traditional server-rendered web apps | Stateless microservices |
+| **Remember-Me** | Two-factor persistent token hash| DB Persistent Token | E-commerce shopping portals | High-security banking applications |
+| **Problem Details 7807** | RFC 7807 JSON Error Payloads | Stateless | Uniform REST error contracts | HTML browser redirect logins |
+| **Security 6 Lambda DSL** | Type-safe declarative lambdas | Compile-time | Spring Boot 3+ modern security | Legacy XML or `.and()` chaining |
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        return http
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/**", "/actuator/health").permitAll()
-                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/billing/**").hasAuthority("billing:read")
-                .anyRequest().authenticated()
-            )
-            // Insert custom JWT filter before the standard UsernamePasswordAuthenticationFilter
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .build();
-    }
+---
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12); // Work factor 12
-    }
+## 2.1 DelegatingFilterProxy & SecurityFilterChain Pipeline
 
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
-}
-```
+1. **Architectural Overview & Purpose**:
+   - Acts as the architectural bridge connecting the Servlet Container (Tomcat/Jetty) with the Spring ApplicationContext. Standard Servlet Filters are managed by Tomcat, but security requires dependency injection. `DelegatingFilterProxy` intercepts HTTP traffic and delegates execution to the Spring bean named `springSecurityFilterChain` (`FilterChainProxy`).
+
+2. **Underlying Algorithm & Filter Chain Execution**:
+   - `FilterChainProxy` contains a `List<SecurityFilterChain>`. For each incoming request:
+     1. It tests `requestMatcher.matches(request)` against each chain sequentially.
+     2. The **first matching chain** is selected.
+     3. It executes the chain's filters in strict priority order.
+     4. If an unauthenticated request reaches an authorization filter, an `AccessDeniedException` or `AuthenticationException` is thrown, caught by `ExceptionTranslationFilter`.
+
+3. **Full Syntax & Method Signatures**:
+   ```java
+   @Bean
+   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception;
+   ```
+
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Configuration
+   @EnableWebSecurity
+   public class SecurityConfig {
+
+       @Bean
+       public SecurityFilterChain apiSecurity(HttpSecurity http) throws Exception {
+           return http
+               .securityMatcher("/api/**") // Applies strictly to /api/** endpoints
+               .csrf(csrf -> csrf.disable())
+               .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+               .authorizeHttpRequests(auth -> auth
+                   .requestMatchers("/api/auth/**").permitAll()
+                   .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                   .anyRequest().authenticated()
+               )
+               .build();
+       }
+   }
+   ```
+   - **Sample HTTP Response**:
+     ```http
+     HTTP/1.1 401 Unauthorized
+     WWW-Authenticate: Bearer
+     Content-Type: application/json
+     {"error": "Unauthorized", "message": "Full authentication is required to access this resource"}
+     ```
+
+5. **Pros & Cons**:
+   - **Pros**: Clean modular security; multiple independent filter chains can protect different URL paths (e.g. `/api/**` vs `/admin/**`).
+   - **Cons**: Filter ordering is strict; misplacing custom filters causes silent security bypasses.
 
 ---
 
 ## 2.2 Stateless JWT Authentication Filter (`OncePerRequestFilter`)
 
-```java
-package com.example.security.filter;
+1. **Architectural Overview & Purpose**:
+   - Intercepts every incoming HTTP request, extracts the `Authorization: Bearer <token>` header, verifies the cryptographic signature, and populates the `SecurityContextHolder`.
 
-import com.example.security.service.JwtService;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.lang.NonNull;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
+2. **Underlying Mechanics**:
+   - Extends `OncePerRequestFilter` to guarantee single execution per request dispatch (preventing duplicate execution across internal MVC forwards or asynchronous dispatches).
 
-import java.io.IOException;
+3. **Production Implementation Blueprint**:
+   ```java
+   @Component
+   public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-@Component
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+       private final JwtTokenService jwtService;
+       private final UserDetailsService userDetailsService;
 
-    private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
+       public JwtAuthenticationFilter(JwtTokenService jwtService, UserDetailsService userDetailsService) {
+           this.jwtService = jwtService;
+           this.userDetailsService = userDetailsService;
+       }
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserDetailsService userDetailsService) {
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
-    }
+       @Override
+       protected void doFilterInternal(
+               @NonNull HttpServletRequest request,
+               @NonNull HttpServletResponse response,
+               @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-    @Override
-    protected void doFilterInternal(
-        @NonNull HttpServletRequest request,
-        @NonNull HttpServletResponse response,
-        @NonNull FilterChain filterChain
-    ) throws ServletException, IOException {
+           final String authHeader = request.getHeader("Authorization");
+           if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+               filterChain.doFilter(request, response);
+               return; // Skip filter if no bearer token present
+           }
 
-        final String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+           final String jwt = authHeader.substring(7);
+           final String username = jwtService.extractUsername(jwt);
 
-        final String jwt = authHeader.substring(7);
-        final String userEmail = jwtService.extractUsername(jwt);
+           if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+               UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-        // If username exists and user is not already authenticated in this thread context
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                // Establish identity in the SecurityContext
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
-        }
-
-        filterChain.doFilter(request, response);
-    }
-}
-```
+               if (jwtService.validateToken(jwt, userDetails)) {
+                   var authToken = new UsernamePasswordAuthenticationToken(
+                       userDetails,
+                       null,
+                       userDetails.getAuthorities()
+                   );
+                   authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                   // Establish verified identity in ThreadLocal SecurityContext
+                   SecurityContextHolder.getContext().setAuthentication(authToken);
+               }
+           }
+           filterChain.doFilter(request, response);
+       }
+   }
+   ```
 
 ---
 
-## 2.3 Method-Level Security (`@EnableMethodSecurity`)
+## 2.3 Method-Level Security & SpEL Expressions (`@EnableMethodSecurity`)
 
-URL authorization provides broad perimeter defense, while Method Security provides fine-grained domain-level protection:
+1. **Architectural Overview & Purpose**:
+   - Enforces Attribute-Based Access Control (ABAC) and Role-Based Access Control (RBAC) directly on Java Service methods via CGLIB dynamic proxies, ensuring security even if methods are invoked from non-HTTP entry points (Kafka consumers, batch jobs, CLI).
 
-```java
-@Configuration
-@EnableMethodSecurity(prePostEnabled = true, securedEnabled = true, jsr250Enabled = true)
-public class MethodSecurityConfig {}
-```
+2. **Core Annotations**:
+   - `@PreAuthorize`: Evaluated before method entry. Can inspect arguments (`#orderId`).
+   - `@PostAuthorize`: Evaluated after method execution. Can inspect return value (`returnObject`).
+   - `@PreFilter` / `@PostFilter`: Filters collection arguments or returned collections based on user ownership.
 
-```java
-@Service
-public class OrderService {
+3. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Configuration
+   @EnableMethodSecurity(prePostEnabled = true)
+   public class MethodSecurityConfig {}
 
-    // Only allow users with ROLE_ADMIN or matching owner ID
-    @PreAuthorize("hasRole('ADMIN') or #customerId == authentication.principal.id")
-    public Order findOrderById(Long orderId, Long customerId) {
-        return orderRepository.findById(orderId).orElseThrow();
-    }
+   @Service
+   public class InvoiceService {
 
-    // Filter return collections based on user identity
-    @PostAuthorize("returnObject.ownerUsername == authentication.name")
-    public Invoice getInvoice(Long invoiceId) {
-        return invoiceRepository.findById(invoiceId).orElseThrow();
-    }
-}
-```
+       // Only allow ADMIN or the owner of the customer account
+       @PreAuthorize("hasRole('ADMIN') or #customerId == authentication.principal.id")
+       public Invoice generateInvoice(Long customerId, Double amount) {
+           return new Invoice(customerId, amount, "PAID");
+       }
 
----
-
-## 2.4 OAuth2 Resource Server & OIDC Integration
-
-Integrate with identity providers (Keycloak, Auth0, Okta, Entra ID) using asymmetric public keys (JWKS):
-
-```yaml
-# application.yml
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: https://auth.company.com/realms/enterprise
-          jwk-set-uri: https://auth.company.com/realms/enterprise/protocol/openid-connect/certs
-```
-
-```java
-@Configuration
-public class OAuth2ResourceServerConfig {
-
-    @Bean
-    public SecurityFilterChain resourceServerSecurity(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/public/**").permitAll()
-                .requestMatchers("/api/orders/**").hasAuthority("SCOPE_orders:read")
-                .anyRequest().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())));
-
-        return http.build();
-    }
-
-    // Maps Keycloak realm roles to Spring Security GrantedAuthorities
-    private JwtAuthenticationConverter jwtAuthConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("roles");
-
-        JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
-        jwtConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
-        return jwtConverter;
-    }
-}
-```
+       // Only return invoice if the current user owns it
+       @PostAuthorize("returnObject.ownerUsername == authentication.name")
+       public Invoice getInvoice(Long invoiceId) {
+           return invoiceRepository.findById(invoiceId).orElseThrow();
+       }
+   }
+   ```
+   - **Sample Failure**: If user `bob` calls `generateInvoice(customerId=999)` where `principal.id=404`, Spring Security throws `AccessDeniedException: Access Denied`.
 
 ---
 
-## 2.5 Production CORS Hardening (`CorsConfigurationSource`)
+## 2.4 OAuth2 Resource Server & Dynamic JWKS Key Rotation
 
-```java
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
-    configuration.setAllowedOrigins(List.of("https://app.company.com", "https://admin.company.com"));
-    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept"));
-    configuration.setExposedHeaders(List.of("X-Total-Count", "Content-Disposition"));
-    configuration.setAllowCredentials(true); // Mandatory for cookies, but forbidden with wildcard "*" origin!
-    configuration.setMaxAge(3600L);          // Preflight cached for 1 hour
+1. **Architectural Overview & Purpose**:
+   - Validates incoming JWTs against an external OpenID Connect (OIDC) identity provider (Keycloak, Auth0, Okta, AWS Cognito) using asymmetric public keys fetched from the **JSON Web Key Set (JWKS)** endpoint.
 
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", configuration);
-    return source;
-}
-```
+2. **Underlying Cryptographic Verification**:
+   - The token contains a Key ID in its header (`kid: "key-2026-rsa"`).
+   - Spring Security queries the JWKS endpoint, retrieves the public RSA/EC key corresponding to `kid`, and verifies the signature off-line without making network calls for every request. Public keys are cached and refreshed automatically on key rotation!
+
+3. **Production `application.yml` & Configuration**:
+   ```yaml
+   spring:
+     security:
+       oauth2:
+         resourceserver:
+           jwt:
+             issuer-uri: https://auth.company.com/realms/enterprise
+             jwk-set-uri: https://auth.company.com/realms/enterprise/protocol/openid-connect/certs
+   ```
+   ```java
+   @Bean
+   public SecurityFilterChain resourceServerFilterChain(HttpSecurity http) throws Exception {
+       return http
+           .oauth2ResourceServer(oauth2 -> oauth2
+               .jwt(jwt -> jwt.jwtAuthenticationConverter(customJwtAuthenticationConverter()))
+           )
+           .authorizeHttpRequests(auth -> auth
+               .requestMatchers("/api/orders/**").hasAuthority("SCOPE_orders:read")
+               .anyRequest().authenticated()
+           )
+           .build();
+   }
+   ```
+
+---
+
+## 2.5 Production CORS & CSRF Defense
+
+1. **CORS (Cross-Origin Resource Sharing)**:
+   - Must be configured at the security filter level (`CorsFilter`), because preflight HTTP `OPTIONS` requests omit authentication headers and must pass through without 401 rejections.
+   ```java
+   @Bean
+   public CorsConfigurationSource corsConfigurationSource() {
+       CorsConfiguration config = new CorsConfiguration();
+       config.setAllowedOrigins(List.of("https://dashboard.company.com"));
+       config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+       config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+       config.setAllowCredentials(true);
+       config.setMaxAge(3600L); // Cache preflight for 1 hour
+
+       UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+       source.registerCorsConfiguration("/**", config);
+       return source;
+   }
+   ```
+
+2. **CSRF (Cross-Site Request Forgery)**:
+   - For stateless REST APIs with JWT in headers, disable CSRF: `csrf -> csrf.disable()`.
+   - For session cookie apps, use the **CookieCsrfTokenRepository**:
+     ```java
+     .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+     ```
+
+---
+
+## 2.6 Multi-Tenant Authentication Routing
+
+1. **Architectural Overview**:
+   - In B2B SaaS, each corporate customer has their own dedicated IdP (e.g. Tenant A uses Okta, Tenant B uses Microsoft Azure Entra ID).
+
+2. **Dynamic JWT Decoder Routing**:
+   ```java
+   @Bean
+   public AuthenticationManagerResolver<HttpServletRequest> tenantAuthManagerResolver() {
+       return request -> {
+           String tenantId = request.getHeader("X-Tenant-ID");
+           String issuer = "https://auth.company.com/" + tenantId;
+           return new JwtAuthenticationProvider(JwtDecoders.fromIssuerLocation(issuer))::authenticate;
+       };
+   }
+   ```
+
+---
+
+## 2.7 Session Management & Fixation Protection
+
+1. **Session Creation Policies**:
+   - `SessionCreationPolicy.STATELESS`: Spring Security never creates or reads `HttpSession`. Ideal for REST APIs.
+   - `SessionCreationPolicy.IF_REQUIRED`: Creates a session only when required (Default for web apps).
+2. **Session Fixation Defense**:
+   - When a user logs in, the attacker might know the pre-login session ID. Spring Security automatically calls `changeSessionId()` on authentication, issuing a brand new session cookie while retaining session attributes.
+
+---
+
+## 2.8 Remember-Me Authentication & Persistent Token Repository
+
+1. **The Vulnerability in Cookie-Only Remember-Me**:
+   - Standard cookie remember-me (`username + expiration + signature`) can be captured and reused until expiration.
+2. **The Persistent Token Solution**:
+   - Stores `(series, token, last_used)` in database. Every login presents the series and token. If token matches, a new token is generated. If an attacker reuses an old token, Spring Security detects token theft, invalidates all sessions for that user, and alerts security!
+
+---
+
+## 2.9 Custom AuthenticationEntryPoint & AccessDeniedHandler
+
+1. **Uniform RFC 7807 Problem Details Response**:
+   ```java
+   @Bean
+   public AuthenticationEntryPoint customAuthEntryPoint() {
+       return (request, response, authException) -> {
+           response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+           response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+           response.getWriter().write("""
+               {
+                   "type": "https://api.company.com/errors/unauthorized",
+                   "title": "Unauthorized",
+                   "status": 401,
+                   "detail": "%s",
+                   "instance": "%s"
+               }
+               """.formatted(authException.getMessage(), request.getRequestURI()));
+       };
+   }
+   ```
+
+---
+
+## 2.10 Modern Spring Security 6 Lambda DSL & Migration Architecture
+
+1. **Eliminating Deprecated Chaining**:
+   - Old Spring Security used `.and()` chaining:
+     ```java
+     // ❌ DEPRECATED OLD SYNTAX
+     http.csrf().disable().and().authorizeRequests().antMatchers("/api/**").authenticated();
+     ```
+   - Modern Spring Security 6 enforces **Lambda DSL**:
+     ```java
+     // ✅ MODERN SPRING SECURITY 6 SYNTAX
+     http
+         .csrf(AbstractHttpConfigurer::disable)
+         .authorizeHttpRequests(auth -> auth
+             .requestMatchers("/api/**").authenticated()
+         );
+     ```
 
 ---
 
@@ -491,16 +594,18 @@ Authentication is decoupled from authorization via the `AuthenticationManager` i
 
 ## 4.1 Token Security: Secure Cookie Pattern vs LocalStorage
 
-Storing JWT access tokens in `localStorage` exposes them to complete theft via any Cross-Site Scripting (XSS) vulnerability.
+Storing JWT access tokens in browser `localStorage` exposes them to complete theft via Cross-Site Scripting (XSS).
 
-### The Zero-Trust Cookie Defense:
-1. **Access Token**: Short-lived (15 minutes), stored in memory or sent via `Authorization` header.
-2. **Refresh Token**: Long-lived (7 days), stored in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie. JavaScript has zero access to this cookie, eliminating XSS token harvesting.
+### The Zero-Trust Dual-Token Architecture:
+1. **Access Token (Short-Lived: 15 mins)**:
+   - Kept purely in client memory (React/Vue/Angular state) or sent via `Authorization: Bearer <token>` header.
+2. **Refresh Token (Long-Lived: 7 days)**:
+   - Stored in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie bound to `/api/v1/auth/refresh`. JavaScript has zero access to this cookie, completely neutralizing XSS token harvesting.
 
 ```java
 ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
     .httpOnly(true)
-    .secure(true) // HTTPS only
+    .secure(true) // HTTPS only in production
     .path("/api/v1/auth/refresh")
     .maxAge(Duration.ofDays(7))
     .sameSite("Strict")
@@ -511,73 +616,211 @@ response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
 ---
 
-# TRACK 5: WAR ROOM POST-MORTEMS & ROOT CAUSE ANALYSIS (RCAs)
+## 4.2 Dynamic Asymmetric Key Rotation (JWKS)
 
-## Incident 1: SecurityContext ThreadLocal Leak across Virtual Threads
-
-- **Severity:** P0 Security Incident (Cross-Tenant Account Takeover)
-- **Mean Time to Recovery (MTTR):** 28 minutes
-- **Symptoms:** Under high load, User A saw User B's billing records after refreshing the page.
-- **Root Cause:** A developer used a custom thread pool executor to process async order checks without wrapping it in `DelegatingSecurityContextExecutor`. When worker threads were returned to the pool without calling `SecurityContextHolder.clearContext()`, subsequent requests executed with the previous user's cached identity.
-- **The Permanent Fix:**
-  1. Enforce `finally { SecurityContextHolder.clearContext(); }` in all custom filters.
-  2. Use Spring's `DelegatingSecurityContextAsyncTaskExecutor` for all async task execution.
-
----
-
-## Incident 2: CORS Preflight 403 Forbidden Outage on React Frontend
-
-- **Severity:** P1 Outage (Complete frontend API failure)
-- **Symptoms:** All `POST` and `PUT` requests failed from the React single-page app with `CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status`.
-- **Root Cause:** A developer placed an endpoint authorization rule:
-  ```java
-  .requestMatchers("/api/**").authenticated()
+In cloud-native zero-trust architectures, identity providers (Keycloak, Okta, Entra ID) periodically rotate their RSA/EC private keys.
+- **The Key ID (`kid`) Header**:
+  Each issued JWT includes the `kid` in its header:
+  ```json
+  { "alg": "RS256", "typ": "JWT", "kid": "key-2026-q3" }
   ```
-  This rule intercepted and blocked the browser's HTTP `OPTIONS` preflight request with a `401 Unauthorized` before the `CorsFilter` could process the headers.
-- **The Permanent Fix:**
-  Add `.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()` or configure `http.cors(Customizer.withDefaults())` with a proper `CorsConfigurationSource` bean.
+- **Caching & Eviction**:
+  Spring Security's `NimbusJwtDecoder` automatically caches public keys fetched from the JWKS URI. If a token arrives with an unknown `kid`, Nimbus initiates an out-of-band HTTPS request to refresh its public key cache, achieving seamless zero-downtime key rotation without restarting backend microservices.
 
 ---
 
-# TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (SENIOR & STAFF+ LEVEL)
+## 4.3 Mutual TLS (mTLS) & Zero-Trust Service-to-Service Security
 
-### 1. How does Spring Security handle authorization decisions internally in Spring Security 6?
-Spring Security 6 replaced the legacy `AccessDecisionManager` and `AccessDecisionVoter` architecture with the streamlined **`AuthorizationManager<T>`** interface. During request evaluation, `AuthorizationFilter` delegates directly to an `AuthorizationManager` (e.g. `AuthorityAuthorizationManager`), which evaluates the user's `GrantedAuthority` collection and returns an `AuthorizationDecision(boolean granted)`.
+For internal microservice-to-microservice traffic, perimeter firewalls are insufficient. Zero-Trust requires **mTLS**:
+1. The client presents an X.509 certificate during the TLS handshake.
+2. The server verifies the certificate against an internal corporate Certificate Authority (CA).
+3. Spring Security extracts the client identity via `X509AuthenticationFilter`:
 
-### 2. What happens if you fail to call `SecurityContextHolder.clearContext()`?
-Because worker threads are pooled by servlet containers (Tomcat), failing to clear the context causes the authenticated user's state to persist on that thread. When the thread is subsequently assigned to a different client request, that request may inherit the previous user's permissions, causing catastrophic privilege escalation and cross-tenant data leaks.
-
-### 3. How do you secure Actuator endpoints without breaking Prometheus scraping?
-Isolate management port security by defining two separate `SecurityFilterChain` beans using `@Order`:
 ```java
 @Bean
-@Order(1)
-public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
+public SecurityFilterChain mTLSSecurityFilterChain(HttpSecurity http) throws Exception {
     return http
-        .securityMatcher(EndpointRequest.toAnyEndpoint())
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
-            .anyRequest().hasRole("MONITORING")
+        .x509(x509 -> x509
+            .subjectPrincipalRegex("CN=(.*?)(?:,|$)")
+            .userDetailsService(clientCertificateUserDetailsService())
         )
-        .httpBasic(Customizer.withDefaults())
+        .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
         .build();
 }
 ```
 
 ---
 
+## 4.4 Brute-Force Defense & Rate Limiting with Redis & Bucket4j
+
+To defend login endpoints (`/api/v1/auth/login`) against credential stuffing and brute-force attacks:
+```java
+@Component
+public class RateLimitingFilter extends OncePerRequestFilter {
+
+    private final ProxyManager<String> buckets;
+
+    public RateLimitingFilter(ProxyManager<String> buckets) {
+        this.buckets = buckets;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
+        if ("/api/v1/auth/login".equals(request.getRequestURI())) {
+            String clientIp = request.getRemoteAddr();
+            BucketConfiguration config = BucketConfiguration.builder()
+                .addLimit(Bandwidth.builder().capacity(5).refillGreedy(5, Duration.ofMinutes(1)).build())
+                .build();
+
+            Bucket bucket = buckets.builder().build(clientIp, config);
+
+            if (!bucket.tryConsume(1)) {
+                response.setStatus(429); // HTTP 429 Too Many Requests
+                response.getWriter().write("{\"error\": \"Too many login attempts. Please wait 1 minute.\"}");
+                return;
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+}
+```
+
+---
+
+# TRACK 5: WAR ROOM POST-MORTEMS & ROOT CAUSE ANALYSIS (RCAs)
+
+## Incident 1: SecurityContext ThreadLocal Leak across Virtual Threads & Thread Pools
+
+- **Severity:** P0 Security Incident (Cross-Tenant Account Takeover)
+- **Mean Time to Recovery (MTTR):** 28 minutes
+- **Symptoms:** Under high concurrent traffic, User A intermittently saw User B's private account records after refreshing their dashboard.
+- **Root Cause:** A developer used a custom `ThreadPoolTaskExecutor` to execute asynchronous billing computations without wrapping the executor with `DelegatingSecurityContextAsyncTaskExecutor`. When worker threads were returned to the pool without invoking `SecurityContextHolder.clearContext()`, subsequent requests processed on those reused threads inherited the previous user's cached identity.
+- **The Permanent Fix:**
+  1. Enforce `finally { SecurityContextHolder.clearContext(); }` in all custom security filters.
+  2. Register `DelegatingSecurityContextAsyncTaskExecutor` as the default asynchronous task executor:
+     ```java
+     @Bean
+     public AsyncTaskExecutor applicationTaskExecutor() {
+         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+         executor.initialize();
+         return new DelegatingSecurityContextAsyncTaskExecutor(executor);
+     }
+     ```
+
+---
+
+## Incident 2: CORS Preflight 403 Forbidden Outage on Single-Page Frontend
+
+- **Severity:** P1 Outage (Complete frontend API failure)
+- **Symptoms:** All `POST`, `PUT`, and `DELETE` requests failed from the React web client with `CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status (403 Forbidden)`.
+- **Root Cause:** The developer declared URL patterns using:
+  ```java
+  .authorizeHttpRequests(auth -> auth
+      .requestMatchers("/api/**").authenticated()
+  )
+  ```
+  Browsers automatically emit HTTP `OPTIONS` requests before sending actual requests with custom headers (`Authorization`). Because the `OPTIONS` request contains no bearer token, the security filter chain rejected it with `403 Forbidden` before the CORS filter could attach the required `Access-Control-Allow-Origin` headers.
+- **The Permanent Fix:**
+  1. Insert `http.cors(Customizer.withDefaults())` at the top of the security chain.
+  2. Explicitly permit HTTP `OPTIONS` requests across all paths:
+     ```java
+     .authorizeHttpRequests(auth -> auth
+         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+         .requestMatchers("/api/**").authenticated()
+     )
+     ```
+
+---
+
+## Incident 3: CSRF Token Desynchronization in Cookie-Based Single Page Application
+
+- **Severity:** P2 Production Defect (Checkout and payment submissions failed for 100% of returning users)
+- **Symptoms:** Users could browse the catalogue, but clicking "Pay Now" threw an immediate `403 Forbidden` with `Invalid CSRF Token`.
+- **Root Cause:** The backend configured `CookieCsrfTokenRepository.withHttpOnlyFalse()`, expecting the frontend to read the `XSRF-TOKEN` cookie and send it back as an `X-XSRF-TOKEN` header. However, Spring Security 6 introduced deferred CSRF tokens: the token is not written into the cookie until the token is explicitly accessed in the request.
+- **The Permanent Fix:**
+  Implement a `CsrfCookieFilter` ensuring the token is resolved on every request:
+  ```java
+  public class CsrfCookieFilter extends OncePerRequestFilter {
+      @Override
+      protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+              throws ServletException, IOException {
+          CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+          if (csrfToken != null) {
+              csrfToken.getToken(); // Forces lazy token resolution and cookie emission
+          }
+          filterChain.doFilter(request, response);
+      }
+  }
+  ```
+
+---
+
+# TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (SENIOR & STAFF+ LEVEL)
+
+### 1. How does Spring Security 6 evaluate authorization decisions internally?
+Spring Security 6 replaced legacy `AccessDecisionManager` and `AccessDecisionVoter` components with the streamlined **`AuthorizationManager<T>`** interface. During request evaluation, `AuthorizationFilter` delegates directly to an `AuthorizationManager` (such as `AuthorityAuthorizationManager`), which evaluates the user's `GrantedAuthority` collection and returns an `AuthorizationDecision(boolean granted)`.
+
+### 2. What is the fundamental difference between `hasRole('ADMIN')` and `hasAuthority('ADMIN')`?
+`hasRole('ADMIN')` automatically prepends the prefix `ROLE_` to the argument, checking whether the user possesses the authority `ROLE_ADMIN`. In contrast, `hasAuthority('ADMIN')` performs an exact string match for `ADMIN` without prefix modification.
+
+### 3. Why must `SecurityContextHolder.clearContext()` always be called in a `finally` block?
+Because servlet containers (e.g. Tomcat) reuse worker threads across different client requests. If the security context is not explicitly cleared, subsequent requests dispatched on that thread inherit the previous client's credentials, causing critical cross-tenant data leaks and privilege escalation.
+
+### 4. How does Method Security SpEL evaluation work under the hood?
+Method security is enforced via Spring AOP proxies (CGLIB or JDK dynamic proxies). When a method annotated with `@PreAuthorize` is invoked, the proxy's `MethodSecurityInterceptor` parses the SpEL expression into an Abstract Syntax Tree (AST), constructs a `MethodSecurityEvaluationContext` containing the method arguments and `SecurityContext`, and evaluates the boolean expression prior to proceeding with target execution.
+
+### 5. What are the dangers of using `MODE_INHERITABLETHREADLOCAL` in a modern microservice?
+`InheritableThreadLocal` passes security context from a parent thread to child threads spawned via `new Thread()`. In thread-pooled environments (like `ForkJoinPool` or `ThreadPoolExecutor`), worker threads are long-lived and reused. Child threads retain stale parent contexts from previous invocations, causing severe context pollution and memory leaks.
+
+### 6. How do you protect Spring Boot Actuator endpoints from unauthorized exposure?
+Configure a dedicated, prioritized `SecurityFilterChain` bean marked with `@Order(1)`:
+```java
+@Bean
+@Order(1)
+public SecurityFilterChain actuatorSecurity(HttpSecurity http) throws Exception {
+    return http
+        .securityMatcher(EndpointRequest.toAnyEndpoint())
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers(EndpointRequest.to(HealthEndpoint.class, InfoEndpoint.class)).permitAll()
+            .anyRequest().hasRole("OPS_MONITORING")
+        )
+        .httpBasic(Customizer.withDefaults())
+        .build();
+}
+```
+
+### 7. How does OAuth2 Resource Server handle token validation without calling the Identity Provider on every request?
+The Resource Server retrieves the IdP's public signing keys from its **JWKS (JSON Web Key Set)** endpoint upon startup and caches them. When a JWT arrives, the server mathematically verifies the cryptographic signature (e.g., using RSA public key or EC public key) and verifies claims (`exp`, `nbf`, `iss`, `aud`) locally in-memory without initiating network calls.
+
+### 8. What is the difference between OAuth2 Introspection and local JWKS validation?
+- **JWKS Local Validation**: Token must be a signed JWT. Verification is executed off-line in-memory. Ultra-fast ($<0.1\text{ms}$), but cannot detect immediate server-side revocations until token expiry.
+- **Opaque Token Introspection (RFC 7662)**: The token is an arbitrary random string. The Resource Server makes an HTTP POST call to the Authorization Server's `/oauth/introspect` endpoint on every request. Higher latency ($20\text{ms}-50\text{ms}$), but supports instantaneous revocation.
+
+### 9. Why should you never disable CSRF protection in server-side rendered cookie-based web apps?
+In cookie-based applications, web browsers automatically attach stored session cookies to cross-origin requests. An attacker hosting `evil.com` can craft a hidden form targeting `bank.com/transfer` and trick the user into submitting it. Without a synchronizer CSRF token, the server cannot distinguish between legitimate user submissions and forged cross-site requests.
+
+### 10. How does Reactive Spring Security operate in Spring WebFlux?
+In Spring WebFlux, execution hops across multiple Netty event loop threads, rendering `ThreadLocal` ineffective. Reactive Spring Security leverages **Reactor Context** (`reactor.util.context.Context`), binding the `Mono<SecurityContext>` to the subscriber pipeline and propagating user identity across asynchronous non-blocking operators.
+
+---
+
 ## ⚖️ Spring Security 6 Master Cheat Sheet
 
-| Task / Configuration | Production Implementation |
+| Requirement | Modern Spring Security 6 Implementation |
 | :--- | :--- |
-| **Stateless Session** | `session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)` |
-| **Disable CSRF for REST** | `csrf -> csrf.disable()` |
-| **Method Security** | `@EnableMethodSecurity` + `@PreAuthorize("hasRole('ADMIN')")` |
-| **CORS Preflight** | `http.cors(Customizer.withDefaults())` + `CorsConfigurationSource` |
-| **Password Encoding** | `new BCryptPasswordEncoder(12)` |
-| **Filter Placement** | `.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)` |
-| **Clear Context Hygiene**| `SecurityContextHolder.clearContext()` in filter `finally` block |
-| **OAuth2 Resource Server**| `http.oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))` |
+| **Stateless REST API** | `sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))` |
+| **Disable CSRF for REST** | `csrf(AbstractHttpConfigurer::disable)` |
+| **CORS Configuration** | `cors(Customizer.withDefaults())` + registered `CorsConfigurationSource` |
+| **Method Security** | `@EnableMethodSecurity(prePostEnabled = true)` on config class |
+| **Custom Filter Position** | `.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)` |
+| **Password Encoder** | `new BCryptPasswordEncoder(12)` |
+| **Secure Actuator** | `@Order(1)` chain matching `EndpointRequest.toAnyEndpoint()` |
+| **Clear Context** | `SecurityContextHolder.clearContext()` inside filter `finally` block |
+| **Extract Principal** | `@AuthenticationPrincipal UserDetails user` in `@RestController` |
+| **Problem Details 7807** | Custom `AuthenticationEntryPoint` writing `application/problem+json` |
 
 ---
 [🏠 Back to Home](README.md) | [🍃 Spring Boot Master Guide](spring_master_guide.md) | [🏛️ Spring Data JPA Guide](spring_data_jpa.md)
+

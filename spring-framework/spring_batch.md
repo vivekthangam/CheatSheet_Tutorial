@@ -218,326 +218,310 @@ When processing millions of records, bad records (e.g. corrupt CSV lines or miss
 
 ---
 
-# TRACK 2: ADVANCED ARCHITECTURE & ENTERPRISE PIPELINES
+# TRACK 2: ADVANCED ARCHITECTURE & MASTER BATCH FEATURE CATALOG
 
-## ⚙️ 1. Spring Batch 5 Core Architecture & Metadata Schema
+## Master Spring Batch Architecture Decision Matrix
 
-> [!IMPORTANT]
-> **Spring Batch 5 Migration Note:**
-> `JobBuilderFactory` and `StepBuilderFactory` are **deprecated / removed**.
-> In Spring Batch 5+, instantiate steps and jobs explicitly using:
-> `new JobBuilder("jobName", jobRepository)` and `new StepBuilder("stepName", jobRepository)`.
-
-### Maven Dependencies (`pom.xml`)
-```xml
-<dependencies>
-    <!-- Spring Boot 3 Batch Starter -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-batch</artifactId>
-    </dependency>
-
-    <!-- Database Drivers & Connection Pool -->
-    <dependency>
-        <groupId>org.postgresql</groupId>
-        <artifactId>postgresql</artifactId>
-        <scope>runtime</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-jdbc</artifactId>
-    </dependency>
-</dependencies>
-```
-
-### Essential Spring Batch Metadata Tables
-Spring Batch automatically manages its state through 6 core tables:
-- `BATCH_JOB_INSTANCE`: Top-level job identity keyed by name and `JobParameters`.
-- `BATCH_JOB_EXECUTION`: Represents a single physical run of a Job Instance (status: `STARTING`, `COMPLETED`, `FAILED`).
-- `BATCH_JOB_EXECUTION_PARAMS`: Key-value arguments passed at startup (e.g. `run.date=2026-09-03`).
-- `BATCH_STEP_EXECUTION`: Granular metrics for each step (read count, write count, commit count, rollback count, skip count).
-- `BATCH_STEP_EXECUTION_CONTEXT`: Key-value state machine checkpoint for restarting failed jobs exactly where they left off.
+| Architectural Pattern | Core Mechanism | Memory Footprint | Concurrency Model | Ideal Production Use Case | Anti-Pattern For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Chunk Processing** | Reader $\to$ Processor $\to$ Writer | $O(\text{chunk size})$ constant | Single Thread (or worker pool) | Millions of CSV, database or JSON rows | One-off discrete task (e.g. file delete) |
+| **Tasklet Step** | Single `execute()` lambda | Depends on code | Single Thread | Staging folder cleanup, table truncate | Iterating 1,000,000 DB records |
+| **Cursor Reader** | Persistent DB socket cursor | Low ($O(1)$ stream) | Single Thread ONLY (Not thread-safe)| Ordered sequential processing | Multi-threaded concurrent steps |
+| **Paging Reader** | SQL `LIMIT/OFFSET` or Keyset | $O(\text{page size})$ | Thread-Safe | Concurrent multi-threaded steps | Massive offsets in MySQL (use keyset) |
+| **Multi-Threaded Step**| Worker ThreadPoolExecutor | Medium | Concurrent workers on 1 JVM | High-CPU transformations on 1 box | State-tracking non-thread-safe readers |
+| **Partitioned Step** | Master splits into $N$ slices | Low per slice | Multi-thread or Multi-JVM | 100M+ records sharded by ID range | Small datasets under 10,000 records |
+| **Skip Policy** | Catches corrupt lines | Minimal | Handled in transaction loop | Dirty CSV files with malformed rows | Systemic database outages |
+| **Retry Policy** | Re-executes chunk on lock | Minimal | Backoff wait loop | Transient DB deadlocks, network blips| Validation errors (e.g. invalid email) |
+| **Composite Processor**| Pipeline of processors | Low | Chained sequential | Clean separation: Validate $\to$ Enrich | Heavy blocking network calls |
+| **ExecutionContext**| DB serialized state map | Tiny ($<10\text{ KB}$) | Per Step / Job Execution | Checkpointing cursor for restarts | Storing massive entity lists |
 
 ---
 
-## 🔄 2. Chunk-Oriented Processing vs Tasklet
+## 2.1 Chunk-Oriented Processing & Transaction Demarcation
 
-### When to Use What?
-| Feature | Chunk Processing (`Reader -> Processor -> Writer`) | Tasklet Step (`Tasklet`) |
-| :--- | :--- | :--- |
-| **Primary Use Case** | Streaming 10,000+ to millions of records | Single discrete actions (file move, table purge, notification) |
-| **Memory Footprint** | Constant $O(\text{chunk size})$, never loads full dataset | Depends on tasklet implementation |
-| **Transaction Boundary**| Committed every $N$ records (`chunkSize`) | Single transaction wrapping the entire tasklet |
-| **Restartability** | Automatically resumes from last committed chunk | Re-executes from step start unless manually tracked |
+1. **Architectural Overview & Purpose**:
+   - Instead of reading an entire dataset into memory or executing individual database commits per record, Chunk-Oriented Processing streams data in discrete units of size $N$ (e.g. 500 items). It provides constant $O(\text{chunk size})$ heap usage and commits transactions at exact chunk boundaries.
 
-### Tasklet Example: Staging Directory Cleanup
-```java
-package com.example.batch.tasklets;
+2. **Underlying Algorithm & Execution Loop**:
+   ```
+   [ Open Transaction ]
+   Loop chunk_size times:
+       item = ItemReader.read()
+       if item == null: break (End of dataset)
+       transformed = ItemProcessor.process(item)
+       if transformed != null: chunkList.add(transformed)
+   ItemWriter.write(chunkList)
+   [ Commit Transaction & Checkpoint ExecutionContext ]
+   ```
+   - If an unhandled exception throws during the write, the entire transaction of 500 items rolls back automatically.
 
-import org.springframework.batch.core.StepContribution;
-import org.springframework.batch.core.scope.context.ChunkContext;
-import org.springframework.batch.core.step.tasklet.Tasklet;
-import org.springframework.batch.repeat.RepeatStatus;
-import org.springframework.stereotype.Component;
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // Spring Batch 5 StepBuilder
+   public <I, O> SimpleStepBuilder<I, O> chunk(int chunkSize, PlatformTransactionManager transactionManager);
+   ```
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Bean
+   public Step orderProcessingStep(JobRepository jobRepository,
+                                   PlatformTransactionManager txManager,
+                                   ItemReader<RawOrder> reader,
+                                   ItemProcessor<RawOrder, ProcessedOrder> processor,
+                                   ItemWriter<ProcessedOrder> writer) {
+       return new StepBuilder("orderProcessingStep", jobRepository)
+           .<RawOrder, ProcessedOrder>chunk(100, txManager)
+           .reader(reader)
+           .processor(processor)
+           .writer(writer)
+           .build();
+   }
+   ```
+   - **Execution Log Output**:
+     ```
+     INFO  o.s.b.c.s.c.TaskletStep - Step: [orderProcessingStep] executed in 450ms
+     INFO  o.s.b.c.s.c.TaskletStep - Read: 100, Filtered: 5, Written: 95, Commit Count: 1
+     ```
 
-@Component
-public class FileCleanupTasklet implements Tasklet {
+5. **Pros & Cons**:
+   - **Pros**: Zero memory explosion regardless of dataset size; automatic checkpointing.
+   - **Cons**: Choosing the wrong chunk size causes performance bottlenecks (too small = excessive DB commits; too large = long lock times).
 
-    private final String targetDirectory = "target/batch-staging";
+6. **How It Breaks: Top Beginner Mistakes**:
+   - **Modifying Entities in Memory Without Saving in Writer**:
+     Relying on JPA dirty-checking across chunk boundaries without explicit session management causes uncommitted detached entity state.
 
-    @Override
-    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
-        Path path = Paths.get(targetDirectory);
-        if (Files.exists(path)) {
-            try (var stream = Files.walk(path)) {
-                stream.filter(Files::isRegularFile)
-                      .map(Path::toFile)
-                      .forEach(File::delete);
-            }
-        }
-        // Signal that the tasklet has completed its execution
-        return RepeatStatus.FINISHED;
-    }
-}
-```
-
----
-
-## 📖 3. Production Readers & Writers (FlatFile, JDBC, JPA, Kafka)
-
-### 3.1 Streaming CSV FlatFileItemReader
-```java
-package com.example.batch.config;
-
-import com.example.batch.model.CustomerRecord;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
-import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.FileSystemResource;
-
-@Configuration
-public class CustomerReaderConfig {
-
-    @Bean
-    public FlatFileItemReader<CustomerRecord> customerCsvReader() {
-        return new FlatFileItemReaderBuilder<CustomerRecord>()
-            .name("customerCsvReader")
-            .resource(new FileSystemResource("inbound/customers.csv"))
-            .linesToSkip(1) // Skip CSV Header line
-            .delimited()
-            .delimiter(",")
-            .names("customerId", "firstName", "lastName", "email", "accountBalance")
-            .fieldSetMapper(new BeanWrapperFieldSetMapper<>() {{
-                setTargetType(CustomerRecord.class);
-            }})
-            .saveState(true) // Crucial for restartability from checkpoint
-            .build();
-    }
-}
-```
-
-### 3.2 High-Throughput JdbcBatchItemWriter
-Instead of running $N$ individual `INSERT` statements, `JdbcBatchItemWriter` groups records into a single multi-row network payload using JDBC Batching.
-
-```java
-package com.example.batch.config;
-
-import com.example.batch.model.CustomerRecord;
-import org.springframework.batch.item.database.JdbcBatchItemWriter;
-import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-import javax.sql.DataSource;
-
-@Configuration
-public class CustomerWriterConfig {
-
-    @Bean
-    public JdbcBatchItemWriter<CustomerRecord> customerDatabaseWriter(DataSource dataSource) {
-        return new JdbcBatchItemWriterBuilder<CustomerRecord>()
-            .dataSource(dataSource)
-            .sql("""
-                INSERT INTO customers (customer_id, first_name, last_name, email, account_balance, updated_at)
-                VALUES (:customerId, :firstName, :lastName, :email, :accountBalance, NOW())
-                ON CONFLICT (customer_id) DO UPDATE
-                SET account_balance = EXCLUDED.account_balance, updated_at = NOW()
-                """)
-            .beanMapped()
-            .build();
-    }
-}
-```
+7. **Tricky Interview Questions & Gotchas**:
+   - **Q: What happens if `ItemProcessor` returns `null`?**
+     - *Answer*: Returning `null` explicitly signals to Spring Batch that the record should be **filtered out**. The item is silently dropped from the current chunk and will NOT be passed to the `ItemWriter`.
 
 ---
 
-## 🛡️ 4. Fault Tolerance: Skip, Retry & Transaction Boundaries
+## 2.2 Paging vs Cursor Database Readers
 
-In production, corrupt CSV records or temporary database deadlocks must not crash a 5-hour batch job.
+1. **Architectural Overview & Purpose**:
+   - Extracting millions of rows from a relational database requires streaming:
+     - `JdbcCursorItemReader`: Maintains a single open database cursor connection, streaming records over the network buffer.
+     - `JdbcPagingItemReader`: Executes paginated queries (`LIMIT ? OFFSET ?` or keyset pagination) pulling pages into memory.
 
-```mermaid
-flowchart TD
-    A[Read Item from Source] --> B{Valid Item?}
-    B -->|Corrupt CSV line| C{Skip Limit Exceeded?}
-    C -->|No: skipCount < 50| D[Log to Dead-Letter Audit & Continue]
-    C -->|Yes| E[Step FAILED: Rollback Chunk]
-    B -->|Valid| F[ItemProcessor: Transform]
-    F --> G[Accumulate to Chunk: 500 records]
-    G --> H[ItemWriter: Bulk SQL Insert]
-    H -->|Deadlock / Network Disconnect| I{Retry Limit Exceeded?}
-    I -->|No: retryCount < 3| J[Wait with Exponential Backoff & Retry Chunk]
-    I -->|Yes| E
-    H -->|Success| K[Commit Transaction & Checkpoint ExecutionContext]
-```
+2. **Underlying Mechanics**:
+   - **Cursor Reader**: Extremely fast ($O(1)$ stream). **Strictly single-threaded and NOT thread-safe**! The database connection must remain open throughout the entire step.
+   - **Paging Reader**: Completely **thread-safe**. Multiple threads can fetch different pages concurrently.
 
-### Complete Fault-Tolerant Step Configuration
-```java
-package com.example.batch.config;
+3. **Production Blueprint (Thread-Safe Keyset Paging Reader)**:
+   ```java
+   @Bean
+   public JdbcPagingItemReader<CustomerDto> customerPagingReader(DataSource dataSource) {
+       PostgresPagingQueryProvider queryProvider = new PostgresPagingQueryProvider();
+       queryProvider.setSelectClause("customer_id, email, balance");
+       queryProvider.setFromClause("FROM customers");
+       queryProvider.setSortKeys(Map.of("customer_id", Order.ASCENDING));
 
-import com.example.batch.model.CustomerRecord;
-import org.springframework.batch.core.Step;
-import org.springframework.batch.core.repository.JobRepository;
-import org.springframework.batch.core.step.builder.StepBuilder;
-import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.file.FlatFileParseException;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.dao.TransientDataAccessException;
-import org.springframework.transaction.PlatformTransactionManager;
-
-@Configuration
-public class ResilientBatchStepConfig {
-
-    @Bean
-    public Step processCustomerBatchStep(
-            JobRepository jobRepository,
-            PlatformTransactionManager transactionManager,
-            ItemReader<CustomerRecord> reader,
-            ItemProcessor<CustomerRecord, CustomerRecord> processor,
-            ItemWriter<CustomerRecord> writer) {
-
-        return new StepBuilder("processCustomerBatchStep", jobRepository)
-            .<CustomerRecord, CustomerRecord>chunk(500, transactionManager)
-            .reader(reader)
-            .processor(processor)
-            .writer(writer)
-            // Enable Fault Tolerance
-            .faultTolerant()
-            // Skip invalid data rows (up to 50 records)
-            .skip(FlatFileParseException.class)
-            .skip(IllegalArgumentException.class)
-            .skipLimit(50)
-            // Retry transient database locks or network drops (up to 3 times)
-            .retry(TransientDataAccessException.class)
-            .retryLimit(3)
-            .build();
-    }
-}
-```
+       return new JdbcPagingItemReaderBuilder<CustomerDto>()
+           .name("customerPagingReader")
+           .dataSource(dataSource)
+           .pageSize(500)
+           .queryProvider(queryProvider)
+           .rowMapper((rs, rowNum) -> new CustomerDto(
+               rs.getLong("customer_id"),
+               rs.getString("email"),
+               rs.getDouble("balance")
+           ))
+           .saveState(true)
+           .build();
+   }
+   ```
 
 ---
 
-## 👂 5. Lifecycle Interception with Listeners
+## 2.3 Fault Tolerance: Skip & Retry Policies
 
-Listeners allow teams to publish Slack alerts, record audit metrics in Prometheus/Micrometer, or track failed skipped items.
+1. **Architectural Overview & Purpose**:
+   - In a 10,000,000-record batch, 3 corrupt CSV lines or a 500ms database deadlock must not abort the entire 4-hour job. Spring Batch provides granular **Skip** (discard bad record and continue) and **Retry** (re-execute transient failure).
 
-```java
-package com.example.batch.listeners;
+2. **Skip vs Retry Invariant**:
+   - **Skip**: Used for deterministic, non-retryable bad data (e.g. `FlatFileParseException`, `NumberFormatException`).
+   - **Retry**: Used for non-deterministic, transient infrastructure failures (e.g. `CannotAcquireLockException`, `TransientDataAccessException`).
 
-import com.example.batch.model.CustomerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.batch.core.ItemProcessListener;
-import org.springframework.batch.core.JobExecution;
-import org.springframework.batch.core.JobExecutionListener;
-import org.springframework.batch.core.SkipListener;
-import org.springframework.stereotype.Component;
-
-@Component
-public class BatchMonitoringListener implements JobExecutionListener, SkipListener<CustomerRecord, CustomerRecord> {
-
-    private static final Logger log = LoggerFactory.getLogger(BatchMonitoringListener.class);
-
-    @Override
-    public void beforeJob(JobExecution jobExecution) {
-        log.info("Batch Job [{}] started with parameters: {}", 
-            jobExecution.getJobInstance().getJobName(), 
-            jobExecution.getJobParameters());
-    }
-
-    @Override
-    public void afterJob(JobExecution jobExecution) {
-        log.info("Batch Job [{}] finished with exit status: {}. Duration: {} ms",
-            jobExecution.getJobInstance().getJobName(),
-            jobExecution.getExitStatus(),
-            System.currentTimeMillis() - jobExecution.getStartTime().toEpochMilli());
-    }
-
-    @Override
-    public void onSkipInRead(Throwable t) {
-        log.error("Corrupt line encountered during read! Reason: {}", t.getMessage());
-    }
-
-    @Override
-    public void onSkipInWrite(CustomerRecord item, Throwable t) {
-        log.error("Failed to write customer ID [{}]: {}", item.getCustomerId(), t.getMessage());
-    }
-}
-```
+3. **Production Fault-Tolerant Step Blueprint**:
+   ```java
+   @Bean
+   public Step resilientStep(JobRepository jobRepository,
+                            PlatformTransactionManager txManager,
+                            ItemReader<CustomerInput> reader,
+                            ItemWriter<CustomerInput> writer) {
+       return new StepBuilder("resilientStep", jobRepository)
+           .<CustomerInput, CustomerInput>chunk(500, txManager)
+           .reader(reader)
+           .writer(writer)
+           .faultTolerant()
+           // Skip configuration
+           .skip(FlatFileParseException.class)
+           .skip(IllegalArgumentException.class)
+           .skipLimit(50) // Allow up to 50 bad lines
+           // Retry configuration
+           .retry(CannotAcquireLockException.class)
+           .retryLimit(3) // Retry up to 3 times on lock acquisition
+           .backOffPolicy(new ExponentialBackOffPolicy() {{
+               setInitialInterval(1000L);
+               setMultiplier(2.0);
+           }})
+           .build();
+   }
+   ```
 
 ---
 
-## 🚀 6. High-Throughput Scaling: Multi-Threading & Partitioning
+## 2.4 JobRepository State Machine & Metadata Schema
 
-When single-threaded processing cannot meet a nightly SLA (e.g., 20 million rows in 30 minutes), use **Multi-Threaded Steps** or **Partitioning**.
+1. **The 6 Core Tables**:
+   - `BATCH_JOB_INSTANCE`: Logical job identity. Keyed by Job Name + identifying `JobParameters`.
+   - `BATCH_JOB_EXECUTION`: Physical execution attempt. Tracks status (`STARTING`, `STARTED`, `COMPLETED`, `FAILED`).
+   - `BATCH_JOB_EXECUTION_PARAMS`: Key-value pairs passed at job launch.
+   - `BATCH_STEP_EXECUTION`: Metric telemetry: `READ_COUNT`, `WRITE_COUNT`, `COMMIT_COUNT`, `ROLLBACK_COUNT`, `FILTER_COUNT`, `SKIP_COUNT`.
+   - `BATCH_STEP_EXECUTION_CONTEXT`: Serialized JSON/Base64 key-value machine checkpoints for restartability.
 
-### 6.1 Multi-Threaded Step (Single Process, Multiple Worker Threads)
-> [!CAUTION]
-> Most standard `ItemReader` instances (like `FlatFileItemReader` or `JdbcCursorItemReader`) are **NOT thread-safe** because they maintain internal pointer state.
-> In a multi-threaded step, you must either synchronize access, use a `SynchronizedItemStreamReader`, or use a naturally thread-safe reader like `JdbcPagingItemReader`.
+2. **The Restartability Guard**:
+   - If a job fails at Step 2 after committing 100,000 rows in Step 1, re-launching the job with identical parameters will **skip Step 1 entirely** and resume Step 2 from the exact offset recorded in `BATCH_STEP_EXECUTION_CONTEXT`!
 
-```java
-@Bean
-public Step multiThreadedStep(JobRepository jobRepo, PlatformTransactionManager txManager) {
-    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-    executor.setCorePoolSize(8);
-    executor.setMaxPoolSize(16);
-    executor.setThreadNamePrefix("batch-worker-");
-    executor.initialize();
+---
 
-    return new StepBuilder("multiThreadedStep", jobRepo)
-        .<TransactionDto, TransactionDto>chunk(1000, txManager)
-        .reader(pagingDatabaseReader()) // Thread-safe paging reader!
-        .writer(databaseBatchWriter())
-        .taskExecutor(executor)
-        .throttleLimit(8)
-        .build();
-}
-```
+## 2.5 ExecutionContext Checkpoints & PromotionListener
 
-### 6.2 Partitioned Step (Divide & Conquer by Range)
-Divides a dataset into independent slices (e.g., partition by `Region` or `ID % 10`), running each partition on a separate thread or remote worker.
+1. **Architectural Overview**:
+   - `ExecutionContext` is a persistent state dictionary stored in PostgreSQL. It allows readers and steps to persist bookmarks (e.g. last processed line number or database primary key).
 
-```java
-@Bean
-public Step managerStep(JobRepository jobRepo, Step workerStep) {
-    return new StepBuilder("managerStep", jobRepo)
-        .partitioner("workerStep", new CustomerRangePartitioner())
-        .step(workerStep)
-        .gridSize(4) // 4 concurrent partition workers
-        .taskExecutor(new SimpleAsyncTaskExecutor())
-        .build();
-}
-```
+2. **Sample Usage**:
+   ```java
+   // In ItemReader or StepExecutionListener:
+   stepExecution.getExecutionContext().putLong("lastCommittedId", 450123L);
+
+   // On job restart after crash, the reader retrieves this checkpoint:
+   long startId = stepExecution.getExecutionContext().getLong("lastCommittedId", 0L);
+   ```
+
+---
+
+## 2.6 Master-Worker Partitioning (Divide & Conquer)
+
+1. **Architectural Overview & Purpose**:
+   - When processing 50,000,000 rows, a single process cannot finish within nightly batch windows. Partitioning divides the dataset into independent slices and executes them concurrently across worker threads or remote worker nodes.
+
+2. **Production Range Partitioner**:
+   ```java
+   public class CustomerIdRangePartitioner implements Partitioner {
+       @Override
+       public Map<String, ExecutionContext> partition(int gridSize) {
+           Map<String, ExecutionContext> result = new HashMap<>();
+           long minId = 1;
+           long maxId = 1000000;
+           long targetSize = (maxId - minId) / gridSize + 1;
+
+           long start = minId;
+           long end = start + targetSize - 1;
+
+           for (int i = 0; i < gridSize; i++) {
+               ExecutionContext context = new ExecutionContext();
+               context.putLong("minId", start);
+               context.putLong("maxId", Math.min(end, maxId));
+               result.put("partition_" + i, context);
+
+               start += targetSize;
+               end += targetSize;
+           }
+           return result;
+       }
+   }
+   ```
+
+3. **Step Manager Configuration**:
+   ```java
+   @Bean
+   public Step managerStep(JobRepository jobRepository, Step workerStep) {
+       return new StepBuilder("managerStep", jobRepository)
+           .partitioner("workerStep", new CustomerIdRangePartitioner())
+           .step(workerStep)
+           .gridSize(8) // 8 parallel worker threads
+           .taskExecutor(new ThreadPoolTaskExecutor() {{
+               setCorePoolSize(8);
+               setMaxPoolSize(16);
+               initialize();
+           }})
+           .build();
+   }
+   ```
+
+---
+
+## 2.7 Composite Processors & Validation Pipelines
+
+1. **Architectural Overview**:
+   - Enables chaining multiple independent single-responsibility processors (e.g., Step 1: Validation $\to$ Step 2: Currency Conversion $\to$ Step 3: Fraud Scoring).
+
+2. **Production Blueprint**:
+   ```java
+   @Bean
+   public ItemProcessor<RawTransaction, EnrichedTransaction> compositeProcessor() {
+       CompositeItemProcessor<RawTransaction, EnrichedTransaction> composite = new CompositeItemProcessor<>();
+       composite.setDelegates(List.of(
+           new ValidationProcessor(),
+           new CurrencyNormalizationProcessor(),
+           new FraudScoringProcessor()
+       ));
+       return composite;
+   }
+   ```
+
+---
+
+## 2.8 FlatFileItemReader & Streaming Ingestion
+
+1. **Production Delimited CSV Configuration**:
+   ```java
+   @Bean
+   public FlatFileItemReader<InvoiceDto> invoiceCsvReader() {
+       return new FlatFileItemReaderBuilder<InvoiceDto>()
+           .name("invoiceCsvReader")
+           .resource(new FileSystemResource("inbound/invoices.csv"))
+           .linesToSkip(1) // Skip header
+           .delimited()
+           .delimiter(",")
+           .names("invoiceId", "customerId", "amount", "dueDate")
+           .targetType(InvoiceDto.class)
+           .saveState(true) // Enables checkpoint restart from line number!
+           .build();
+   }
+   ```
+
+---
+
+## 2.9 Multi-Threaded Steps & SynchronizedItemStreamReader
+
+1. **The Concurrency Trap**:
+   - `FlatFileItemReader` and `JdbcCursorItemReader` maintain internal state (`lineCount`, cursor index). If 8 threads invoke `read()` concurrently on the same reader, lines are skipped, read out of order, or cause index corruption!
+
+2. **The Solution**: Wrap in `SynchronizedItemStreamReader`:
+   ```java
+   @Bean
+   public SynchronizedItemStreamReader<InvoiceDto> synchronizedReader(ItemReader<InvoiceDto> rawReader) {
+       SynchronizedItemStreamReader<InvoiceDto> reader = new SynchronizedItemStreamReader<>();
+       reader.setDelegate(rawReader);
+       return reader;
+   }
+   ```
+
+---
+
+## 2.10 Spring Batch 5 & Boot 3 Migration Architecture
+
+1. **What Changed in Spring Batch 5**:
+   - `@EnableBatchProcessing` is NO LONGER required in Spring Boot 3 (auto-configures `JobLauncher`, `JobRepository`, `TransactionManager`).
+   - `JobBuilderFactory` and `StepBuilderFactory` are completely removed. Always use explicit constructors:
+     ```java
+     new JobBuilder("jobName", jobRepository);
+     new StepBuilder("stepName", jobRepository);
+     ```
+   - Native support for **Java 21 Virtual Threads**: pass `new VirtualThreadTaskExecutor()` to multi-threaded steps for massive I/O concurrency with zero OS thread bloat.
 
 ---
 

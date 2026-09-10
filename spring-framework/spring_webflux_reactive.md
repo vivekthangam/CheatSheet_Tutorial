@@ -208,276 +208,299 @@ record ProductDto(String id, String name, Double price) {}
 
 ---
 
-# TRACK 2: ADVANCED ARCHITECTURE & REACTIVE SYSTEMS
+# TRACK 2: ADVANCED ARCHITECTURE & MASTER REACTIVE FEATURE CATALOG
 
-## ⚙️ 1. Project Reactor Core: Mono, Flux & Functional Operators
+## Master Reactive Architecture Decision Matrix
 
-### Maven Dependencies (`pom.xml`)
-```xml
-<dependencies>
-    <!-- WebFlux Starter (includes Netty and Project Reactor) -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-webflux</artifactId>
-    </dependency>
-
-    <!-- Reactive Relational Database (R2DBC) -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-data-r2dbc</artifactId>
-    </dependency>
-    <dependency>
-        <groupId>org.postgresql</groupId>
-        <artifactId>r2dbc-postgresql</artifactId>
-        <scope>runtime</scope>
-    </dependency>
-</dependencies>
-```
-
-### Mono vs Flux
-- **`Mono<T>`:** A reactive stream emitting **0 or 1 item**, followed by an `onComplete` or `onError` signal.
-- **`Flux<T>`:** A reactive stream emitting **0 to $N$ items**, followed by an `onComplete` or `onError` signal.
-
-### Essential Reactor Transformation Pipeline
-```java
-package com.example.reactive.service;
-
-import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-
-import java.time.Duration;
-
-@Service
-public class ReactiveOrderPipeline {
-
-    public record Order(String id, double amount, String status) {}
-
-    public Flux<Order> processOrderStream(Flux<Order> rawOrders) {
-        return rawOrders
-            // 1. Filter out cancelled orders
-            .filter(order -> !"CANCELLED".equals(order.status()))
-            // 2. Transform or enrich order
-            .map(order -> new Order(order.id(), order.amount() * 1.05, "TAX_APPLIED"))
-            // 3. FlatMap: Asynchronously call downstream non-blocking validation
-            .flatMap(this::validateFraudAsync)
-            // 4. Timeouts & Fallback
-            .timeout(Duration.ofSeconds(3))
-            .onErrorResume(ex -> Flux.empty());
-    }
-
-    private Mono<Order> validateFraudAsync(Order order) {
-        return Mono.just(order)
-            .delayElement(Duration.ofMillis(20)); // Simulates non-blocking async network check
-    }
-}
-```
+| Reactive Component | Core Mechanism | Concurrency Model | Best Used For | Anti-Pattern For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Netty EventLoop** | Non-blocking `epoll` socket loop| 1 Thread per CPU core | Ultra-high I/O concurrency ($>50\text{k req/s}$) | Long-running CPU math or blocking JDBC |
+| **`Mono<T>`** | 0 or 1 Item Publisher | Asynchronous push | Single REST payload, DB row lookup | Streaming multi-item collections |
+| **`Flux<T>`** | 0 to $N$ Stream Publisher | Push with Demand pull | Continuous live feeds, SSE, chunked DB | Single entity responses (use Mono) |
+| **Backpressure** | Reactive Streams `request(N)` | Dynamic flow control | Preventing fast producers from OOMing workers | Fixed-capacity unbounded memory queues |
+| **`boundedElastic()`** | Growable ThreadPool (10x cores)| Thread offloading | Wrapping legacy blocking disk/JDBC I/O | Pure non-blocking Netty operations |
+| **WebClient** | Reactor Netty HTTP Client | Connection Pool + Zero-Copy | High-throughput non-blocking microservice RPC | Simple CLI scripts with 1 request |
+| **R2DBC** | Reactive Relational Driver | Socket event streaming | Non-blocking Postgres/MySQL transactional apps | Hibernate ORM rich graph mappings |
+| **Server-Sent Events** | Single persistent HTTP connection| Text Event Stream | Real-time dashboards, stock tickers | Bidirectional binary gaming (use WebSocket)|
+| **BlockHound** | Bytecode Instrumentation | JVM runtime interceptor | Automated CI/CD regression defense | Production runtime overhead (dev/test only) |
+| **Reactor Context** | Immutable Key-Value Map | Pipeline-propagated context| Distributed tracing (MDC), SecurityContext | Mutable global state machines |
 
 ---
 
-## 🛑 2. Backpressure & Thread Scheduling (Schedulers)
+## 2.1 Netty EventLoop & Channel Pipelines
 
-### What is Backpressure?
-In traditional streaming, if a producer emits 100,000 items/sec but the consumer can only write 1,000 items/sec, the consumer runs out of memory. **Reactive Streams Backpressure** allows the consumer to tell the producer: *"Send me only 10 items (`request(10)`); I will ask for more when finished."*
+1. **Architectural Overview & Purpose**:
+   - WebFlux does not allocate 200 Tomcat worker threads. Instead, it runs on an event loop multiplexer powered by **Netty** (using Linux `epoll` or macOS `kqueue`). A small pool of threads (typically 1 per CPU core) manages tens of thousands of open TCP connections without blocking.
 
-```java
-public Flux<TelemetryEvent> handleHighSpeedTelemetry(Flux<TelemetryEvent> stream) {
-    return stream
-        // Drop incoming events if consumer is too slow to keep up
-        .onBackpressureDrop(dropped -> log.warn("Dropped telemetry event: {}", dropped.id()))
-        // Or buffer up to 1000 items, discarding oldest on overflow
-        // .onBackpressureBuffer(1000, BufferOverflowStrategy.DROP_OLDEST)
-        .publishOn(Schedulers.boundedElastic());
-}
-```
+2. **Underlying Algorithm: Non-Blocking Socket Multiplexing**:
+   - The OS kernel maintains readiness lists for network sockets.
+   - When a client sends bytes, the kernel wakes the Netty Event Loop. The Event Loop reads the byte buffer, invokes the reactive pipeline, and dispatches the thread immediately to the next ready socket.
+   - **The Golden Rule of Reactive**: A Netty thread **must NEVER sleep, wait on a lock, or call blocking I/O**. Blocking one thread freezes 25% to 50% of the entire application!
 
-### Reactor Schedulers: When to Switch Execution Contexts
-- **`Schedulers.immediate()`:** Runs on the caller's current thread.
-- **`Schedulers.parallel()`:** Fixed pool of worker threads sized to CPU cores. Ideal for CPU-intensive calculation.
-- **`Schedulers.boundedElastic()`:** Dynamic, growable thread pool. **Must be used whenever wrapping legacy blocking code (e.g., blocking JDBC, legacy SOAP clients, local disk I/O)**:
-
-```java
-// ✅ Safely isolate legacy blocking call without freezing the Netty Event Loop
-public Mono<String> readLegacyDiskFile(String path) {
-    return Mono.fromCallable(() -> Files.readString(Path.of(path)))
-        .subscribeOn(Schedulers.boundedElastic());
-}
-```
+3. **Production Server Sizing**:
+   ```yaml
+   server:
+     port: 8080
+     netty:
+       connection-timeout: 2000ms
+       idle-timeout: 60s
+   ```
 
 ---
 
-## 🌐 3. Reactive Web Controllers & Functional Router Functions
+## 2.2 Project Reactor Primitives: `Mono<T>` & `Flux<T>`
 
-### 3.1 Annotated Reactive Controller
-```java
-package com.example.reactive.controller;
+1. **Architectural Overview & Purpose**:
+   - `Mono<T>` and `Flux<T>` are lazy asynchronous publishers implementing the Reactive Streams specification. Nothing executes until **`.subscribe()`** is called (which Spring WebFlux handles automatically when returning from a `@RestController`).
 
-import com.example.reactive.entity.Customer;
-import com.example.reactive.repository.CustomerReactiveRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+2. **Core Transformation Pipeline Operators**:
+   - `.map()`: Synchronous 1-to-1 payload transformation on the current thread.
+   - `.flatMap()`: Asynchronous 1-to-1 transformation where the mapper returns another `Mono`/`Flux`. Flattens concurrent async inner streams.
+   - `.concatMap()`: Asynchronous transformation preserving strict sequence ordering (waits for inner Mono to complete before starting next).
+   - `.zip()`: Combines multiple independent Monos concurrently and emits a joined tuple.
 
-@RestController
-@RequestMapping("/api/v1/customers")
-public class CustomerReactiveController {
+3. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Service
+   public class OrderEnrichmentService {
 
-    private final CustomerReactiveRepository repository;
-
-    public CustomerReactiveController(CustomerReactiveRepository repository) {
-        this.repository = repository;
-    }
-
-    @GetMapping("/{id}")
-    public Mono<ResponseEntity<Customer>> getCustomer(@PathVariable Long id) {
-        return repository.findById(id)
-            .map(ResponseEntity::ok)
-            .defaultIfEmpty(ResponseEntity.notFound().build());
-    }
-
-    @GetMapping
-    public Flux<Customer> getAllActive() {
-        return repository.findAllByActiveTrue();
-    }
-
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public Mono<Customer> create(@RequestBody Customer customer) {
-        return repository.save(customer);
-    }
-}
-```
-
-### 3.2 Modern Functional Endpoints (`RouterFunction`)
-```java
-package com.example.reactive.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
-import org.springframework.web.reactive.function.server.RouterFunction;
-import org.springframework.web.reactive.function.server.ServerResponse;
-
-import static org.springframework.web.reactive.function.server.RequestPredicates.*;
-import static org.springframework.web.reactive.function.server.RouterFunctions.route;
-
-@Configuration
-public class OrderRouterConfig {
-
-    @Bean
-    public RouterFunction<ServerResponse> orderRoutes(OrderHandler handler) {
-        return route(GET("/routes/orders").and(accept(MediaType.APPLICATION_JSON)), handler::listOrders)
-            .andRoute(POST("/routes/orders").and(contentType(MediaType.APPLICATION_JSON)), handler::createOrder);
-    }
-}
-```
+       public Mono<EnrichedOrder> enrichOrder(Mono<RawOrder> rawOrderMono) {
+           return rawOrderMono
+               .filter(order -> order.amount() > 0)
+               .flatMap(order -> Mono.zip(
+                   fetchCustomerRatingAsync(order.customerId()),
+                   fetchTaxRateAsync(order.countryCode()),
+                   (rating, tax) -> new EnrichedOrder(order.id(), order.amount() * (1 + tax), rating)
+               ))
+               .timeout(Duration.ofMillis(500))
+               .onErrorResume(TimeoutException.class, ex -> Mono.just(EnrichedOrder.fallback()));
+       }
+       private Mono<String> fetchCustomerRatingAsync(String id) { return Mono.just("GOLD"); }
+       private Mono<Double> fetchTaxRateAsync(String country) { return Mono.just(0.18); }
+   }
+   ```
+   - **Sample Output**:
+     ```
+     EnrichedOrder[id="ORD-99", finalAmount=118.0, customerRating="GOLD"]
+     ```
 
 ---
 
-## 📡 4. High-Performance Asynchronous HTTP: Reactive WebClient
+## 2.3 Backpressure Management & Overflow Strategies
 
-`WebClient` is the modern, non-blocking replacement for `RestTemplate`.
+1. **Architectural Overview & Purpose**:
+   - If an upstream producer emits 50,000 events/sec but a downstream database writer can only insert 2,000 events/sec, traditional systems crash with `OutOfMemoryError`.
+   - Backpressure enables the subscriber to dictate throughput via `request(n)` signals.
 
-```java
-package com.example.reactive.client;
-
-import io.netty.channel.ChannelOption;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
-import reactor.netty.http.client.HttpClient;
-
-import java.time.Duration;
-
-@Service
-public class PricingServiceClient {
-
-    private final WebClient webClient;
-
-    public PricingServiceClient(WebClient.Builder builder) {
-        HttpClient httpClient = HttpClient.create()
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 2000)
-            .responseTimeout(Duration.ofSeconds(3));
-
-        this.webClient = builder
-            .baseUrl("https://pricing-api.internal")
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
-    }
-
-    public record PriceQuote(String sku, double price, String currency) {}
-
-    public Mono<PriceQuote> fetchPrice(String sku) {
-        return webClient.get()
-            .uri("/v1/quotes/{sku}", sku)
-            .retrieve()
-            // Handle HTTP 4xx / 5xx non-blocking errors
-            .onStatus(status -> status.is4xxClientError(), response -> 
-                Mono.error(new IllegalArgumentException("Invalid SKU requested: " + sku)))
-            .bodyToMono(PriceQuote.class)
-            .timeout(Duration.ofSeconds(2))
-            .onErrorReturn(new PriceQuote(sku, 0.0, "FALLBACK"));
-    }
-}
-```
+2. **Reactor Overflow Strategies**:
+   ```java
+   public Flux<StockPrice> consumeHighSpeedTicker(Flux<StockPrice> marketStream) {
+       return marketStream
+           // Buffer up to 1000 items; drop oldest if capacity breached
+           .onBackpressureBuffer(1000, 
+               dropped -> log.warn("Buffer full! Dropped stock tick: {}", dropped.ticker()),
+               BufferOverflowStrategy.DROP_OLDEST)
+           // Or drop entirely if downstream cannot keep up:
+           // .onBackpressureDrop(tick -> log.warn("Dropped tick {}", tick.ticker()))
+           // Or keep only the latest tick, discarding stale historical ticks:
+           // .onBackpressureLatest()
+           .publishOn(Schedulers.boundedElastic());
+   }
+   ```
 
 ---
 
-## 🗄️ 5. Non-Blocking Relational Persistence with R2DBC
+## 2.4 Reactor Schedulers & Thread Pool Isolation
 
-Traditional JDBC blocks threads. **R2DBC** allows non-blocking relational database access via reactive drivers.
+1. **Architectural Overview**:
+   - Schedulers control the execution context (thread pool) of reactive stages:
+     - `Schedulers.immediate()`: Executes on caller thread.
+     - `Schedulers.parallel()`: Fixed worker threads sized to `Runtime.getRuntime().availableProcessors()`. For CPU-intensive algorithms.
+     - `Schedulers.boundedElastic()`: Dynamically sized thread pool (default $10 \times \text{cores}$, capped queue of 100,000 tasks). **Mandatory when wrapping blocking legacy libraries (JDBC, disk I/O, SOAP)**.
 
-```java
-package com.example.reactive.entity;
+2. **`publishOn` vs `subscribeOn` Invariant**:
+   - `subscribeOn(scheduler)`: Changes the thread on which the source **subscription begins** (upstream).
+   - `publishOn(scheduler)`: Switches execution to a new thread for all **downstream operators** following the call.
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.relational.core.mapping.Table;
-
-@Table("customers")
-public record Customer(@Id Long id, String email, String name, boolean active) {}
-```
-
-```java
-package com.example.reactive.repository;
-
-import com.example.reactive.entity.Customer;
-import org.springframework.data.r2dbc.repository.Query;
-import org.springframework.data.repository.reactive.ReactiveCrudRepository;
-import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-
-@Repository
-public interface CustomerReactiveRepository extends ReactiveCrudRepository<Customer, Long> {
-
-    Flux<Customer> findAllByActiveTrue();
-
-    @Query("SELECT * FROM customers WHERE email = :email LIMIT 1")
-    Mono<Customer> findByEmail(String email);
-}
-```
+3. **Safe Legacy Blocking Wrapper Blueprint**:
+   ```java
+   public Mono<byte[]> readLegacyReportFromDisk(String filePath) {
+       // Offload blocking disk read from Netty thread to boundedElastic thread
+       return Mono.fromCallable(() -> Files.readAllBytes(Path.of(filePath)))
+           .subscribeOn(Schedulers.boundedElastic());
+   }
+   ```
 
 ---
 
-## 🌊 6. Real-Time Streaming: Server-Sent Events (SSE) & NDJSON
+## 2.5 Reactive WebClient Asynchronous HTTP
 
-Stream live data directly to browsers or upstream microservices over a single persistent HTTP connection.
+1. **Architectural Overview**:
+   - Non-blocking, reactive HTTP client replacing legacy blocking `RestTemplate`. Backed by Reactor Netty with connection pooling and DNS caching.
 
-```java
-@GetMapping(value = "/stream/prices", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-public Flux<ServerSentEvent<StockTick>> streamStockTicks() {
-    return Flux.interval(Duration.ofSeconds(1))
-        .map(sequence -> new StockTick("AAPL", 220.0 + Math.random() * 5, Instant.now()))
-        .map(tick -> ServerSentEvent.<StockTick>builder()
-            .id(String.valueOf(tick.timestamp().toEpochMilli()))
-            .event("stock-update")
-            .data(tick)
-            .build());
-}
-```
+2. **Production WebClient Blueprint with Non-Blocking Retries**:
+   ```java
+   @Configuration
+   public class WebClientConfig {
+
+       @Bean
+       public WebClient paymentGatewayClient(WebClient.Builder builder) {
+           HttpClient httpClient = HttpClient.create()
+               .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
+               .responseTimeout(Duration.ofSeconds(5));
+
+           return builder
+               .baseUrl("https://payments.partner.com")
+               .clientConnector(new ReactorClientHttpConnector(httpClient))
+               .build();
+       }
+   }
+   ```
+   ```java
+   @Service
+   public class PaymentGatewayService {
+       private final WebClient client;
+       public PaymentGatewayService(WebClient client) { this.client = client; }
+
+       public Mono<PaymentResponse> chargeCard(PaymentRequest req) {
+           return client.post()
+               .uri("/v1/charges")
+               .bodyValue(req)
+               .retrieve()
+               .onStatus(HttpStatusCode::is5xxServerError, res -> 
+                   Mono.error(new RemoteServiceUnavailableException("Partner gateway down")))
+               .bodyToMono(PaymentResponse.class)
+               .retryWhen(Retry.backoff(3, Duration.ofMillis(200))
+                   .filter(RemoteServiceUnavailableException.class::isInstance));
+       }
+   }
+   ```
+
+---
+
+## 2.6 Non-Blocking Relational Persistence with R2DBC
+
+1. **Architectural Overview**:
+   - JDBC is inherently blocking (calls `SocketInputStream.read()` synchronously).
+   - **R2DBC (Reactive Relational Database Connectivity)** provides a 100% non-blocking protocol driver for PostgreSQL, MySQL, SQL Server, and Oracle.
+
+2. **Reactive Entity & Repository**:
+   ```java
+   @Table("accounts")
+   public record Account(@Id Long id, String accountNumber, Double balance) {}
+
+   @Repository
+   public interface AccountReactiveRepository extends ReactiveCrudRepository<Account, Long> {
+       @Query("SELECT * FROM accounts WHERE balance > :minBalance")
+       Flux<Account> findHighValueAccounts(Double minBalance);
+   }
+   ```
+
+3. **Transactional Demarcation with `TransactionalOperator`**:
+   ```java
+   @Service
+   public class ReactiveAccountTransferService {
+       private final AccountReactiveRepository repo;
+       private final TransactionalOperator txOperator;
+
+       public ReactiveAccountTransferService(AccountReactiveRepository repo, TransactionalOperator tx) {
+           this.repo = repo;
+           this.txOperator = tx;
+       }
+
+       public Mono<Void> transferFunds(Long fromId, Long toId, Double amount) {
+           return repo.findById(fromId)
+               .flatMap(from -> repo.findById(toId)
+                   .flatMap(to -> {
+                       Account updatedFrom = new Account(from.id(), from.accountNumber(), from.balance() - amount);
+                       Account updatedTo = new Account(to.id(), to.accountNumber(), to.balance() + amount);
+                       return repo.save(updatedFrom).then(repo.save(updatedTo)).then();
+                   }))
+               .as(txOperator::transactional); // Atomic reactive transaction rollback on error!
+       }
+   }
+   ```
+
+---
+
+## 2.7 Real-Time Streaming: Server-Sent Events (SSE) & NDJSON
+
+1. **Architectural Overview**:
+   - Stream data continuously over a single HTTP connection:
+     - `text/event-stream`: SSE for web browsers (auto-reconnects, event IDs).
+     - `application/x-ndjson`: Newline Delimited JSON for high-throughput service-to-service streaming.
+
+2. **Production SSE Controller Blueprint**:
+   ```java
+   @GetMapping(value = "/api/v1/telemetry", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+   public Flux<ServerSentEvent<TelemetryData>> streamTelemetry() {
+       return Flux.interval(Duration.ofSeconds(1))
+           .map(sequence -> new TelemetryData("CPU", 45.0 + Math.random() * 10, Instant.now()))
+           .map(data -> ServerSentEvent.<TelemetryData>builder()
+               .id(String.valueOf(data.timestamp().toEpochMilli()))
+               .event("telemetry-event")
+               .data(data)
+               .build());
+   }
+   ```
+
+---
+
+## 2.8 Functional Endpoints & RouterFunctions
+
+1. **Architectural Overview**:
+   - A lightweight, functional alternative to `@RestController` annotation reflection, offering faster startup and zero annotation overhead:
+   ```java
+   @Configuration
+   public class ProductRouter {
+
+       @Bean
+       public RouterFunction<ServerResponse> productRoutes(ProductHandler handler) {
+           return RouterFunctions.route()
+               .GET("/routes/products/{id}", handler::getProduct)
+               .POST("/routes/products", RequestPredicates.contentType(MediaType.APPLICATION_JSON), handler::createProduct)
+               .build();
+       }
+   }
+   ```
+
+---
+
+## 2.9 BlockHound Detection Engine: Catching Illegal Blocking Calls
+
+1. **The Architecture of BlockHound**:
+   - Instruments JVM bytecode at runtime. If any thread starting with `reactor-http-epoll` or `parallel` attempts to call a blocking method (`Thread.sleep()`, `SocketInputStream.read()`, `ReentrantLock.lock()`), BlockHound intercepts the call and immediately throws `BlockingOperationError` with a full stack trace!
+
+2. **Integration in Unit Tests**:
+   ```java
+   @Test
+   void shouldVerifyNoBlockingCalls() {
+       BlockHound.install();
+       assertDoesNotThrow(() -> {
+           orderService.processOrderReactive(new OrderDto("123")).block();
+       });
+   }
+   ```
+
+---
+
+## 2.10 Reactor Context & Distributed Tracing
+
+1. **The Problem with ThreadLocal in Reactive Systems**:
+   - In Spring MVC, `SecurityContextHolder` and SLF4J MDC use `ThreadLocal`.
+   - In Spring WebFlux, a single request jumps across multiple threads (e.g. Netty Thread $1 \to$ BoundedElastic Thread $4 \to$ Netty Thread $2$). `ThreadLocal` values are lost!
+
+2. **The Solution: Reactor Context**:
+   - Context is an immutable key-value dictionary tied to the **Subscriber**, propagated upwards across all thread switches.
+   ```java
+   public Mono<String> processWithTenant() {
+       return Mono.deferContextual(ctx -> {
+           String tenantId = ctx.get("TENANT_ID");
+           return Mono.just("Processed for tenant: " + tenantId);
+       })
+       .contextWrite(Context.of("TENANT_ID", "CORP-ACME"));
+   }
+   ```
 
 ---
 

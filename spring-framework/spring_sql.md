@@ -180,174 +180,297 @@ public class AccountJdbcRepository {
 
 ---
 
-## 2.1 Ultra-Fast Batch Inserts (100,000 Rows in $<2$ Seconds)
+## 2.1 `NamedParameterJdbcTemplate` & Parameter Mapping
 
-```java
-package com.example.sql.batch;
+1. **Architectural Overview & Purpose**:
+   - Eliminates positional index mistakes (`?` parameter 1, parameter 2) by binding parameters by explicit name (`:accountId`, `:amount`). It uses `PreparedStatement` under the hood, completely neutralizing SQL injection attacks while allowing database query plan caching.
 
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+2. **Underlying Parameter Binding Mechanism**:
+   - Parses the SQL template string at startup into a tokenized AST.
+   - When executed, it extracts named parameters from `SqlParameterSource` (e.g., `MapSqlParameterSource` or `BeanPropertySqlParameterSource`), rewrites the SQL to standard JDBC positional `?` markers, and binds parameters using exact JDBC data types (`Types.BIGINT`, `Types.VARCHAR`).
 
-import java.util.List;
+3. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Repository
+   public class AccountJdbcRepository {
+       private final NamedParameterJdbcTemplate jdbcTemplate;
 
-public record TransactionRecord(String txId, Long accountId, double amount, String status) {}
+       public AccountJdbcRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+           this.jdbcTemplate = jdbcTemplate;
+       }
 
-@Service
-public class BulkIngestionJdbcService {
+       public Optional<Account> findAccount(String accountNumber) {
+           String sql = """
+               SELECT id, account_number, balance, status
+               FROM accounts
+               WHERE account_number = :accountNumber
+               """;
 
-    private final NamedParameterJdbcTemplate jdbcTemplate;
+           SqlParameterSource params = new MapSqlParameterSource("accountNumber", accountNumber);
 
-    public BulkIngestionJdbcService(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+           List<Account> accounts = jdbcTemplate.query(sql, params, (rs, rowNum) -> new Account(
+               rs.getLong("id"),
+               rs.getString("account_number"),
+               rs.getBigDecimal("balance"),
+               rs.getString("status")
+           ));
+           return accounts.stream().findFirst();
+       }
+   }
+   ```
+   - **Sample Output**:
+     ```
+     Account[id=101, accountNumber="ACC-8921", balance=15450.50, status="ACTIVE"]
+     ```
 
-    @Transactional
-    public void bulkInsertTransactions(List<TransactionRecord> transactions) {
-        String sql = """
-            INSERT INTO transactions (tx_id, account_id, amount, status)
-            VALUES (:txId, :accountId, :amount, :status)
-            """;
-
-        // Converts list of records into an array of SqlParameterSource in a single pass
-        var batchParams = SqlParameterSourceUtils.createBatch(transactions);
-
-        jdbcTemplate.batchUpdate(sql, batchParams);
-    }
-}
-```
-
----
-
-## 2.2 Streaming 10 Million Rows to CSV Without Memory Exhaustion
-
-```java
-package com.example.sql.streaming;
-
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.io.Writer;
-import java.util.Collections;
-
-@Service
-public class StreamingExportService {
-
-    private final NamedParameterJdbcTemplate jdbcTemplate;
-
-    public StreamingExportService(NamedParameterJdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    @Transactional(readOnly = true) // Crucial: maintains cursor open across stream
-    public void exportLargeAuditLogToCsv(Writer writer) {
-        String sql = "SELECT id, user_id, action, timestamp FROM audit_logs ORDER BY id ASC";
-
-        jdbcTemplate.getJdbcTemplate().setFetchSize(1000); // Fetch in 1,000-row chunks
-
-        jdbcTemplate.query(sql, Collections.emptyMap(), rs -> {
-            try {
-                // Invoked once per row; memory footprint is O(1)
-                writer.write(String.format("%d,%d,%s,%s\n",
-                    rs.getLong("id"),
-                    rs.getLong("user_id"),
-                    rs.getString("action"),
-                    rs.getTimestamp("timestamp")
-                ));
-            } catch (Exception e) {
-                throw new RuntimeException("Error writing CSV", e);
-            }
-        });
-    }
-}
-```
+4. **Pros & Cons**:
+   - **Pros**: 100% immune to SQL injection; zero ORM reflection overhead; full control over database-specific SQL features.
+   - **Cons**: Requires manual SQL writing and `RowMapper` boilerplate (unless using Java Records with `DataClassRowMapper`).
 
 ---
 
-## 2.3 Result Mapping: 1-to-Many Hierarchies with `ResultSetExtractor`
+## 2.2 HikariCP Pool Sizing Formula & Leak Detection
 
-Avoid the N+1 problem by joining tables in SQL and aggregating parent-child relationships in memory:
+1. **Architectural Overview & Purpose**:
+   - HikariCP is the default high-performance JDBC connection pool in Spring Boot. It uses lock-free micro-optimizations, volatile reads, and custom byte-code generation to deliver connections in under 100 nanoseconds.
 
-```java
-package com.example.sql.extractor;
+2. **The Famous PostgreSQL Pool Sizing Formula**:
+   $$\text{Pool Size} = (2 \times \text{CPU Cores}) + \text{Effective Spindle Count}$$
+   - For an 8-core database server with SSD storage:
+     $$\text{Pool Size} = (2 \times 8) + 1 = 17 \text{ connections}$$
+   - *Why smaller pools are faster:* An oversized pool (e.g. 200 connections) causes the database CPU to thrash on context switching, disk I/O lock queues, and memory buffer contention.
 
-import org.springframework.jdbc.core.ResultSetExtractor;
-import org.springframework.stereotype.Component;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.*;
-
-public record CustomerWithOrders(Long id, String name, List<String> orderNumbers) {}
-
-@Component
-public class CustomerOrdersExtractor implements ResultSetExtractor<List<CustomerWithOrders>> {
-
-    @Override
-    public List<CustomerWithOrders> extractData(ResultSet rs) throws SQLException {
-        Map<Long, CustomerWithOrders> customerMap = new LinkedHashMap<>();
-
-        while (rs.next()) {
-            Long customerId = rs.getLong("customer_id");
-            CustomerWithOrders customer = customerMap.get(customerId);
-
-            if (customer == null) {
-                customer = new CustomerWithOrders(
-                    customerId,
-                    rs.getString("customer_name"),
-                    new ArrayList<>()
-                );
-                customerMap.put(customerId, customer);
-            }
-
-            String orderNumber = rs.getString("order_number");
-            if (orderNumber != null) {
-                customer.orderNumbers().add(orderNumber);
-            }
-        }
-        return new ArrayList<>(customerMap.values());
-    }
-}
-```
+3. **Production `application.yml` Setup with Leak Detection**:
+   ```yaml
+   spring:
+     datasource:
+       hikari:
+         maximum-pool-size: 20
+         minimum-idle: 10
+         idle-timeout: 300000        # 5 minutes
+         max-lifetime: 1800000       # 30 minutes (must be shorter than DB timeout!)
+         connection-timeout: 2000    # 2 seconds (fails fast if pool exhausted)
+         leak-detection-threshold: 5000 # Warns if connection held >5s without closing!
+   ```
 
 ---
 
-## 2.4 Programmatic Transactions via `TransactionTemplate`
+## 2.3 Ultra-Fast Batch Inserts (100,000 Rows in $<2$ Seconds)
 
-```java
-package com.example.sql.tx;
+1. **Architectural Overview & Purpose**:
+   - Inserting 100,000 rows one-by-one requires 100,000 network round-trips. Using JDBC Batching groups rows into a single multi-row TCP payload.
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+2. **Crucial Driver Rewrite Settings**:
+   - **PostgreSQL**: Must add `?reWriteBatchedInserts=true` to JDBC URL!
+   - **MySQL**: Must add `?rewriteBatchedStatements=true` to JDBC URL!
+   - Without these driver flags, standard JDBC drivers still send individual insert statements over the socket!
 
-@Service
-public class WalletTransferService {
+3. **Production Batch Insert Blueprint**:
+   ```java
+   @Service
+   public class BulkPaymentIngestionService {
+       private final NamedParameterJdbcTemplate jdbcTemplate;
+       public BulkPaymentIngestionService(NamedParameterJdbcTemplate jdbcTemplate) {
+           this.jdbcTemplate = jdbcTemplate;
+       }
 
-    private final TransactionTemplate transactionTemplate;
+       @Transactional
+       public void ingestPayments(List<PaymentRecord> payments) {
+           String sql = """
+               INSERT INTO payments (payment_id, account_id, amount, status, created_at)
+               VALUES (:paymentId, :accountId, :amount, :status, NOW())
+               """;
 
-    public WalletTransferService(PlatformTransactionManager txManager) {
-        this.transactionTemplate = new TransactionTemplate(txManager);
-        this.transactionTemplate.setIsolationLevel(TransactionTemplate.ISOLATION_READ_COMMITTED);
-        this.transactionTemplate.setTimeout(5); // 5-second timeout
-    }
+           SqlParameterSource[] batch = SqlParameterSourceUtils.createBatch(payments);
+           jdbcTemplate.batchUpdate(sql, batch);
+       }
+   }
+   ```
 
-    public boolean executeAtomicTransfer(Long fromId, Long toId, double amount) {
-        return Boolean.TRUE.equals(transactionTemplate.execute(status -> {
-            try {
-                // Step 1: Debit
-                // Step 2: Credit
-                return true;
-            } catch (Exception ex) {
-                status.setRollbackOnly(); // Triggers rollback
-                return false;
-            }
-        }));
-    }
-}
-```
+---
+
+## 2.4 Streaming 10M Rows to CSV with Constant $O(1)$ Memory
+
+1. **Architectural Overview & Purpose**:
+   - Traditional `jdbcTemplate.query()` loads all rows into a `List<T>` on the heap. If querying 10,000,000 rows, the JVM crashes with `OutOfMemoryError`.
+   - Using `RowCallbackHandler` with cursor streaming guarantees constant $O(1)$ heap memory.
+
+2. **Production Streaming Blueprint**:
+   ```java
+   @Service
+   public class AuditReportExportService {
+       private final NamedParameterJdbcTemplate jdbcTemplate;
+       public AuditReportExportService(NamedParameterJdbcTemplate jdbcTemplate) {
+           this.jdbcTemplate = jdbcTemplate;
+       }
+
+       @Transactional(readOnly = true) // Crucial: maintains cursor open
+       public void exportLargeAuditLog(Writer csvWriter) {
+           String sql = "SELECT id, user_id, action, created_at FROM audit_logs ORDER BY id ASC";
+
+           // Set cursor fetch size to stream in chunks of 1000 from database socket
+           jdbcTemplate.getJdbcTemplate().setFetchSize(1000);
+
+           jdbcTemplate.query(sql, Collections.emptyMap(), rs -> {
+               try {
+                   // Invoked once per row; row is immediately written to disk and garbage collected!
+                   csvWriter.write(String.format("%d,%d,%s,%s\n",
+                       rs.getLong("id"),
+                       rs.getLong("user_id"),
+                       rs.getString("action"),
+                       rs.getTimestamp("created_at")
+                   ));
+               } catch (IOException e) {
+                   throw new RuntimeException("CSV stream error", e);
+               }
+           });
+       }
+   }
+   ```
+
+---
+
+## 2.5 1-to-Many Hierarchies with `ResultSetExtractor`
+
+1. **Architectural Overview**:
+   - Avoids the N+1 problem by joining parent and child tables in a single SQL query and grouping the hierarchical graph in Java memory:
+   ```java
+   public record CustomerWithOrders(Long id, String name, List<String> orders) {}
+
+   @Component
+   public class CustomerOrdersExtractor implements ResultSetExtractor<List<CustomerWithOrders>> {
+       @Override
+       public List<CustomerWithOrders> extractData(ResultSet rs) throws SQLException {
+           Map<Long, CustomerWithOrders> customerMap = new LinkedHashMap<>();
+
+           while (rs.next()) {
+               Long customerId = rs.getLong("customer_id");
+               CustomerWithOrders customer = customerMap.computeIfAbsent(customerId, id -> {
+                   try {
+                       return new CustomerWithOrders(id, rs.getString("name"), new ArrayList<>());
+                   } catch (SQLException e) {
+                       throw new RuntimeException(e);
+                   }
+               });
+               String orderNumber = rs.getString("order_number");
+               if (orderNumber != null) {
+                   customer.orders().add(orderNumber);
+               }
+           }
+           return new ArrayList<>(customerMap.values());
+       }
+   }
+   ```
+
+---
+
+## 2.6 Programmatic Transaction Demarcation via `TransactionTemplate`
+
+1. **Architectural Overview & Purpose**:
+   - `@Transactional` annotations rely on Spring AOP proxies and fail if called internally (`this.method()`).
+   - `TransactionTemplate` provides programmatic, fine-grained demarcation without proxy traps.
+
+2. **Production Blueprint**:
+   ```java
+   @Service
+   public class WalletTransferService {
+       private final TransactionTemplate txTemplate;
+       public WalletTransferService(PlatformTransactionManager txManager) {
+           this.txTemplate = new TransactionTemplate(txManager);
+           this.txTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+           this.txTemplate.setTimeout(5); // 5s timeout
+       }
+
+       public boolean executeTransfer(Long fromId, Long toId, BigDecimal amount) {
+           return Boolean.TRUE.equals(txTemplate.execute(status -> {
+               try {
+                   debitAccount(fromId, amount);
+                   creditAccount(toId, amount);
+                   return true;
+               } catch (Exception ex) {
+                   status.setRollbackOnly(); // Trigger explicit rollback
+                   return false;
+               }
+           }));
+       }
+       private void debitAccount(Long id, BigDecimal amt) {}
+       private void creditAccount(Long id, BigDecimal amt) {}
+   }
+   ```
+
+---
+
+## 2.7 Transaction Propagation Behaviors
+
+1. **The 3 Most Critical Propagations**:
+   - **`REQUIRED` (Default)**: Joins current active transaction if one exists; creates a new one if none exists.
+   - **`REQUIRES_NEW`**: Suspends current transaction and opens a brand new, independent physical transaction. **Essential for audit logging** (audit record must persist even if outer business transaction rolls back).
+   - **`NESTED`**: Executes within a nested transaction using JDBC **Savepoints**. Rolling back the nested transaction rolls back only to the savepoint without aborting the outer transaction.
+
+---
+
+## 2.8 Database Generated Keys & Sequences (`KeyHolder`)
+
+1. **Retrieving Auto-Increment / Identity IDs**:
+   ```java
+   public Long insertAccount(String name) {
+       String sql = "INSERT INTO accounts (name) VALUES (:name)";
+       KeyHolder keyHolder = new GeneratedKeyHolder();
+
+       MapSqlParameterSource params = new MapSqlParameterSource("name", name);
+       jdbcTemplate.update(sql, params, keyHolder, new String[]{"id"});
+
+       return keyHolder.getKey().longValue();
+   }
+   ```
+
+---
+
+## 2.9 Stored Procedures & Multi-Result Sets with `SimpleJdbcCall`
+
+1. **Architectural Overview**:
+   - `SimpleJdbcCall` reads database catalog metadata on initialization, auto-detecting parameters and return types:
+   ```java
+   @Service
+   public class StoredProcService {
+       private final SimpleJdbcCall procReadUserBalance;
+
+       public StoredProcService(DataSource dataSource) {
+           this.procReadUserBalance = new SimpleJdbcCall(dataSource)
+               .withProcedureName("get_customer_balance")
+               .declareParameters(
+                   new SqlParameter("p_customer_id", Types.BIGINT),
+                   new SqlOutParameter("p_balance", Types.DECIMAL)
+               );
+       }
+
+       public BigDecimal getCustomerBalance(Long customerId) {
+           Map<String, Object> out = procReadUserBalance.execute(Map.of("p_customer_id", customerId));
+           return (BigDecimal) out.get("p_balance");
+       }
+   }
+   ```
+
+---
+
+## 2.10 Mapping Postgres JSONB & Custom Types
+
+1. **Architectural Overview**:
+   - Modern microservices store unstructured metadata in PostgreSQL `JSONB` columns.
+   - JDBC handles JSON via `PGobject`:
+   ```java
+   public record UserPreferences(String theme, boolean emailNotifications) {}
+
+   // Mapping to PGobject for insert
+   PGobject jsonObject = new PGobject();
+   jsonObject.setType("jsonb");
+   jsonObject.setValue(objectMapper.writeValueAsString(preferences));
+   params.addValue("preferences", jsonObject);
+
+   // Reading JSONB in RowMapper
+   String rawJson = rs.getString("preferences");
+   UserPreferences prefs = objectMapper.readValue(rawJson, UserPreferences.class);
+   ```
 
 ---
 

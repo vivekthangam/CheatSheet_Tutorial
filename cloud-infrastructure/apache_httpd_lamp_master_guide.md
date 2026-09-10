@@ -414,4 +414,40 @@ request_slowlog_timeout = 5s
 #### Q5: What does `SetHandler "proxy:unix:/path.sock|fcgi://localhost/"` accomplish?
 > **Answer**: It intercepts matching requests (like `.php` files) and delegates their execution to an external FastCGI server (PHP-FPM) across a Linux Unix Domain Socket using inter-process communication (IPC), avoiding TCP loopback overhead.
 
-*(...and 25 additional questions covering `.htaccess` security, `mod_security` WAF rules, SSL OCSP, HTTP/2 multiplexing, and slowlog debugging).*
+#### Q6: How does HTTP/2 Server Push differ from standard HTTP/1.1 pipelining in Apache HTTPD?
+> **Answer**: Standard HTTP/1.1 pipelining required responses to be returned in strict FIFO sequence, causing head-of-line blocking. Apache's HTTP/2 implementation (`Protocols h2 http/1.1` via `mod_http2`) multiplexes streams asynchronously over a single TCP connection, allowing binary frame interleaving and flow control with zero head-of-line blocking.
+
+#### Q7: What are the security risks of having `Options +Indexes` enabled in an Apache VirtualHost?
+> **Answer**: `Options +Indexes` instructs Apache to generate an automated HTML directory listing when no `DirectoryIndex` (e.g. `index.html`, `index.php`) is found. This exposes internal file structures, database backups (`.sql`), configuration files, and secrets directly to attackers. Always set `Options -Indexes`.
+
+#### Q8: How does `mod_deflate` / `mod_brotli` impact CPU vs bandwidth trade-offs?
+> **Answer**: `mod_brotli` achieves 15–25% higher compression ratios than Gzip (`mod_deflate`) for text assets (HTML/CSS/JS), saving bandwidth and edge latency. However, compression levels higher than level 4 or 5 consume excessive CPU per request on dynamic responses. In production, pre-compress static assets at build time (`.br` and `.gz`) and serve them directly via `mod_headers` and `RewriteRule`.
+
+#### Q9: What causes "AH00161: server reached MaxRequestWorkers setting" and how do you resolve it safely?
+> **Answer**: It indicates that all worker threads/processes defined by `MaxRequestWorkers` are busy. Under `mpm_event`, verify whether workers are blocked on slow backend queries, disk I/O, or upstream API timeouts. If CPU and RAM headroom permits, increase `ServerLimit` and `MaxRequestWorkers`. Otherwise, scale horizontally and enable caching via `mod_cache_disk`.
+
+#### Q10: How do you harden Apache against Slowloris Denial of Service attacks?
+> **Answer**: Enable `mod_reqtimeout` and configure strict header and body read limits:
+> ```apache
+> RequestReadTimeout header=20-40,MinRate=500 body=20,MinRate=500
+> ```
+> This forces Apache to terminate slow-drip HTTP client sockets that fail to transmit at least 500 bytes per second, preventing attackers from tying up connection slots indefinitely.
+
+---
+
+## ⚖️ Apache HTTPD & LAMP Production Hardening Cheat Sheet
+
+| Parameter / Module | Recommended Value | Security & Performance Impact |
+| :--- | :--- | :--- |
+| **`MPM`** | `mpm_event` | Asynchronous epoll offloads idle keepalive connections |
+| **`AllowOverride`** | `None` | Eliminates expensive disk `stat()` calls for `.htaccess` |
+| **`Options`** | `-Indexes +FollowSymLinks` | Blocks directory browsing; speeds up path resolution |
+| **`ServerTokens`** | `Prod` | Suppresses Apache version and OS information in HTTP response headers |
+| **`ServerSignature`** | `Off` | Removes footer line containing server hostname on error pages |
+| **`TraceEnable`** | `Off` | Disables HTTP TRACE requests (mitigates Cross-Site Tracing / XST) |
+| **`FileETag`** | `None` or `MTime Size` | Prevents inode number leakage across multi-server clusters |
+| **`Protocols`** | `h2 http/1.1` | Enables binary multiplexed HTTP/2 transport |
+
+---
+[🏠 Back to Home](README.md) | [🌐 NGINX Master Guide](nginx_master_guide.md) | [🐱 Tomcat Master Guide](apache_tomcat_master_guide.md) | [🌐 Envoy Proxy](envoy_proxy_master_guide.md)
+

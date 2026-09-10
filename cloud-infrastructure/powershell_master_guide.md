@@ -766,4 +766,21 @@ else {
 #### Q10: How do you enforce Constrained Language Mode (CLM) in a high-security environment?
 > **Answer**: By configuring Windows Defender Application Control (WDAC) or AppLocker policy. When WDAC is active in enforcement mode, PowerShell automatically runs in ConstrainedLanguage mode, preventing script invocation of unapproved .NET types, Reflection APIs, and custom C# code injection (`Add-Type`).
 
-*(...and 40 additional questions covering AST parsing, Pester 5 test lifecycle, JEA role definitions, custom PSDrives, and memory leak triage).*
+---
+
+## ⚖️ PowerShell 7 Core Production Hardening Cheat Sheet
+
+| Feature / Setting | Production Standard | Operational Purpose |
+| :--- | :--- | :--- |
+| **Array Allocations** | `[System.Collections.Generic.List[T]]::new()` | Eliminates $O(N)$ heap re-allocations caused by `+=` array concatenation |
+| **Error Handling** | `$ErrorActionPreference = 'Stop'` | Converts silent non-terminating errors into catchable terminating exceptions |
+| **Pipeline Performance** | Filter Left: `Get-Process -Name 'node'` | Pushes filtering to the OS kernel rather than streaming everything to `Where-Object` |
+| **Parallel Execution** | `ForEach-Object -Parallel -ThrottleLimit 16` | Executes across in-process Runspace threads instead of heavy OS child processes |
+| **Remoting Transport** | CIM Sessions (`New-CimSession`) over WS-Man | Firewall-friendly (ports 5985/5986) replacement for deprecated DCOM RPC |
+| **Cross-Scope Variables** | `$using:variableName` | Safely injects caller thread variables into remote or parallel script blocks |
+| **Enterprise Security** | WDAC-enforced Constrained Language Mode | Blocks unauthorized .NET reflection and arbitrary C# Win32 API injection |
+| **Execution Policy** | Signed scripts (`AllSigned`) via GPO | Enforces cryptographic code-signing on production infrastructure automation |
+
+---
+[🏠 Back to Home](README.md) | [🐧 Linux SysAdmin Guide](linux.md) | [🐳 Docker Master Guide](docker_master_guide.md)
+

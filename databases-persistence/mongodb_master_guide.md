@@ -222,305 +222,276 @@ module.exports = { createCustomer, findByEmail, updateTier };
 
 # TRACK 2: MASTER MONGODB POLYGLOT FEATURE CATALOG
 
-## Master MongoDB Feature Matrix
+## Master MongoDB Polyglot Decision Matrix
 
-| Feature / Pattern | Java Spring Data Mongo | Node.js (Mongoose / Driver) | Performance / Resource Profile | Production Sweet Spot |
-| :--- | :--- | :--- | :--- | :--- |
-| **Document CRUD** | `MongoTemplate` / `MongoRepository` | `Model.create()` / `Model.find().lean()` | High (Microsecond BSON parsing) | Core application entities |
-| **Aggregation Pipeline** | `Aggregation.newAggregation(...)` | `Model.aggregate([...])` | Memory-bound (100MB RAM limit) | Analytics, reports, faceted search |
-| **ACID Transactions** | `MongoTransactionManager` / `@Transactional`| `session.withTransaction(async () => ...)` | Incurs snapshot lock overhead | Financial transfers, inventory bookings |
-| **Change Streams** | `MessageListenerContainer` / Reactive flux | `Model.watch()` / `collection.watch()` | Low (Taps into replication Oplog) | Cache invalidation, event-driven webhooks |
-| **Reactive Streaming** | `ReactiveMongoRepository` (Project Reactor) | Native Driver Async Iterators | Zero-blocking, high thread efficiency | Real-time dashboards, IoT ingest |
-| **Bulk Operations** | `mongoTemplate.bulkOps()` | `Model.bulkWrite([...])` | 1 network round-trip for 1000s of writes | High-throughput batch ingestion |
-
----
-
-## 2.1 Advanced Document Modeling: Embedding vs Referencing & The Bucket Pattern
-
-```
-EMBEDDING (1-to-Few)
-{
-  "_id": ObjectId("..."),
-  "orderNumber": "ORD-99",
-  "items": [                                  <-- Embedded: 1 Query retrieves everything
-    { "sku": "IPHONE", "qty": 1, "price": 999 }
-  ]
-}
-
-REFERENCING (1-to-Millions)
-User Document:  { "_id": ObjectId("U1"), "name": "Alice" }
-Log Document:   { "_id": ObjectId("L1"), "userId": ObjectId("U1"), "action": "LOGIN" }
-
-THE BUCKET PATTERN (Time-Series Data)
-{
-  "_id": ObjectId("..."),
-  "sensorId": "SENSOR-42",
-  "date": ISODate("2026-09-06"),
-  "count": 500,                               <-- Groups 500 readings into 1 document
-  "readings": [
-    { "t": ISODate("..."), "temp": 24.5 },
-    { "t": ISODate("..."), "temp": 24.7 }
-  ]
-}
-```
+| Architectural Pattern | Primary Mechanism | Java Spring Implementation | Node.js Implementation | Ideal Production Use Case | Anti-Pattern For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Embedded Document** | Denormalized Tree | `@Field` nested POJO/Record | Nested Schema object | 1-to-Few items accessed together | Unbounded arrays ($>10,000$ items) |
+| **Referenced Document**| Normalization via ID | `@DBRef` / Manual ID join | `populate()` / Manual ID | 1-to-Millions, independent lifecycles | High-frequency inner loop reads |
+| **Compound Index (ESR)**| B-Tree Composite Index | `@CompoundIndex` | `schema.index({ a: 1, b: 1 })` | High-frequency filtered & sorted queries | Unindexed sorting on large collections |
+| **Aggregation Pipeline**| Multi-stage data stream | `mongoTemplate.aggregate()` | `Model.aggregate()` | Real-time analytics, faceted search | Point lookups by primary key (use find) |
+| **Reactive Mongo** | Project Reactor Streams | `ReactiveMongoRepository` | Async Iterators / Cursors | Non-blocking streaming feeds | Traditional blocking Servlet APIs |
+| **Mongoose Middleware** | Hook interception | Lifecycle Events (AOP) | `schema.pre('save')` / `post()` | Password hashing, audit trails | Bypassed direct bulk updates |
+| **Multi-Doc Transaction**| WiredTiger Snapshot + 2PC| `@Transactional` | `session.withTransaction()` | Multi-collection banking transfers | High-throughput batch streaming writes |
+| **Change Streams** | Replication Oplog tail | `MessageListenerContainer` | `collection.watch()` | Real-time cache invalidation, webhooks | Polling batch jobs |
+| **Sharding (Hashed)** | MD5 Hash Partitioning | Transparent Driver Routing | Transparent Driver Routing | Uniform write distribution (scale-out)| Range scans across IDs (scatter-gather) |
+| **Bucket Pattern** | Grouping array packets | Custom aggregation groups | Custom aggregation groups | High-frequency IoT / Time-Series metrics| Rapid ad-hoc queries on single metrics |
 
 ---
 
-## 2.2 Indexing Mastery & The ESR Rule
+## 2.1 Advanced Document Modeling: Embedding vs Referencing & 16MB Limits
 
-```javascript
-// Optimal Index for: db.orders.find({ status: "PAID", customerId: 101 }).sort({ createdAt: -1 })
-// Follows ESR: Equality (status, customerId) -> Sort (createdAt) -> Range
-db.orders.createIndex({ status: 1, customerId: 1, createdAt: -1 });
+1. **Architectural Overview & Purpose**:
+   - The primary design rule of MongoDB: **Data accessed together is stored together**.
+   - **Embedding (1-to-Few)**: Child objects reside directly inside parent document. Zero query joins, maximum read throughput.
+   - **Referencing (1-to-Many / 1-to-Millions)**: Parent stores foreign `ObjectId` pointers. Avoids the **16MB BSON hard limit** and unbounded document growth.
 
-// Partial Index: Only indexes active accounts, reducing index RAM usage by 90%
-db.users.createIndex(
-  { email: 1 },
-  { partialFilterExpression: { status: "ACTIVE" } }
-);
+2. **The Bucket Pattern for High-Velocity Metrics**:
+   - Instead of inserting 1 document per second (86,400 documents/day), pre-allocate 1 document per hour with an array of 60 readings, reducing index size by 98%!
 
-// TTL Index: Automatically deletes session documents after 3600 seconds (1 hour)
-db.sessions.createIndex(
-  { createdAt: 1 },
-  { expireAfterSeconds: 3600 }
-);
-```
+3. **Polyglot Code Blueprint**:
+   ```javascript
+   // Time-Series Bucket Pattern Schema
+   {
+     "_id": ObjectId("65e01..."),
+     "sensorId": "TEMP-RACK-04",
+     "bucketDate": ISODate("2026-09-06T14:00:00Z"),
+     "sampleCount": 60,
+     "readings": [
+       { "offsetSec": 0, "temperature": 23.4, "humidity": 45.1 },
+       { "offsetSec": 60, "temperature": 23.6, "humidity": 45.0 }
+     ]
+   }
+   ```
+
+---
+
+## 2.2 Indexing Mastery: The ESR Rule & Index Types
+
+1. **The Universal ESR Indexing Rule**:
+   - When designing compound indexes for queries containing equality filters, sorting, and range filters:
+     1. **E**quality: Exact match fields first (`status: "PAID"`).
+     2. **S**ort: Ordering fields second (`createdAt: -1`).
+     3. **R**ange: Range filters last (`amount: { $gte: 100 }`).
+   - Violating ESR forces MongoDB to perform in-memory sort (**`SORT_KEY_GENERATOR`**), crashing if sort memory exceeds 32MB!
+
+2. **Partial & TTL Indexes**:
+   ```javascript
+   // Partial Index: Only indexes active accounts (saves 90% RAM)
+   db.users.createIndex(
+     { email: 1 },
+     { partialFilterExpression: { status: "ACTIVE" } }
+   );
+
+   // TTL Index: Automatically drops expired sessions after 3600 seconds
+   db.sessions.createIndex(
+     { lastActivity: 1 },
+     { expireAfterSeconds: 3600 }
+   );
+   ```
 
 ---
 
 ## 2.3 The Aggregation Pipeline Framework
 
-```javascript
-// Complex Multi-stage Aggregation Pipeline
-db.orders.aggregate([
-  // Stage 1: Filter ($match) - Must leverage indexes!
-  { $match: { status: "COMPLETED", orderDate: { $gte: ISODate("2026-01-01") } } },
+1. **Architectural Overview**:
+   - A declarative data processing framework inspired by Unix pipes: documents pass through an ordered pipeline of transformation stages (`$match`, `$unwind`, `$group`, `$project`, `$sort`, `$limit`).
 
-  // Stage 2: Deconstruct items array ($unwind)
-  { $unwind: "$items" },
-
-  // Stage 3: Group & Calculate Revenue ($group)
-  {
-    $group: {
-      _id: "$items.category",
-      totalRevenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
-      totalOrders: { $addToSet: "$_id" },
-      avgItemPrice: { $avg: "$items.price" }
-    }
-  },
-
-  // Stage 4: Reshape output ($project)
-  {
-    $project: {
-      category: "$_id",
-      totalRevenue: 1,
-      orderCount: { $size: "$totalOrders" },
-      avgItemPrice: { $round: ["$avgItemPrice", 2] }
-    }
-  },
-
-  // Stage 5: Sort ($sort)
-  { $sort: { totalRevenue: -1 } },
-
-  // Stage 6: Bounded Limit ($limit)
-  { $limit: 10 }
-], { allowDiskUse: true }); // Bypasses the 100MB in-memory RAM barrier!
-```
+2. **Production Pipeline Blueprint with `allowDiskUse`**:
+   ```javascript
+   db.orders.aggregate([
+     { $match: { status: "COMPLETED", orderDate: { $gte: ISODate("2026-01-01") } } },
+     { $unwind: "$items" },
+     {
+       $group: {
+         _id: "$items.category",
+         totalRevenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+         orderCount: { $addToSet: "$_id" },
+         avgPrice: { $avg: "$items.price" }
+       }
+     },
+     {
+       $project: {
+         category: "$_id",
+         totalRevenue: 1,
+         orderCount: { $size: "$orderCount" },
+         avgPrice: { $round: ["$avgPrice", 2] }
+       }
+     },
+     { $sort: { totalRevenue: -1 } },
+     { $limit: 10 }
+   ], { allowDiskUse: true }); // Crucial: Bypasses 100MB RAM stage limit!
+   ```
 
 ---
 
-## 2.4 Java: Spring Data MongoDB Aggregation & Reactive Streams
+## 2.4 Java: Spring Data MongoDB Type-Safe Operations
 
-```java
-package com.example.mongo.advanced;
+1. **Architectural Overview**:
+   - `MongoTemplate` provides rich, type-safe execution of queries, updates, and aggregation pipelines:
+   ```java
+   @Service
+   public class CustomerAnalyticsService {
+       private final MongoTemplate mongoTemplate;
+       public CustomerAnalyticsService(MongoTemplate mongoTemplate) { this.mongoTemplate = mongoTemplate; }
 
-import org.springframework.data.domain.Sort;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.*;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.stereotype.Service;
+       public List<CategoryRevenueDto> getTopCategories() {
+           MatchOperation match = match(Criteria.where("status").is("COMPLETED"));
+           UnwindOperation unwind = unwind("items");
+           GroupOperation group = group("items.category")
+               .sum(ArithmeticOperators.Multiply.valueOf("items.price").multiplyBy("items.quantity")).as("totalRevenue");
+           SortOperation sort = sort(Sort.Direction.DESC, "totalRevenue");
+           LimitOperation limit = limit(10);
 
-import java.util.List;
+           Aggregation agg = newAggregation(match, unwind, group, sort, limit)
+               .withOptions(AggregationOptions.builder().allowDiskUse(true).build());
 
-import static org.springframework.data.mongodb.core.aggregation.Aggregation.*;
-
-@Service
-public class OrderAnalyticsService {
-
-    private final MongoTemplate mongoTemplate;
-
-    public OrderAnalyticsService(MongoTemplate mongoTemplate) {
-        this.mongoTemplate = mongoTemplate;
-    }
-
-    public List<CategoryRevenueDto> calculateCategoryRevenue() {
-        MatchOperation match = match(Criteria.where("status").is("COMPLETED"));
-        UnwindOperation unwind = unwind("items");
-        GroupOperation group = group("items.category")
-            .sum(ArithmeticOperators.Multiply.valueOf("items.price").multiplyBy("items.quantity")).as("totalRevenue")
-            .count().as("itemCount");
-        SortOperation sort = sort(Sort.Direction.DESC, "totalRevenue");
-        LimitOperation limit = limit(10);
-
-        Aggregation aggregation = newAggregation(match, unwind, group, sort, limit)
-            .withOptions(AggregationOptions.builder().allowDiskUse(true).build());
-
-        return mongoTemplate.aggregate(aggregation, "orders", CategoryRevenueDto.class).getMappedResults();
-    }
-}
-```
-
-```java
-public record CategoryRevenueDto(String id, double totalRevenue, long itemCount) {}
-```
+           return mongoTemplate.aggregate(agg, "orders", CategoryRevenueDto.class).getMappedResults();
+       }
+   }
+   ```
 
 ---
 
-## 2.5 Node.js: Mongoose Advanced Schemas, Middleware & Virtuals
+## 2.5 Java: Reactive Streams WebFlux with ReactiveMongoRepository
 
-```javascript
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+1. **Architectural Overview**:
+   - Leverages non-blocking Netty sockets to stream documents directly into Project Reactor `Flux<T>`:
+   ```java
+   @Repository
+   public interface OrderReactiveRepository extends ReactiveCrudRepository<OrderDocument, String> {
+       @Tailable // Continuous stream from capped collection!
+       Flux<OrderDocument> findByStatus(String status);
 
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, index: true },
-  passwordHash: { type: String, required: true },
-  firstName: String,
-  lastName: String
-}, {
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Virtual Field: Computed on the fly without DB storage
-userSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`.trim();
-});
-
-// Pre-Save Middleware: Automatically hashes passwords before persistence
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('passwordHash')) return next();
-  this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
-  next();
-});
-
-// Query Middleware: Prevents leaking passwordHash in find operations
-userSchema.pre(/^find/, function(next) {
-  this.select('-__v');
-  next();
-});
-
-module.exports = mongoose.model('User', userSchema);
-```
+       Flux<OrderDocument> findByCustomerId(String customerId);
+   }
+   ```
 
 ---
 
-## 2.6 Multi-Document ACID Transactions (Polyglot Blueprints)
+## 2.6 Node.js: Native Driver Connection Pooling & Cursors
 
-### 2.6.1 Java Spring `@Transactional` Blueprint
-```java
-@Configuration
-@EnableTransactionManagement
-public class MongoTxConfig {
-    @Bean
-    public MongoTransactionManager transactionManager(MongoDatabaseFactory dbFactory) {
-        return new MongoTransactionManager(dbFactory);
-    }
-}
-```
+1. **Architectural Overview**:
+   - The official `mongodb` npm driver provides low-overhead, cursor-based streaming:
+   ```javascript
+   const { MongoClient } = require('mongodb');
 
-```java
-@Service
-public class WalletTransferService {
+   const client = new MongoClient(process.env.MONGO_URI, {
+     maxPoolSize: 50,
+     minPoolSize: 10,
+     connectTimeoutMS: 5000,
+     socketTimeoutMS: 30000
+   });
 
-    private final MongoTemplate mongoTemplate;
+   async function streamLargeReport(responseStream) {
+     const db = client.db('enterprise');
+     const cursor = db.collection('audit_logs').find({}).batchSize(1000);
 
-    public WalletTransferService(MongoTemplate mongoTemplate) {
-        this.mongoTemplate = mongoTemplate;
-    }
-
-    @Transactional // Executes inside a Multi-Document ClientSession
-    public void transferFunds(String fromId, String toId, double amount) {
-        // Decrement source
-        Query fromQuery = new Query(Criteria.where("_id").is(fromId).and("balance").gte(amount));
-        Update fromUpdate = new Update().inc("balance", -amount);
-        var result = mongoTemplate.updateFirst(fromQuery, fromUpdate, "wallets");
-        if (result.getModifiedCount() == 0) {
-            throw new IllegalStateException("Insufficient funds");
-        }
-
-        // Increment target
-        Query toQuery = new Query(Criteria.where("_id").is(toId));
-        Update toUpdate = new Update().inc("balance", amount);
-        mongoTemplate.updateFirst(toQuery, toUpdate, "wallets");
-    }
-}
-```
-
-### 2.6.2 Node.js Mongoose Transaction Blueprint
-```javascript
-const mongoose = require('mongoose');
-const Wallet = require('../models/Wallet');
-
-async function transferFundsNode(fromId, toId, amount) {
-  const session = await mongoose.startSession();
-  session.startTransaction({
-    readConcern: { level: 'snapshot' },
-    writeConcern: { w: 'majority' }
-  });
-
-  try {
-    const fromWallet = await Wallet.findOneAndUpdate(
-      { _id: fromId, balance: { $gte: amount } },
-      { $inc: { balance: -amount } },
-      { session, new: true }
-    );
-
-    if (!fromWallet) {
-      throw new Error('Insufficient funds');
-    }
-
-    await Wallet.findOneAndUpdate(
-      { _id: toId },
-      { $inc: { balance: amount } },
-      { session, new: true }
-    );
-
-    // Commit both operations atomically
-    await session.commitTransaction();
-  } catch (error) {
-    // Rollback on any failure
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-}
-```
+     // Stream rows over network with zero memory accumulation
+     for await (const doc of cursor) {
+       responseStream.write(JSON.stringify(doc) + '\n');
+     }
+   }
+   ```
 
 ---
 
-## 2.7 Real-Time Change Streams: Event-Driven Microservices
+## 2.7 Node.js: Mongoose Schemas, Middleware Hooks & Virtuals
 
-Change streams allow applications to access real-time data changes without polling:
+1. **Architectural Overview**:
+   - Mongoose wraps raw MongoDB documents with object modeling, schema validation, virtual fields, and pre/post lifecycle middleware:
+   ```javascript
+   const mongoose = require('mongoose');
+   const bcrypt = require('bcrypt');
 
-```javascript
-// Node.js Change Stream Listener
-const Order = require('./models/Order');
+   const UserSchema = new mongoose.Schema({
+     email: { type: String, required: true, unique: true, index: true },
+     passwordHash: { type: String, required: true },
+     firstName: String,
+     lastName: String
+   }, { toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
-function listenToOrders() {
-  const changeStream = Order.watch([
-    { $match: { 'operationType': { $in: ['insert', 'update'] }, 'fullDocument.status': 'PAID' } }
-  ], { fullDocument: 'updateLookup' });
+   UserSchema.virtual('fullName').get(function() {
+     return `${this.firstName} ${this.lastName}`.trim();
+   });
 
-  changeStream.on('change', (next) => {
-    console.log('Real-time payment event detected:', next.fullDocument.orderNumber);
-    // Publish to Kafka or RabbitMQ...
-  });
+   // Pre-save hook: Automatic password hashing
+   UserSchema.pre('save', async function(next) {
+     if (!this.isModified('passwordHash')) return next();
+     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
+     next();
+   });
 
-  changeStream.on('error', (err) => console.error('Change stream error:', err));
-}
-```
+   module.exports = mongoose.model('User', UserSchema);
+   ```
+
+---
+
+## 2.8 Multi-Document ACID Transactions (Polyglot Blueprints)
+
+1. **Java Spring `@Transactional` Blueprint**:
+   ```java
+   @Service
+   public class BankingService {
+       private final MongoTemplate mongoTemplate;
+       public BankingService(MongoTemplate mongoTemplate) { this.mongoTemplate = mongoTemplate; }
+
+       @Transactional
+       public void transferMoney(String fromWalletId, String toWalletId, double amount) {
+           Query debitQ = new Query(Criteria.where("_id").is(fromWalletId).and("balance").gte(amount));
+           Update debitU = new Update().inc("balance", -amount);
+           if (mongoTemplate.updateFirst(debitQ, debitU, "wallets").getModifiedCount() == 0) {
+               throw new InsufficientBalanceException();
+           }
+           Query creditQ = new Query(Criteria.where("_id").is(toWalletId));
+           Update creditU = new Update().inc("balance", amount);
+           mongoTemplate.updateFirst(creditQ, creditU, "wallets");
+       }
+   }
+   ```
+
+2. **Node.js Mongoose Transaction Blueprint**:
+   ```javascript
+   async function transferMoneyNode(fromId, toId, amount) {
+     const session = await mongoose.startSession();
+     session.startTransaction({ readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' } });
+     try {
+       const debit = await Wallet.findOneAndUpdate(
+         { _id: fromId, balance: { $gte: amount } },
+         { $inc: { balance: -amount } },
+         { session, new: true }
+       );
+       if (!debit) throw new Error('Insufficient funds');
+       await Wallet.findOneAndUpdate({ _id: toId }, { $inc: { balance: amount } }, { session });
+       await session.commitTransaction();
+     } catch (err) {
+       await session.abortTransaction();
+       throw err;
+     } finally {
+       session.endSession();
+     }
+   }
+   ```
+
+---
+
+## 2.9 Real-Time Change Streams: Event-Driven Resumption
+
+1. **Architectural Overview**:
+   - Change Streams listen directly to the cluster replication Oplog (`local.oplog.rs`), allowing microservices to publish change events to Kafka or invalidate Redis caches in real time.
+
+2. **Resumption Token Pattern**:
+   - Every change event carries a `_data` token. Storing this token allows the worker to reconnect and resume streaming right where it left off after an application restart!
+
+---
+
+## 2.10 Horizontal Sharding & Shard Key Selection
+
+1. **Architectural Overview**:
+   - Distributes collections across multiple independent database nodes (**Shards**) coordinated by `mongos` query routers and `Config Servers`.
+2. **Hashed vs Ranged Sharding**:
+   - **Hashed Sharding**: Hashes the shard key (e.g. `{ userId: "hashed" }`). Uniform write distribution, prevents single-node hotspots, but forces scatter-gather for range queries.
+   - **Ranged Sharding**: Stores contiguous ranges on the same shard. Fast range queries, but prone to write bottleneck hotspots on monotonic increasing keys (e.g. `createdAt`). Always avoid monotonically increasing keys as the sole shard key!
 
 ---
 
@@ -603,7 +574,40 @@ A chunk becomes a "Jumbo Chunk" when its size exceeds `maxChunkSize` (default 64
 ### 3. How does Mongoose change-tracking work under the hood?
 Mongoose documents maintain an internal `$__delta()` state tracking which paths were modified via getters and setters. When `.save()` is called, Mongoose constructs a minimal `$set` and `$unset` update document rather than replacing the entire document.
 
+### 4. What is the ESR (Equality, Sort, Range) rule and what happens if index order violates it?
+The ESR rule dictates the optimal order of fields in a compound index:
+1. **Equality (`E`)**: Exact match fields (e.g. `status: "ACTIVE"`). Must come first to prune the search space to a tiny fraction of index entries.
+2. **Sort (`S`)**: Sorting fields (e.g. `createdAt: -1`). Must come second so the B-Tree index scan returns records in order without requiring an in-memory sort.
+3. **Range (`R`)**: Range filter fields (e.g. `age: { $gte: 21 }`). Must come last because any index keys evaluated after a range predicate cannot be used for sorting or subsequent equality filters.
+If an index puts Range before Sort (e.g. `{ age: 1, createdAt: -1 }`), MongoDB cannot use the index for sorting and falls back to an expensive in-memory sort buffer (capped at 32MB).
+
+### 5. Why is `.lean()` critical for read-heavy operations in Node.js Mongoose?
+By default, Mongoose wraps returned documents in heavy Mongoose Document prototype instances complete with internal change tracking, virtuals, getters/setters, and middleware hooks. This incurs 3x to 5x higher memory allocation and CPU overhead. Calling `.lean()` instructs Mongoose to skip document hydration and return plain JavaScript objects (POJOs), slashing API latency and memory footprint.
+
+### 6. How do Multi-Document ACID Transactions work in MongoDB and what are their limitations?
+MongoDB transactions use snapshot isolation across replica set nodes and shards via a two-phase commit protocol coordinated by the transaction router (`mongos`).
+**Limitations**:
+1. Maximum transaction runtime limit of 60 seconds (`transactionLifetimeLimitSeconds`).
+2. Maximum transaction commit size of 16MB (the size of a single Oplog entry).
+3. Lock contention: transactions acquire write locks on documents; long-running transactions trigger write-conflict aborts under concurrent updates.
+
+### 7. What is the difference between Write Concern `w: 1`, `w: "majority"`, and `j: true`?
+- **`w: 1`**: Write is acknowledged as soon as the Primary commits the data to memory. If the Primary loses power before replicating, the write is lost on failover (rollback).
+- **`w: "majority"`**: Write is acknowledged only after a quorum ($>50\%$) of replica set voting members replicate the write. Guaranteed rollback-free.
+- **`j: true`**: Forces the node to write to the physical on-disk journal (`fsync`) before acknowledging, protecting against immediate simultaneous data center power failure.
+
+### 8. How do Change Streams work and how do they resume after an application crash?
+Change Streams listen to MongoDB's distributed replication log (`local.oplog.rs`). Every event emitted in a change stream contains a unique `_id` field acting as a **Resume Token** (storing cluster time and transaction identifiers). When an application service crashes and reboots, it passes the last stored resume token into `.watch([], { resumeAfter: lastToken })`, seamlessly picking up from the exact point of interruption without losing events.
+
+### 9. What causes WiredTiger Cache Eviction Starvation and how do you monitor it?
+WiredTiger targets retaining $<20\%$ dirty data in RAM. If an application executes mass unindexed updates, dirty pages accumulate faster than the background storage threads can flush to disk. Once dirty pages cross $20\%$, application worker threads are coerced into performing disk flushing themselves, causing request response times to spike from 2ms to 30,000ms. Monitor via `mongostat` (`dirty` percentage and `evict` tickets).
+
+### 10. When should you Embed vs Reference documents in MongoDB?
+- **Embed (1-to-1 or bounded 1-to-Few)**: When child data is strictly owned by and queried with the parent, and the collection of children will not grow unbounded (e.g. Order Items in an Order, User Billing Address). Avoids multi-document queries and guarantees atomic updates within the 16MB document limit.
+- **Reference (1-to-Many or Many-to-Many)**: When child entities grow unbounded (e.g. log events, user followers) or need to be accessed independently from multiple domain contexts (e.g. Products referenced across millions of Orders).
+
 ---
+
 
 ## ⚖️ MongoDB Polyglot Master Cheat Sheet
 

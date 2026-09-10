@@ -331,7 +331,49 @@ export CATALINA_OPTS="${CATALINA_OPTS} -Dfile.encoding=UTF-8"
 #### Q4: What does `RemoteIpValve` do and why is it critical behind NGINX or AWS ALB?
 > **Answer**: When Tomcat sits behind a reverse proxy, `request.getRemoteAddr()` returns the proxy's IP address rather than the client's. `RemoteIpValve` inspects `X-Forwarded-For` and `X-Forwarded-Proto`, safely rewriting the request IP and scheme.
 
-#### Q5: How does Tomcat's JDBC Pool handle abandoned connections?
-> **Answer**: When `removeAbandoned="true"`, the pool tracks when a connection was checked out. If the checkout time exceeds `removeAbandonedTimeout`, the pool marks it abandoned, calls `close()` to return it to the pool, and prints the stack trace of the thread that originally borrowed it.
+#### Q5: How do you detect and triage thread starvation and deadlocks in Tomcat?
+> **Answer**: Capture thread dumps using `jcmd <PID> Thread.print` or `kill -3 <PID>` spaced 5–10 seconds apart. Inspect the state of `http-nio-8080-exec-*` worker threads:
+> 1. If all threads are in `WAITING` or `TIMED_WAITING` on `HikariCP` connection checkout, the database connection pool is exhausted or queries are slow.
+> 2. If threads are blocked on synchronizers (`BLOCKED (on object monitor)`), analyze the lock address to identify synchronized block contention or cyclic deadlocks.
+> 3. If threads are in `RUNNABLE` consuming 100% CPU, analyze stack frames for infinite loops or regex catastrophic backtracking.
 
-*(...and 25 additional questions covering Catalina Valves, SSL renegotiation, APR vs NIO2, ThreadLocal leaks, and JMX monitoring).*
+#### Q6: How does the Tomcat ClassLoader hierarchy break the standard Java Delegation model?
+> **Answer**: Standard Java classloaders use parent-first delegation (child asks parent first). Tomcat's `WebappClassLoader` reverses this for web application libraries (child-first delegation): it searches `/WEB-INF/classes` and `/WEB-INF/lib` *first* before delegating to the Common or System classloader. This allows individual web apps to override shared container libraries with their own specific versions.
+
+#### Q7: What is the performance difference between Coyote NIO and NIO2 protocols?
+> **Answer**: 
+> - **NIO (`Http11NioProtocol`)**: Synchronous non-blocking I/O using OS `epoll`/`kqueue` selectors. Poller threads continually query the selector for ready channels.
+> - **NIO2 (`Http11Nio2Protocol`)**: True asynchronous I/O using completion handlers (`AsynchronousSocketChannel`). The operating system kernel performs the I/O read and directly notifies Tomcat upon completion. NIO2 can offer lower CPU utilization under huge connection counts, though NIO remains the most battle-tested default.
+
+#### Q8: How should you configure Tomcat to safely handle graceful shutdowns without dropping active in-flight HTTP requests?
+> **Answer**: In modern Tomcat 9/10/11, configure `unloadDelay` on the `StandardWrapper` and send `SIGTERM` rather than `SIGKILL`. In Spring Boot embedded Tomcat, configure `server.shutdown=graceful` and `spring.lifecycle.timeout-per-shutdown-phase=30s`. Tomcat stops accepting new connections on port 8080 and grants existing in-flight worker threads up to 30 seconds to finish processing and commit transactions before the JVM halts.
+
+#### Q9: What causes "Severe: The web application registered the JDBC driver but failed to unregister it" warnings upon shutdown?
+> **Answer**: JDBC drivers register themselves with the JVM's global `DriverManager` (which lives in the Bootstrap/System ClassLoader). When a web app is undeployed, the driver still holds a reference to the `WebappClassLoader`. To prevent this memory leak, applications should use a `ServletContextListener` to explicitly deregister drivers via `DriverManager.deregisterDriver()`, or rely on Tomcat's `JreMemoryLeakPreventionListener`.
+
+#### Q10: How do you tune Tomcat for high-throughput microservice workloads on Kubernetes?
+> **Answer**:
+> 1. Set `server.tomcat.threads.max=200` and `server.tomcat.threads.min-spare=20` (matching container CPU quotas).
+> 2. Align JVM memory: `-XX:InitialRAMPercentage=70.0 -XX:MaxRAMPercentage=70.0` with `-XX:+AlwaysPreTouch`.
+> 3. Disable DNS lookups: `enableLookups="false"`.
+> 4. Offload TLS termination to ingress (NGINX/Envoy) and use `RemoteIpValve` with internal CIDRs.
+> 5. Bind Actuator liveness/readiness probes to a separate management port (`management.server.port=8081`) to prevent health probe starvation during application thread pool saturation.
+
+---
+
+## ⚖️ Apache Tomcat Production Hardening Cheat Sheet
+
+| Parameter | Recommended Setting | Production Impact |
+| :--- | :--- | :--- |
+| **`protocol`** | `org.apache.coyote.http11.Http11NioProtocol` | Non-blocking I/O multiplexing via epoll |
+| **`maxThreads`** | 200 – 400 (per container) | Limits worker thread concurrency to prevent CPU context-switch thrashing |
+| **`minSpareThreads`** | 20 – 50 | Pre-warmed thread pool for sudden traffic bursts |
+| **`acceptCount`** | 100 – 300 | OS TCP listen backlog queue length |
+| **`maxConnections`** | 10,000 | Maximum simultaneous TCP sockets managed by Poller |
+| **`connectionTimeout`** | 20,000 (20s) | Sockets idle for $>20\text{s}$ are closed to free file descriptors |
+| **`enableLookups`** | `false` | Disables expensive reverse DNS lookups on client IP addresses |
+| **`server`** | Custom string or blank | Hides Apache Tomcat version header to prevent automated CVE scanning |
+
+---
+[🏠 Back to Home](README.md) | [🌐 NGINX Master Guide](nginx_master_guide.md) | [🐘 Apache & LAMP](apache_httpd_lamp_master_guide.md) | [🌐 Envoy Proxy](envoy_proxy_master_guide.md)
+

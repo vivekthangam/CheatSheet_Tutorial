@@ -553,4 +553,67 @@ http {
 > - `proxy_cache_bypass`: Decides whether to fetch the response from the cache or query the upstream backend.
 > - `proxy_no_cache`: Decides whether the response received from the upstream backend should be saved into the cache.
 
-*(...and 25 additional technical questions covering OCSP stapling, HTTP/3 QUIC, TCP buffer tuning, leak detection, reload signals `SIGHUP` vs `SIGQUIT`, and custom logging formats).*
+#### Q6: What is OCSP Stapling and how does `ssl_stapling on;` improve TLS handshake latency?
+> **Answer**: In standard TLS handshakes, the client browser must pause and query the Certificate Authority's OCSP responder to verify that the server's TLS certificate hasn't been revoked, adding 100–500ms of latency and risking CA downtime. With **OCSP Stapling**, the NGINX server periodically contacts the CA in the background, caches the cryptographically signed time-stamped OCSP revocation status, and "staples" this proof directly into the TLS Certificate Status request during the initial TLS handshake. This eliminates client CA roundtrips and protects user privacy.
+
+#### Q7: How do NGINX master process signals differ (`SIGHUP`, `SIGUSR1`, `SIGUSR2`, and `SIGQUIT`)?
+> **Answer**:
+> - `SIGHUP` (or `nginx -s reload`): Re-reads configuration files, starts new worker processes with the new config, and gracefully shuts down old workers once they finish in-flight requests.
+> - `SIGQUIT`: Gracefully shuts down workers after completing active connections.
+> - `SIGUSR1`: Re-opens log files on disk (used during logrotate to prevent writing to deleted file handles).
+> - `SIGUSR2`: Executes an on-the-fly binary upgrade (spawns a brand-new NGINX master binary without dropping any client sockets).
+
+#### Q8: How does the leaky-bucket rate limiting algorithm in `limit_req_zone` handle bursts without dropping traffic?
+> **Answer**: `limit_req_zone` sets a fixed processing rate (e.g. `rate=10r/s`, allowing 1 request every 100ms). When a traffic burst arrives, the `burst=20` parameter creates a queue holding up to 20 excess requests. With `nodelay`, burst requests are processed immediately as long as the burst bucket isn't full, but subsequent requests from that client must wait until the bucket leaks. If the burst bucket overflows, incoming requests are immediately rejected with HTTP 429 or 503.
+
+#### Q9: What causes upstream buffer spilling to disk (`an upstream response is buffered to a temporary file`) and how do you resolve it?
+> **Answer**: When a backend upstream server (e.g. Spring Boot or Node.js) generates a large response faster than the slow client can download it over the Internet, NGINX buffers the response in memory (`proxy_buffers`). If the payload exceeds the allocated RAM buffer size (`proxy_buffer_size + proxy_buffers`), NGINX writes the excess payload to a temporary file on disk (`/var/cache/nginx/proxy_temp`), causing high disk I/O latency.
+> **Remediation**:
+> 1. Increase memory buffers for large API payloads: `proxy_buffers 16 32k; proxy_buffer_size 64k;`.
+> 2. For heavy file streaming endpoints (videos, large CSVs), disable buffering entirely: `proxy_buffering off;`.
+
+#### Q10: How do you configure NGINX for zero-downtime canary traffic splitting?
+> **Answer**: Use the `split_clients` module based on a consistent request attribute (e.g. client IP or session cookie):
+> ```nginx
+> split_clients "${remote_addr}${http_user_agent}" $upstream_variant {
+>     10%     canary_backend;
+>     *       production_backend;
+> }
+> 
+> upstream production_backend {
+>     server 10.0.1.10:8080 max_fails=3 fail_timeout=10s;
+>     keepalive 32;
+> }
+> upstream canary_backend {
+>     server 10.0.2.20:8080 max_fails=3 fail_timeout=10s;
+>     keepalive 32;
+> }
+> 
+> server {
+>     location /api/ {
+>         proxy_pass http://$upstream_variant;
+>         proxy_set_header Connection "";
+>         proxy_http_version 1.1;
+>     }
+> }
+> ```
+> This deterministically routes 10% of users to the canary backend while ensuring that an individual user's subsequent requests stay pinned to the same version.
+
+---
+
+## ⚖️ NGINX Edge Proxy Production Hardening Cheat Sheet
+
+| Parameter / Directive | Recommended Setting | Production Impact |
+| :--- | :--- | :--- |
+| **`worker_processes`** | `auto` | Binds one worker process per CPU core, maximizing cache locality |
+| **`worker_connections`** | `10240` (with `ulimit -n 65535`) | Prevents `worker_connections are not enough` 500 errors during traffic spikes |
+| **`sendfile` & `tcp_nopush`** | `sendfile on; tcp_nopush on;` | Enables zero-copy kernel streaming and packs packets to MTU size |
+| **`tcp_nodelay`** | `on` | Disables Nagle's algorithm for interactive, low-latency API responses |
+| **`server_tokens`** | `off` | Hides NGINX version string in HTTP headers and default error pages |
+| **`ssl_protocols`** | `TLSv1.2 TLSv1.3` | Eliminates obsolete, vulnerable SSLv3, TLS 1.0, and TLS 1.1 ciphers |
+| **`ssl_stapling`** | `ssl_stapling on; ssl_stapling_verify on;` | Eliminates 100–500ms client OCSP lookup pauses during TLS handshakes |
+| **Upstream Keepalive** | `proxy_http_version 1.1; proxy_set_header Connection "";` | Reuses persistent TCP connections to backends; prevents socket starvation |
+
+---
+[🏠 Back to Home](README.md) | [🌐 Envoy Proxy Guide](envoy_proxy_master_guide.md) | [🕸️ Istio Service Mesh Guide](istio_service_mesh_master_guide.md)
+

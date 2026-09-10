@@ -189,178 +189,498 @@ public class ProductCatalogService {
 
 ---
 
-## 2.1 Production Redis Configuration & Clean JSON Serialization
+## 2.1 Redis Strings & Simple Dynamic Strings (SDS)
 
-```java
-package com.example.redis.config;
+1. **Architectural Overview & Purpose**:
+   - The fundamental binary-safe byte sequence primitive in Redis. Can store raw text, integers, floating-point numbers, or serialized binary blobs (JSON, Protobuf, images) up to **512 MB**.
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **C-String Limitations**: Standard C strings (`char*`) are null-terminated (`\0`), cannot contain binary data, and calculating length requires $O(N)$ string scans.
+   - **Simple Dynamic String (SDS)**:
+     ```
+     +--------+--------+-------+--------------------+---+
+     |  len   | alloc  | flags |   buf ("hello")    | \0|
+     +--------+--------+-------+--------------------+---+
+     ```
+     - `len`: Length of the string in bytes ($O(1)$ length lookup).
+     - `alloc`: Total memory allocated, including unused buffer space (pre-allocation strategy to minimize `realloc()` calls).
+     - `flags`: Header type (`sdshdr8`, `sdshdr16`, `sdshdr32`, `sdshdr64`) to minimize memory header overhead.
+     - **Integer Encoding (`OBJ_ENCODING_INT`)**: If the string is an integer between $-2^{63}$ and $2^{63}-1$, Redis stores it directly as a 64-bit primitive integer in the `ptr` field of the Redis Object (`robj`), consuming **zero auxiliary heap memory**!
 
-import java.time.Duration;
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForValue()
+   void set(String key, String value);
+   void set(String key, String value, Duration timeout);
+   Boolean setIfAbsent(String key, String value, Duration timeout); // SET key val NX PX ms
+   String get(Object key);
+   List<String> multiGet(Collection<String> keys);                  // MGET k1 k2 k3
+   Long increment(String key);                                      // INCR
+   Long increment(String key, long delta);                          // INCRBY
+   ```
 
-@Configuration
-@EnableCaching
-public class RedisConfig {
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   @Autowired
+   private StringRedisTemplate redisTemplate;
 
-    @Bean
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(factory);
+   public void runStringExamples() {
+       ValueOperations<String, String> ops = redisTemplate.opsForValue();
 
-        // Configure hardened ObjectMapper for JSON serialization
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        mapper.activateDefaultTyping(
-            BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build(),
-            ObjectMapper.DefaultTyping.NON_FINAL,
-            JsonTypeInfo.As.PROPERTY
-        );
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
+       // 1. Basic Caching with TTL
+       ops.set("user:101:profile", "{\"name\":\"Alice\",\"role\":\"ADMIN\"}", Duration.ofMinutes(15));
+       String profile = ops.get("user:101:profile");
+       System.out.println("Cached Profile: " + profile);
+       // Output: Cached Profile: {"name":"Alice","role":"ADMIN"}
 
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
-        template.setHashValueSerializer(serializer);
-        template.afterPropertiesSet();
-        return template;
-    }
+       // 2. Atomic Distributed Counter
+       Long visitCount = ops.increment("page:views:home", 1);
+       ops.increment("page:views:home", 5);
+       System.out.println("Total Visits: " + ops.get("page:views:home"));
+       // Output: Total Visits: 6
 
-    @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory factory) {
-        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-            .entryTtl(Duration.ofMinutes(10)) // Default 10 min TTL
-            .disableCachingNullValues()
-            .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-            .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer()));
+       // 3. Atomic Distributed Mutex (SETNX with TTL)
+       Boolean acquired = ops.setIfAbsent("lock:invoice:789", "INSTANCE_A", Duration.ofSeconds(10));
+       System.out.println("Lock Acquired: " + acquired);
+       // Output: Lock Acquired: true
+       Boolean secondAttempt = ops.setIfAbsent("lock:invoice:789", "INSTANCE_B", Duration.ofSeconds(10));
+       System.out.println("Second Attempt Acquired: " + secondAttempt);
+       // Output: Second Attempt Acquired: false
+   }
+   ```
 
-        return RedisCacheManager.builder(factory)
-            .cacheDefaults(config)
-            // Per-cache specific TTL overrides
-            .withCacheConfiguration("products", config.entryTtl(Duration.ofHours(1)))
-            .withCacheConfiguration("exchangeRates", config.entryTtl(Duration.ofSeconds(30)))
-            .build();
-    }
-}
-```
+5. **Pros & Cons (Benefits vs. Drawbacks & Hard Limits)**:
+   | Metric | Advantage | Drawback / Limit |
+   | :--- | :--- | :--- |
+   | **Latency** | Sub-millisecond ($<0.5\text{ms}$) reads and writes. | Storing massive JSON blobs burns excessive network bandwidth. |
+   | **Atomic Counters** | Native `INCRBY` / `DECRBY` eliminates database update locks. | Maximum size: 512 MB per key (production rule: keep $<100\text{ KB}$). |
+   | **Object Overhead** | Integer encoding saves memory. | Small strings incur 16-byte `robj` + dict entry overhead ($\approx 96$ bytes). |
 
----
+6. **Production Efficiency: When to Use vs. Anti-Patterns**:
+   - **Ideal Scenarios**: High-frequency read-through API caching, idempotency keys, atomic distributed sequence numbers, temporary auth tokens.
+   - **Fatal Anti-Pattern**: Serializing a 50-field User DTO into a JSON string when the application frequently updates only one field (`lastLoginTimestamp`). Deserializing 100 KB, updating 1 timestamp, and re-serializing 100 KB back to Redis wastes CPU, network I/O, and causes race condition overwrites! (Use a Redis **Hash** instead).
 
-## 2.2 Distributed Locks with Redisson (Reentrant & Watchdog)
+7. **How It Breaks: Top Beginner Mistakes & Failure Dynamics**:
+   - **The Non-Atomic `SETNX` without TTL Leak**:
+     ```java
+     // 💥 DISASTER: Two-step non-atomic locking!
+     redisTemplate.opsForValue().setIfAbsent("lock:order", "1");
+     // If JVM crashes, OOMs, or is killed HERE, the lock key NEVER expires!
+     redisTemplate.expire("lock:order", Duration.ofSeconds(10));
+     // ✅ FIX: Always use the atomic single-command overload:
+     redisTemplate.opsForValue().setIfAbsent("lock:order", "1", Duration.ofSeconds(10));
+     ```
 
-```java
-package com.example.redis.lock;
-
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
-import org.springframework.stereotype.Service;
-
-import java.util.concurrent.TimeUnit;
-
-@Service
-public class FlashSaleBookingService {
-
-    private final RedissonClient redisson;
-
-    public FlashSaleBookingService(RedissonClient redisson) {
-        this.redisson = redisson;
-    }
-
-    public boolean purchaseLimitedStock(String productId, int quantity) {
-        String lockKey = "lock:product:" + productId;
-        RLock lock = redisson.getLock(lockKey);
-
-        try {
-            // Wait up to 3 seconds to acquire lock; lock holds for 10 seconds
-            boolean isLocked = lock.tryLock(3, 10, TimeUnit.SECONDS);
-            if (!isLocked) {
-                return false; // Could not acquire lock, system busy
-            }
-
-            // Critical Section: Decrement stock safely
-            return executeInventoryDecrement(productId, quantity);
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        } finally {
-            if (lock.isHeldByCurrentThread()) {
-                lock.unlock(); // Safe unlock
-            }
-        }
-    }
-
-    private boolean executeInventoryDecrement(String productId, int qty) {
-        // Business logic...
-        return true;
-    }
-}
-```
+8. **Tricky Interview Questions & Gotchas**:
+   - **Q: How does Redis handle integer increments on strings without parsing overhead?**
+     - *Answer*: If a string contains a numeric value within 64-bit integer limits, Redis encodes it internally as `OBJ_ENCODING_INT` directly inside the pointer field. Calling `INCR` executes direct CPU integer addition without any string parsing or memory reallocation.
 
 ---
 
-## 2.3 Atomic Rate Limiting with Redis Lua Scripting
+## 2.2 Redis Hashes & ZipList/Dict Optimization
 
-```java
-package com.example.redis.ratelimit;
+1. **Architectural Overview & Purpose**:
+   - Maps string fields to string values (`Field -> Value`). Engineered to represent objects (User Profiles, Shopping Carts, Account Balances) and update individual fields without modifying the entire object.
 
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.stereotype.Service;
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **Dual Encoding Mechanism**:
+     - **`ziplist` / `listpack` (Memory-Compressed Array)**: When a Hash contains fewer than 512 fields (`hash-max-ziplist-entries`) and all field/value sizes are $<64$ bytes (`hash-max-ziplist-value`), Redis stores the entire hash in a contiguous linear memory buffer. This eliminates pointer overhead and dictionary headers, **saving up to 80% RAM**!
+     - **`hashtable` (SipHash)**: When thresholds are exceeded, Redis automatically migrates the hash to a dynamic hash table with bucket array, collision chaining, and incremental rehash.
 
-import java.util.Collections;
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForHash()
+   void put(String key, Object hashKey, Object value);             // HSET key field val
+   void putAll(String key, Map<?, ?> m);                          // HMSET key f1 v1 f2 v2
+   Object get(String key, Object hashKey);                        // HGET key field
+   Map<Object, Object> entries(String key);                       // HGETALL key (DANGER!)
+   Boolean hasKey(String key, Object hashKey);                    // HEXISTS key field
+   Long increment(String key, Object hashKey, long delta);        // HINCRBY key field delta
+   ```
 
-@Service
-public class RedisRateLimiterService {
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   public void runHashExamples() {
+       HashOperations<String, Object, Object> hashOps = redisTemplate.opsForHash();
+       String cartKey = "cart:user:405";
 
-    private final StringRedisTemplate redisTemplate;
+       // 1. Partial Object Updates
+       Map<String, String> initialCart = Map.of(
+           "item:SKU-100", "2",
+           "item:SKU-200", "1",
+           "couponCode", "SPRING20"
+       );
+       hashOps.putAll(cartKey, initialCart);
 
-    // Atomic Token Bucket Lua script
-    private static final String LUA_RATE_LIMIT = """
-        local key = KEYS[1]
-        local limit = tonumber(ARGV[1])
-        local window = tonumber(ARGV[2])
-        local current = redis.call('INCR', key)
-        if current == 1 then
-            redis.call('EXPIRE', key, window)
-        end
-        if current > limit then
-            return 0
-        else
-            return 1
-        end
-        """;
+       // 2. Increment item quantity directly inside the hash
+       hashOps.increment(cartKey, "item:SKU-100", 3); // Quantity becomes 2 + 3 = 5
 
-    public RedisRateLimiterService(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
-    }
+       System.out.println("SKU-100 Qty: " + hashOps.get(cartKey, "item:SKU-100"));
+       // Output: SKU-100 Qty: 5
 
-    public boolean isAllowed(String apiKey, int maxRequests, int windowSeconds) {
-        String key = "ratelimit:" + apiKey;
-        DefaultRedisScript<Long> script = new DefaultRedisScript<>(LUA_RATE_LIMIT, Long.class);
+       // 3. Fast Field Existence Check without loading whole object
+       Boolean hasCoupon = hashOps.hasKey(cartKey, "couponCode");
+       System.out.println("Has Coupon: " + hasCoupon);
+       // Output: Has Coupon: true
+   }
+   ```
 
-        Long result = redisTemplate.execute(
-            script,
-            Collections.singletonList(key),
-            String.valueOf(maxRequests),
-            String.valueOf(windowSeconds)
-        );
+5. **Pros & Cons (Benefits vs. Drawbacks & Hard Limits)**:
+   | Feature | Advantage | Drawback / Limit |
+   | :--- | :--- | :--- |
+   | **Granular Updates** | Mutate a single field without touching others. | Expiration (`TTL`) cannot be set on individual fields (applies to whole hash). |
+   | **Memory Packing** | Ziplist encoding reduces RAM footprint by $5\times$. | `HGETALL` on massive hashes blocks single-threaded event loop. |
 
-        return result != null && result == 1L;
-    }
-}
-```
+6. **Production Efficiency: When to Use vs. Anti-Patterns**:
+   - **Ideal Scenarios**: User shopping carts, user sessions, live IoT sensor metrics, dynamic account attributes.
+   - **Fatal Anti-Pattern**: Calling `HGETALL` on a Hash containing 100,000 fields! `HGETALL` is $O(N)$ and blocks the single-threaded Redis engine for 200ms–2 seconds, timing out all upstream microservices. Always use `HSCAN` or `HMGET` for selective field reads.
+
+7. **Tricky Interview Questions & Gotchas**:
+   - **Q: Can you expire a single field inside a Redis Hash?**
+     - *Answer*: Prior to Redis 7.4, native TTL applied strictly to the top-level key; individual field expiration required storing timestamp fields and checking them manually or storing each field as a separate String key. Redis 7.4 introduced field-level expiration (`HEXPIRE`, `HTTL`).
+
+---
+
+## 2.3 Redis Lists & QuickLists: Queues & Activity Feeds
+
+1. **Architectural Overview & Purpose**:
+   - Ordered collection of strings sorted by insertion order. Supports high-speed $O(1)$ push and pop operations at both the head and tail, making it ideal for message queues, task buffers, and capped activity logs.
+
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **`quicklist` (Doubly-Linked List of `ziplist` nodes)**:
+     - Traditional linked lists waste 24 bytes per node and cause CPU cache misses.
+     - Pure ziplists require expensive memory reallocations when resizing large arrays.
+     - **The QuickList Hybrid**: A doubly-linked list where each individual node is a compact `ziplist` containing multiple elements. This provides fast $O(1)$ head/tail operations while retaining contiguous CPU cache locality and zero memory fragmentation.
+
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForList()
+   Long leftPush(String key, String value);                       // LPUSH (Head)
+   Long rightPush(String key, String value);                      // RPUSH (Tail)
+   String leftPop(String key);                                    // LPOP
+   String rightPop(String key);                                   // RPOP (FIFO Queue with LPUSH)
+   String rightPop(String key, Duration timeout);                 // BRPOP (Blocking wait)
+   List<String> range(String key, long start, long end);          // LRANGE (Paging)
+   void trim(String key, long start, long end);                   // LTRIM (Fixed-size buffer)
+   ```
+
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   public void runListExamples() {
+       ListOperations<String, String> listOps = redisTemplate.opsForList();
+       String auditKey = "audit:recent:events";
+
+       // Capped Ring Buffer: Always keep strictly the last 3 events
+       listOps.leftPush(auditKey, "EVENT_LOGIN");
+       listOps.leftPush(auditKey, "EVENT_PASSWORD_CHANGE");
+       listOps.leftPush(auditKey, "EVENT_PAYMENT");
+       listOps.leftPush(auditKey, "EVENT_LOGOUT");
+       listOps.trim(auditKey, 0, 2); // Keeps only indices 0, 1, 2 (drops EVENT_LOGIN)
+
+       List<String> recent = listOps.range(auditKey, 0, -1);
+       System.out.println("Recent Events: " + recent);
+       // Output: Recent Events: [EVENT_LOGOUT, EVENT_PAYMENT, EVENT_PASSWORD_CHANGE]
+   }
+   ```
+
+5. **Pros & Cons (Benefits vs. Drawbacks & Hard Limits)**:
+   - **Pros**: $O(1)$ push/pop at ends; `BRPOP` provides zero-CPU blocking waits for background workers.
+   - **Cons**: Random index access (`LINDEX`, `LINSERT`) is $O(N)$. Never use Redis Lists as a random-access indexed array!
+
+---
+
+## 2.4 Redis Sets & IntSets: Deduplication & Set Algebra
+
+1. **Architectural Overview & Purpose**:
+   - Unordered collection of unique strings. Provides $O(1)$ time complexity for adding, removing, and testing existence of members, as well as powerful set operations (Intersection, Union, Difference).
+
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **`intset` (Sorted Integer Array)**: If a Set consists solely of 64-bit integers and contains fewer than 512 members, Redis stores it in a tightly packed binary array using binary search ($O(\log N)$).
+   - **`hashtable`**: Upgrades to a hash table with empty values when string elements are added or capacity exceeds thresholds.
+
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForSet()
+   Long add(String key, String... values);                        // SADD
+   Boolean isMember(String key, Object o);                        // SISMEMBER (O(1))
+   Set<String> members(String key);                               // SMEMBERS (DANGER if large)
+   Set<String> intersect(String key, String otherKey);            // SINTER
+   Set<String> union(String key, String otherKey);                // SUNION
+   Set<String> difference(String key, String otherKey);           // SDIFF
+   ```
+
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   public void runSetExamples() {
+       SetOperations<String, String> setOps = redisTemplate.opsForSet();
+
+       setOps.add("user:101:skills", "JAVA", "SPRING", "DOCKER", "KUBERNETES");
+       setOps.add("user:102:skills", "PYTHON", "JAVA", "DOCKER", "AWS");
+
+       // Calculate Mutual / Common Skills (Intersection)
+       Set<String> mutualSkills = setOps.intersect("user:101:skills", "user:102:skills");
+       System.out.println("Common Skills: " + mutualSkills);
+       // Output: Common Skills: [JAVA, DOCKER]
+
+       // Deduplication test
+       Boolean knowsKafka = setOps.isMember("user:101:skills", "KAFKA");
+       System.out.println("Knows Kafka: " + knowsKafka);
+       // Output: Knows Kafka: false
+   }
+   ```
+
+5. **Pros & Cons**:
+   - **Pros**: Blazingly fast membership tests; server-side set algebra eliminates client-side looping.
+   - **Cons**: `SMEMBERS` on sets with 1,000,000 items blocks the event loop. Always use `SSCAN` in production.
+
+---
+
+## 2.5 Redis Sorted Sets (ZSets) & SkipLists: Leaderboards & Rate Limiters
+
+1. **Architectural Overview & Purpose**:
+   - Every element in a Sorted Set is associated with a floating-point **score**. Elements are maintained in sorted order by score. Ideal for real-time leaderboards, priority queues, and sliding-window rate limiters.
+
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **The Dual Data Structure**:
+     - **Hash Table**: Maps `member -> score` in $O(1)$ time.
+     - **SkipList (Probabilistic Multilevel Linked List)**:
+       ```
+       Level 3: [Head] ------------------------------> [Node 75] -> NIL
+       Level 2: [Head] -------------> [Node 40] ------> [Node 75] -> NIL
+       Level 1: [Head] -> [Node 10] -> [Node 40] ------> [Node 75] -> NIL
+       ```
+       Provides $O(\log N)$ search, insertion, deletion, and range scans without the complex rebalancing rotations of AVL or Red-Black trees.
+
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForZSet()
+   Boolean add(String key, String value, double score);           // ZADD
+   Double incrementScore(String key, String value, double delta); // ZINCRBY
+   Long rank(String key, Object o);                               // ZRANK (0-based ascending)
+   Long reverseRank(String key, Object o);                        // ZREVRANK (0-based descending)
+   Set<String> reverseRange(String key, long start, long end);    // ZREVRANGE (Top-N)
+   Long removeRangeByScore(String key, double min, double max);   // ZREMRANGEBYSCORE
+   ```
+
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   public void runZSetExamples() {
+       ZSetOperations<String, String> zsetOps = redisTemplate.opsForZSet();
+       String leaderboardKey = "leaderboard:gaming:season1";
+
+       zsetOps.add(leaderboardKey, "Player_Alpha", 1250);
+       zsetOps.add(leaderboardKey, "Player_Bravo", 2400);
+       zsetOps.add(leaderboardKey, "Player_Charlie", 1850);
+       zsetOps.add(leaderboardKey, "Player_Delta", 3100);
+
+       // 1. Get Rank of Player_Charlie (Descending Order, Top rank is 0)
+       Long rank = zsetOps.reverseRank(leaderboardKey, "Player_Charlie");
+       System.out.println("Player_Charlie Rank: #" + (rank + 1));
+       // Output: Player_Charlie Rank: #3 (Delta=1, Bravo=2, Charlie=3, Alpha=4)
+
+       // 2. Fetch Top 3 Players
+       Set<String> top3 = zsetOps.reverseRange(leaderboardKey, 0, 2);
+       System.out.println("Top 3 Players: " + top3);
+       // Output: Top 3 Players: [Player_Delta, Player_Bravo, Player_Charlie]
+   }
+   ```
+
+5. **Sliding Window Rate Limiter Blueprint (Using ZSet & Unix Milliseconds)**:
+   ```java
+   public boolean isAllowed(String userId, int maxRequests, long windowMillis) {
+       String key = "ratelimit:sliding:" + userId;
+       long now = System.currentTimeMillis();
+       long clearBefore = now - windowMillis;
+
+       ZSetOperations<String, String> zset = redisTemplate.opsForZSet();
+       // Remove all requests outside the sliding window
+       zset.removeRangeByScore(key, 0, clearBefore);
+
+       // Count requests remaining in the window
+       Long currentCount = zset.zCard(key);
+       if (currentCount != null && currentCount >= maxRequests) {
+           return false; // Rate limit exceeded!
+       }
+
+       // Add current request with current timestamp as score
+       zset.add(key, String.valueOf(now), now);
+       redisTemplate.expire(key, Duration.ofMillis(windowMillis));
+       return true;
+   }
+   ```
+
+---
+
+## 2.6 Redis Streams & Radix Trees: Event Sourcing & Consumer Groups
+
+1. **Architectural Overview & Purpose**:
+   - Append-only log data structure introduced in Redis 5.0. Models Apache Kafka semantics inside Redis: supports Consumer Groups, message offsets, delivery acknowledgments (`XACK`), and automatic message replay via the **Pending Entries List (PEL)**.
+
+2. **Underlying Algorithm, Data Structure & Design Pattern**:
+   - **Radix Tree (Rax Engine)**: Memory-optimized tree data structure indexing Stream entries by timestamp and sequence number (`<millisecondsTime>-<sequenceNumber>`, e.g., `1717654321000-0`).
+   - **Pending Entries List (PEL)**: Tracks messages delivered to a consumer but not yet acknowledged via `XACK`. If a worker pod crashes, pending messages in the PEL are reclaimed via `XCLAIM`.
+
+3. **Full Syntax & Method Signatures**:
+   ```java
+   // StringRedisTemplate opsForStream()
+   RecordId add(String key, Map<String, String> content);         // XADD key * f1 v1
+   List<MapRecord<String, Object, Object>> read(Consumer consumer, StreamOffset<String> offset);
+   Long acknowledge(String key, String group, RecordId... ids);   // XACK key group id
+   PendingMessagesSummary pending(String key, String group);      // XPENDING summary
+   ```
+
+4. **Concrete Code Examples with Sample Values & Expected Results**:
+   ```java
+   public void runStreamExamples() {
+       StreamOperations<String, Object, Object> streamOps = redisTemplate.opsForStream();
+       String streamKey = "stream:orders";
+
+       // Producer: Publish Order Placed Event
+       Map<String, String> orderEvent = Map.of("orderId", "ORD-9901", "amount", "450.00", "currency", "USD");
+       RecordId messageId = streamOps.add(streamKey, orderEvent);
+       System.out.println("Published Event ID: " + messageId);
+       // Output: Published Event ID: 1717654321000-0
+
+       // Consumer: Read events with auto-ack
+       List<MapRecord<String, Object, Object>> messages = streamOps.read(
+           Consumer.from("order_processors", "worker_pod_1"),
+           StreamReadOptions.empty().count(10),
+           StreamOffset.create(streamKey, ReadOffset.lastConsumed())
+       );
+   }
+   ```
+
+---
+
+## 2.7 Redis Memory Eviction Policies & Sizing Formulas
+
+1. **Eviction Algorithms & Mechanics**:
+   When `used_memory` reaches `maxmemory`, Redis evaluates its eviction policy:
+   - **`noeviction` (Default)**: Rejects writes with `(error) OOM command not allowed`, serves reads.
+   - **`allkeys-lru`**: Evicts least recently used keys across all keys.
+   - **`volatile-lru`**: Evicts least recently used keys among keys with an expiration (`TTL`) set.
+   - **`allkeys-lfu`**: Evicts least frequently used keys across all keys.
+   - **`volatile-ttl`**: Evicts keys with shortest remaining TTL.
+
+2. **The Sampling Approximation Algorithm**:
+   - Redis does NOT maintain a global doubly-linked list of all keys for LRU (which would burn 16 bytes per key).
+   - Instead, it uses **Random Sampling**: It randomly picks $N$ keys (default `maxmemory-samples 5`), examines their idle times, and evicts the oldest key among the sample. With 10 samples, accuracy closely approximates theoretical true LRU with zero memory overhead!
+
+3. **Production Memory Sizing Formula**:
+   $$\text{RAM Needed} = \left( \sum (\text{Key Count} \times (\text{Key Bytes} + \text{Val Bytes} + 96\text{ bytes overhead})) \right) \times 1.3\text{ (Buffer)}$$
+
+---
+
+## 2.8 Distributed Locking Architecture: Redisson Watchdog vs Redlock
+
+1. **The Native Redis Lock Algorithm (Single Node)**:
+   - **Acquire**: `SET lock:order:101 UUID_TOKEN NX PX 10000` (Atomic Set if Not Exists with 10s lease).
+   - **Release**: Must be executed via **Lua script** to ensure the client only releases the lock if the value matches its own `UUID_TOKEN` (preventing deleting another client's lock):
+     ```lua
+     if redis.call('get', KEYS[1]) == ARGV[1] then
+         return redis.call('del', KEYS[1])
+     else
+         return 0
+     end
+     ```
+
+2. **The Redisson Watchdog Mechanics**:
+   - *Problem*: What if the business operation takes 15 seconds, but lock lease was 10 seconds? The lock expires, another worker acquires the lock, and concurrent execution corrupts state!
+   - *Watchdog Solution*: If no explicit lease time is provided (`lock.lock()`), Redisson starts a background Netty timer task that periodically renews the lock expiration every **10 seconds** (`lockWatchdogTimeout / 3`) as long as the holding thread is alive.
+
+3. **Production Flash Sale Code Blueprint**:
+   ```java
+   @Service
+   public class InventoryBookingService {
+       private final RedissonClient redisson;
+
+       public InventoryBookingService(RedissonClient redisson) {
+           this.redisson = redisson;
+       }
+
+       public boolean reserveStock(String productId, int quantity) {
+           RLock lock = redisson.getLock("lock:inventory:" + productId);
+           try {
+               // Wait up to 3s to acquire lock; Watchdog automatically extends lease!
+               boolean acquired = lock.tryLock(3, -1, TimeUnit.SECONDS);
+               if (!acquired) return false;
+
+               // Critical Section: Decrement stock safely
+               return executeDecrement(productId, quantity);
+
+           } catch (InterruptedException e) {
+               Thread.currentThread().interrupt();
+               return false;
+           } finally {
+               if (lock.isHeldByCurrentThread()) {
+                   lock.unlock(); // Safe unlock
+               }
+           }
+       }
+       private boolean executeDecrement(String id, int qty) { return true; }
+   }
+   ```
+
+---
+
+## 2.9 Atomic Lua Scripting & Redis Transactions
+
+1. **Why Lua Scripting Over `MULTI`/`EXEC`**:
+   - `MULTI`/`EXEC` queues commands, but **does NOT support rollback** if a command fails logically, nor does it allow using the result of Step 1 to decide Step 2 within the same transaction.
+   - Lua scripts run atomically inside the single-threaded Redis engine: no other command can execute while a Lua script is running!
+
+2. **Production Rate Limiter Lua Script**:
+   ```java
+   @Service
+   public class RedisLuaRateLimiter {
+       private final StringRedisTemplate redisTemplate;
+
+       private static final String SCRIPT = """
+           local key = KEYS[1]
+           local limit = tonumber(ARGV[1])
+           local window = tonumber(ARGV[2])
+           local current = redis.call('INCR', key)
+           if current == 1 then
+               redis.call('EXPIRE', key, window)
+           end
+           if current > limit then
+               return 0
+           else
+               return 1
+           end
+           """;
+
+       public RedisLuaRateLimiter(StringRedisTemplate redisTemplate) {
+           this.redisTemplate = redisTemplate;
+       }
+
+       public boolean allow(String clientId, int limit, int windowSec) {
+           DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>(SCRIPT, Long.class);
+           Long result = redisTemplate.execute(
+               redisScript,
+               Collections.singletonList("ratelimit:" + clientId),
+               String.valueOf(limit),
+               String.valueOf(windowSec)
+           );
+           return result != null && result == 1L;
+       }
+   }
+   ```
+
+---
+
+## 2.10 Redis Persistence & High Availability Topologies
+
+1. **Persistence Mechanics (RDB vs AOF vs Hybrid)**:
+   - **RDB (Snapshotting)**: Calls `bgsave` via `fork()` system call. Copy-On-Write (COW) dumps point-in-time binary snapshot to `dump.rdb`. Fast recovery, but risks losing minutes of data between snapshots.
+   - **AOF (Append Only File)**: Logs every write command to `appendonly.aof`.
+     - `appendfsync always`: Slow, guaranteed zero data loss.
+     - `appendfsync everysec`: **Production Standard** (max 1 second of data loss).
+   - **Hybrid Persistence (Redis 4.0+)**: RDB preamble + AOF incremental log. Fast restarts with minimal data loss.
+
+2. **Sentinel vs Redis Cluster**:
+   - **Redis Sentinel**: Master-Replica architecture with automated failover via quorum voting. Best for data sets $<50\text{ GB}$.
+   - **Redis Cluster (Sharding)**: Multi-master distributed hash ring with **16,384 hash slots**. Shard determined via $\text{CRC16}(\text{key}) \pmod{16384}$. Scales horizontally beyond RAM limits of a single machine.
 
 ---
 

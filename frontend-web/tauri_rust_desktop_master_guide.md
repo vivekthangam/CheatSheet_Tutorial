@@ -532,4 +532,74 @@ pub async fn compute_dir_hash(path: String) -> Result<String, String> {
 > **Trap Follow-Up**: What if an attacker manages to bypass CSP and execute `window.__TAURI_INTERNALS__.invoke('unwhitelisted_cmd')`?  
 > **Winning Answer**: The Rust core rejects the invocation at runtime because the command fails capability ACL resolution, throwing an authorization error before command parameters are even deserialized.
 
-*(...and 48 additional production-grade scenarios covering cross-compilation, auto-updaters, multi-window synchronization, and custom protocol streaming).*
+#### Q3: How does Tauri's binary size and RAM footprint compare to Electron, and what is the technical reason?
+> **Interviewer Evaluates**: Systems architecture trade-offs and runtime footprint analysis.  
+> **Standout Answer**:
+> - **Binary Size**: Electron bundles an entire Chromium browser engine and Node.js runtime inside every application installer, resulting in base installer sizes of 80MB to 150MB. Tauri reuses the operating system's pre-installed webview (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS) and compiles native Rust machine code, producing release binaries as small as 3MB to 10MB.
+> - **RAM Usage**: Electron initializes a dedicated Chromium GPU and render process plus Node.js V8 heap per window, consuming 150MB to 300MB idle RAM. Tauri runs the OS webview with a lightweight Rust backend, typically idling at 30MB to 50MB RAM.
+
+#### Q4: How do you stream multi-gigabyte binary files from Rust backend to webview frontend without base64 or memory bloat?
+> **Interviewer Evaluates**: IPC serialization limits, zero-copy memory pipelines, and custom asset protocols.  
+> **Standout Answer**: Passing large binary files through JSON IPC using base64 strings inflates payload size by 33% and forces full buffer allocation in both V8/JavaScript and Rust heaps. The production-grade solution is to register a **Custom Asset Protocol** (`tauri::protocol::register`) in Rust:
+> ```rust
+> app.register_asynchronous_uri_scheme_protocol("stream", |ctx, req, resp| {
+>     // Stream chunked file bytes directly into the HTTP response stream:
+>     let file = std::fs::File::open(path)?;
+>     resp.body(tauri::http::HttpBody::from(file))
+> });
+> ```
+> In the frontend, the webview consumes it as a native standard HTTP stream (`<video src="stream://video.mp4">` or `fetch('stream://...')`), bypassing JSON IPC entirely with kernel-buffered zero-copy streaming.
+
+#### Q5: What is Tao and how does it interface with Wry and the OS windowing manager?
+> **Interviewer Evaluates**: Tauri core crate decoupling and native OS windowing event loops.  
+> **Standout Answer**: **Tao** is a Rust cross-platform window creation and event loop library (a fork of `winit`). It communicates directly with native OS windowing APIs (Win32/CreateWindowEx on Windows, Cocoa/NSWindow on macOS, X11/Wayland on Linux). Tao creates the native OS window frame, listens to hardware keyboard/mouse events, and handles system tray events. Once Tao creates the window handle, **Wry** embeds the native webview inside that window canvas.
+
+#### Q6: How do you handle Deep Linking (custom URL schemes like `myapp://auth?token=...`) in Tauri 2.0?
+> **Interviewer Evaluates**: Single-instance desktop routing, OAuth redirects, and OS IPC signaling.  
+> **Standout Answer**:
+> 1. In `tauri.conf.json`, register the custom scheme in the `bundle > iOS/macOS/Windows` scheme configurations.
+> 2. Use the official `@tauri-apps/plugin-deep-link` plugin.
+> 3. Enforce the **Single Instance Plugin** (`tauri-plugin-single-instance`). When an external browser redirects to `myapp://auth?code=123`, the OS launches a second instance. The single-instance plugin intercepts this launch, extracts the deep-link URL arguments, forwards them over a local named pipe/socket to the already running primary instance, and terminates the second process.
+
+#### Q7: How does Tauri's cryptographic auto-updater verify application update packages before execution?
+> **Interviewer Evaluates**: Supply-chain security, binary integrity, and cryptographic code signing.  
+> **Standout Answer**: Tauri's auto-updater uses **Minisign** asymmetric cryptography (Ed25519 public-key signature system).
+> 1. The developer generates a keypair: `tauri signer generate`. The private key is securely kept in CI/CD secrets.
+> 2. The public key is compiled directly into the application's `tauri.conf.json`.
+> 3. During release packaging, Tauri signs the installer binary with the private key and publishes a `.sig` file alongside the binary.
+> 4. Before installing an update, the running client downloads both the archive and `.sig`, validates the Ed25519 signature against its embedded public key, and aborts immediately if a single byte was altered or tampered with.
+
+#### Q8: Why must heavy synchronous computations never be run directly inside an `async fn` `#[tauri::command]`?
+> **Interviewer Evaluates**: Tokio runtime mechanics, worker thread starvation, and UI responsiveness.  
+> **Standout Answer**: Tauri's async commands execute on a shared Tokio async runtime. If a command performs heavy synchronous CPU work (e.g. image encoding, heavy cryptographic hashing, or large array sorting) inside an `async` function without an `.await` suspension point, it monopolizes the underlying Tokio worker thread. If enough long-running CPU commands execute concurrently, all Tokio worker threads become blocked, freezing all asynchronous IPC communication and causing the UI to become completely unresponsive. Solution: wrap synchronous CPU work in `tokio::task::spawn_blocking(move || { ... })`.
+
+#### Q9: How does Tauri 2.0 handle multi-window state synchronization between isolated webviews?
+> **Interviewer Evaluates**: Cross-window communication and distributed state synchronization.  
+> **Standout Answer**: In Tauri, each window is an isolated webview process with its own JavaScript context and DOM. Cross-window state synchronization is implemented via:
+> 1. **Tauri Event System**: `emit_to("window-label", "event-name", payload)` broadcasts typed events through the Rust backend.
+> 2. **Rust-Managed State (`tauri::State<Mutex<T>>`)**: Centralize state in the Rust backend. Windows invoke commands to mutate or fetch shared state.
+> 3. **Tauri Plugin Store**: Uses an encrypted, thread-safe on-disk key-value store synchronized across all windows with automatic file-watch reloads.
+
+#### Q10: How does Tauri 2.0 support cross-platform mobile targets (iOS and Android)?
+> **Interviewer Evaluates**: Mobile architecture and native platform FFI bridges.  
+> **Standout Answer**: Tauri 2.0 re-architected its core into a plugin-based system that abstracts both desktop and mobile platforms:
+> - On **Android**, Tauri compiles Rust into a JNI shared library (`.so`) packaged within a native Kotlin Gradle project. The frontend renders inside Android's native `WebView`.
+> - On **iOS**, Tauri compiles Rust into a static C library (`.a`) embedded inside an Xcode project. The frontend renders inside `WKWebView`.
+> - Plugins use Swift on iOS and Kotlin/Java on Android, exposing native mobile APIs (camera, biometrics, push notifications) via unified Rust FFI bindings.
+
+---
+
+## ⚖️ Tauri 2.0 Production Hardening Cheat Sheet
+
+| Category | Recommended Setting | Production Purpose |
+| :--- | :--- | :--- |
+| **Security ACL** | `capabilities/*.json` with minimal whitelists | Prevents compromised webviews from invoking dangerous Rust commands |
+| **Content Security** | Strict CSP: `default-src 'self'; script-src 'self'` | Eliminates XSS injection and unauthorized script execution |
+| **Large Data I/O** | Custom Asset Protocol (`register_uri_scheme`) | Replaces slow Base64 JSON serialization with $O(1)$ zero-copy streaming |
+| **CPU Workloads** | `tokio::task::spawn_blocking` | Prevents Tokio async runtime starvation and desktop UI freezes |
+| **Auto-Updates** | Minisign Ed25519 Signature Verification | Prevents supply-chain attacks and binary tampering |
+| **Deep Links** | Single Instance Plugin + Custom URL Scheme | Ensures seamless OAuth 2.0 desktop redirects without spawning duplicate windows |
+
+---
+[🏠 Back to Home](README.md) | [🦀 Rust Systems Guide](rust_master_guide.md) | [⚛️ React Master Guide](react_master_guide.md)
+

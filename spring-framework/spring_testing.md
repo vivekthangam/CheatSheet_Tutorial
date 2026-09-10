@@ -169,181 +169,224 @@ class OrderServiceUnitTest {
 
 ## Master Testing Strategy Decision Matrix
 
-| Strategy | Spring Context Booted? | Database Used | Speed (per test) | Best Used For |
-| :--- | :--- | :--- | :--- | :--- |
-| **JUnit 5 + Mockito** | **No** (Zero overhead) | None (Mocked) | $<5\text{ms}$ | Complex business logic, calculation engines |
-| **`@WebMvcTest`** | Sliced (Web layer only)| None (Mocked service) | $200\text{ms}$ | HTTP controllers, validation, security, JSON mapping |
-| **`@DataJpaTest`** | Sliced (JPA layer only)| Testcontainers PostgreSQL | $500\text{ms}$ | Custom repository queries, JPA mapping, DB constraints|
-| **`@SpringBootTest`** | **Full Context** | Testcontainers All | $2\text{s} - 5\text{s}$ | End-to-end integration flows, Kafka event pipelines |
+| Strategy | Spring Context Booted? | Database Used | Speed (per test) | Best Used For | Anti-Pattern For |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **JUnit 5 + Mockito** | **No** (Zero overhead) | None (Mocked) | $<5\text{ms}$ | Complex business logic, calculation engines | Testing database queries or HTTP endpoints |
+| **`@WebMvcTest`** | Sliced (Web layer only)| None (Mocked service) | $200\text{ms}$ | HTTP controllers, validation, security, JSON mapping | Testing database transaction rollback |
+| **`@DataJpaTest`** | Sliced (JPA layer only)| Testcontainers PostgreSQL | $500\text{ms}$ | Custom repository queries, JPA mapping, DB constraints| Testing REST controller serialization |
+| **`@SpringBootTest`** | **Full Context** | Testcontainers All | $2\text{s} - 5\text{s}$ | End-to-end integration flows, Kafka event pipelines | Unit testing simple helper methods |
+| **WireMock** | Optional | None (HTTP stub) | $<10\text{ms}$ | Third-party payment gateways, external partner APIs | Mocking internal database calls |
+| **Awaitility** | Depends on test | Real/Container | Variable | Event-driven eventually consistent Kafka consumers | Synchronous REST endpoints |
+| **EmbeddedKafka** | Context-bound | In-Memory Broker | $1\text{s}$ | Fast local queue routing tests | Realistic multi-partition rebalance tests |
+| **Contract (Pact)** | Sliced/Unit | None | $<50\text{ms}$ | Consumer-driven API contract validation across teams | Heavy performance load testing |
+| **`@Sql` Cleaners** | Integrated | Testcontainers DB | $20\text{ms}$ | Deterministic dataset seeding before complex tests | Unit tests with zero database requirements |
+| **Parallel Execution**| Engine-level | Isolated containers | $4\times$ Speedup | Mass CI test suites with $>500$ test classes | Shared mutable static singleton state |
 
 ---
 
 ## 2.1 Modern Testcontainers Integration with `@ServiceConnection`
 
-Spring Boot 3.1 introduced `@ServiceConnection`, completely eliminating verbose `@DynamicPropertySource` configuration:
+1. **Architectural Overview & Purpose**:
+   - In Spring Boot 3.1+, `@ServiceConnection` completely eliminates verbose `@DynamicPropertySource` methods (`registry.add("spring.datasource.url", ...)`).
+   - Automatically inspects the container image (e.g. `postgres:16-alpine`), extracts JDBC URL, credentials, and driver class, and injects them directly into the Spring environment.
 
-```java
-package com.example.testing.integration;
+2. **Production Blueprint**:
+   ```java
+   @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+   @Testcontainers
+   class OrderIntegrationTest {
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+       @Container
+       @ServiceConnection
+       static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
-import static org.assertj.core.api.Assertions.assertThat;
+       @Autowired
+       private OrderRepository orderRepository;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers // Manages Docker container lifecycle
-class OrderIntegrationTest {
+       @Test
+       void shouldPersistAndRetrieveOrder() {
+           Order saved = orderRepository.save(new Order(null, "ORD-999", 199.99));
+           assertThat(saved.getId()).isNotNull();
 
-    // Spring Boot 3.1+ automatically wires JDBC properties to this container!
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    @Autowired
-    private OrderRepository orderRepository;
-
-    @Test
-    void shouldPersistAndRetrieveOrder() {
-        Order saved = orderRepository.save(new Order(null, "ORD-999", 199.99));
-        assertThat(saved.getId()).isNotNull();
-
-        Order found = orderRepository.findById(saved.getId()).orElseThrow();
-        assertThat(found.getOrderNumber()).isEqualTo("ORD-999");
-    }
-}
-```
+           Order found = orderRepository.findById(saved.getId()).orElseThrow();
+           assertThat(found.getOrderNumber()).isEqualTo("ORD-999");
+       }
+   }
+   ```
 
 ---
 
 ## 2.2 Controller Sliced Testing with `@WebMvcTest` & `MockMvc`
 
-```java
-package com.example.testing.controller;
+1. **Architectural Overview & Purpose**:
+   - Boots only the web layer (`DispatcherServlet`, `@Controller`, `@ControllerAdvice`, `SecurityFilterChain`, Jackson converters) without loading database connections or service implementations:
+   ```java
+   @WebMvcTest(OrderController.class)
+   class OrderControllerTest {
 
-import com.example.testing.service.OrderService;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.web.servlet.MockMvc;
+       @Autowired
+       private MockMvc mockMvc;
 
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+       @MockBean
+       private OrderService orderService;
 
-@WebMvcTest(OrderController.class)
-class OrderControllerTest {
+       @Test
+       @WithMockUser(username = "admin", roles = {"ADMIN"})
+       void shouldReturnOrderJson() throws Exception {
+           when(orderService.getOrder("ORD-101"))
+               .thenReturn(new OrderDto("ORD-101", 99.50));
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockBean
-    private OrderService orderService;
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void shouldReturnOrderJson() throws Exception {
-        when(orderService.getOrder("ORD-101"))
-            .thenReturn(new OrderDto("ORD-101", 99.50));
-
-        mockMvc.perform(get("/api/v1/orders/ORD-101")
-                .accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isOk())
-            .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-            .andExpect(jsonPath("$.orderNumber").value("ORD-101"))
-            .andExpect(jsonPath("$.price").value(99.50));
-    }
-}
-```
+           mockMvc.perform(get("/api/v1/orders/ORD-101").accept(MediaType.APPLICATION_JSON))
+               .andExpect(status().isOk())
+               .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+               .andExpect(jsonPath("$.orderNumber").value("ORD-101"))
+               .andExpect(jsonPath("$.price").value(99.50));
+       }
+   }
+   ```
 
 ---
 
-## 2.3 External HTTP Mocking with WireMock
+## 2.3 Persistence Sliced Testing with `@DataJpaTest`
 
-```java
-package com.example.testing.wiremock;
+1. **Architectural Overview & Purpose**:
+   - Boots only `@Entity` classes and Spring Data JPA repositories.
+   - Automatically wraps each `@Test` method in an atomic database transaction that is **automatically rolled back** upon completion, ensuring zero test data pollution.
+   ```java
+   @DataJpaTest
+   @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE) // Uses real Testcontainers DB
+   @Testcontainers
+   class CustomerRepositoryTest {
 
-import com.github.tomakehurst.wiremock.junit5.WireMockTest;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+       @Container
+       @ServiceConnection
+       static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
-import static org.assertj.core.api.Assertions.assertThat;
+       @Autowired
+       private CustomerRepository customerRepository;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@WireMockTest(httpPort = 8089) // Starts WireMock server on local port 8089
-class PaymentGatewayClientTest {
-
-    @Autowired
-    private PaymentClient paymentClient;
-
-    @Test
-    void shouldHandleSuccessfulPaymentResponse() {
-        // Stub external payment API
-        stubFor(post(urlEqualTo("/v1/charges"))
-            .withHeader("Authorization", equalTo("Bearer secret-test-token"))
-            .willReturn(aResponse()
-                .withStatus(200)
-                .withHeader("Content-Type", "application/json")
-                .withBody("""
-                    { "chargeId": "ch_123", "status": "succeeded" }
-                    """)));
-
-        PaymentResult result = paymentClient.charge(50.0);
-
-        assertThat(result.isSuccess()).isTrue();
-        assertThat(result.getChargeId()).isEqualTo("ch_123");
-    }
-}
-```
+       @Test
+       void shouldFindActiveCustomers() {
+           customerRepository.save(new Customer("alice@corp.com", true));
+           List<Customer> active = customerRepository.findAllByActiveTrue();
+           assertThat(active).hasSize(1);
+       }
+   }
+   ```
 
 ---
 
-## 2.4 Asynchronous Event Testing with Awaitility
+## 2.4 External HTTP Mocking with WireMock
 
-```java
-package com.example.testing.async;
+1. **Architectural Overview & Purpose**:
+   - Tests HTTP client integrations (`RestClient`, `WebClient`) against a local mock HTTP server that simulates real network responses, timeouts, and HTTP 5xx errors:
+   ```java
+   @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+   @WireMockTest(httpPort = 8089)
+   class PaymentGatewayClientTest {
 
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+       @Autowired
+       private PaymentClient paymentClient;
 
-import java.time.Duration;
+       @Test
+       void shouldHandleSuccessfulPayment() {
+           stubFor(post(urlEqualTo("/v1/charges"))
+               .withHeader("Authorization", equalTo("Bearer token-secret"))
+               .willReturn(aResponse()
+                   .withStatus(200)
+                   .withHeader("Content-Type", "application/json")
+                   .withBody("""
+                       { "chargeId": "ch_99", "status": "succeeded" }
+                       """)));
 
-import static org.awaitility.Awaitility.await;
+           PaymentResult res = paymentClient.charge(50.0);
+           assertThat(res.isSuccess()).isTrue();
+       }
+   }
+   ```
 
-@SpringBootTest
-class KafkaNotificationTest {
+---
 
-    @Autowired
-    private EventProducer producer;
+## 2.5 Asynchronous Event Pipeline Testing with Awaitility
 
-    @Autowired
-    private AuditRepository auditRepository;
+1. **Architectural Overview & Purpose**:
+   - In distributed event-driven systems (Kafka/RabbitMQ), assertions fail if executed immediately because message consumption is asynchronous.
+   - **Awaitility** polls the condition periodically until it evaluates to true or times out:
+   ```java
+   @Test
+   void shouldProcessKafkaEventEventually() {
+       kafkaProducer.send("orders", new OrderEvent("ORD-500"));
 
-    @Test
-    void shouldConsumeEventAndPersistAudit() {
-        producer.sendOrderEvent("ORD-777");
+       await()
+           .atMost(Duration.ofSeconds(5))
+           .pollInterval(Duration.ofMillis(100))
+           .untilAsserted(() -> {
+               Optional<Order> order = orderRepository.findByOrderNumber("ORD-500");
+               assertThat(order).isPresent();
+               assertThat(order.get().getStatus()).isEqualTo("PROCESSED");
+           });
+   }
+   ```
 
-        // Polls every 100ms up to 5 seconds; passes as soon as condition becomes true!
-        await()
-            .atMost(Duration.ofSeconds(5))
-            .pollInterval(Duration.ofMillis(100))
-            .untilAsserted(() -> {
-                boolean exists = auditRepository.existsByOrderNumber("ORD-777");
-                org.assertj.core.api.Assertions.assertThat(exists).isTrue();
-            });
-    }
-}
-```
+---
+
+## 2.6 Consumer-Driven Contract Testing (Pact / Spring Cloud Contract)
+
+1. **Architectural Overview**:
+   - Validates that API provider responses match consumer expectations without running expensive full-system end-to-end environments.
+   - Prevents breaking API changes across independent microservice deployment pipelines.
+
+---
+
+## 2.7 Sliced Security Testing with Custom Security Context Factories
+
+1. **Architectural Overview**:
+   - Custom annotations like `@WithMockCustomUser` inject realistic user identities, tenant IDs, and permissions directly into `SecurityContextHolder`:
+   ```java
+   @Retention(RetentionPolicy.RUNTIME)
+   @WithSecurityContext(factory = WithMockCustomUserSecurityContextFactory.class)
+   public @interface WithMockCustomUser {
+       String username() default "alice";
+       String tenantId() default "CORP-ACME";
+   }
+   ```
+
+---
+
+## 2.8 Kafka Integration Testing: EmbeddedKafka vs Testcontainers
+
+1. **Architectural Comparison**:
+   - `@EmbeddedKafka`: Lightweight in-JVM broker; fast startup ($<1\text{s}$), but shares JVM heap and lacks exact production broker features.
+   - **Testcontainers Kafka / Confluent**: Real Dockerized Kafka broker with ZooKeeper/KRaft; tests multi-partition rebalance storms and real network latency.
+
+---
+
+## 2.9 Test Data Management with `@Sql` Scripts
+
+1. **Deterministic Dataset Seeding**:
+   ```java
+   @Test
+   @Sql(scripts = "/test-data/seed-high-value-customers.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+   @Sql(scripts = "/test-data/cleanup.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
+   void shouldGenerateTierReport() {
+       Report report = reportService.generateReport();
+       assertThat(report.totalRevenue()).isGreaterThan(100000.0);
+   }
+   ```
+
+---
+
+## 2.10 Parallel Test Execution & CI Suite Acceleration
+
+1. **JUnit 5 Parallel Execution Configuration (`junit-platform.properties`)**:
+   ```properties
+   junit.jupiter.execution.parallel.enabled = true
+   junit.jupiter.execution.parallel.mode.default = concurrent
+   junit.jupiter.execution.parallel.mode.classes.default = concurrent
+   junit.jupiter.execution.parallel.config.strategy = dynamic
+   junit.jupiter.execution.parallel.config.dynamic.factor = 1.5
+   ```
+   - Reduces multi-thousand test suite run times from 25 minutes to 4 minutes by utilizing all CPU cores concurrently.
 
 ---
 
