@@ -1,4 +1,4 @@
-﻿# 🚀 The Developer & Architect Technical Documentation Hub
+# 🚀 The Developer & Architect Technical Documentation Hub
 
 Welcome to the comprehensive, production-grade engineering documentation and scenario handbook. Designed for developers, senior engineers, and software architects who need immediate, practical reference material and deep-dive real-world scenarios across the modern JVM, Cloud Native, and Distributed Systems landscape.
 
@@ -16,6 +16,7 @@ Welcome to the comprehensive, production-grade engineering documentation and sce
 
 | Guide / Topic | File Link | Focus & Highlights | Production Scenarios |
 | :--- | :--- | :--- | :--- |
+| **Java Master Guide: Core to Staff Architecture** | [java_master_guide.md](java-core/java_master_guide.md) | Flagship Guide: JVM Internals, Tiered JIT, ClassLoaders, Java 17/21 Records & Sealed Types, Generational GC, JCF, NIO.2, Virtual Threads Loom | 4 Production Blueprints, 4 War Room RCAs & 45 Senior/Staff Scenarios |
 | **Enterprise Java Technical Terms Encyclopedia** | [enterprise_java_technical_terms_master_guide.md](java-core/enterprise_java_technical_terms_master_guide.md) | Zero-Jargon Definitions, Mental Models, Code Blueprints & Pitfalls for 60+ Core Terms (CGLIB, Proxies, Dirty Checking, AEAD) | 60+ Foundational Deep Dives across AOP, JPA, Crypto, Kafka, Netty |
 | **JVM JIT Compiler Internals & Tiered Compilation Master Guide** | [jvm_jit_compiler_master_guide.md](java-core/jvm_jit_compiler_master_guide.md) | Template Interpreter, C1 Client, C2 Server / Opto, Graal, Tiered Levels 0-4, Escape Analysis & Scalar Replacement, Inlining, OSR, Deoptimization, Code Cache Architecture, hsdis Assembly | 4 Production War Room RCAs & 45 Senior/Staff Scenarios |
 | **Java 200+ Scenarios & Deep Internals Master Guide** | [java_interview_master_guide.md](java-core/java_interview_master_guide.md) | Collections Internals, JMM, Singleton Masterclass, Generics, Reflection in Spring, AOP, Thread Safety, Flagship Programs | 200+ Deep Scenarios & Flagship Coding Challenges |

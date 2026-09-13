@@ -11,7 +11,7 @@ A production-grade engineering handbook for high-throughput JSON processing, pol
 1. [🧠 Zero-to-Hero Mental Model: The Airport Cargo Scanner](#-the-airport-cargo-scanner--inspection-line)
 2. [🛠️ Prerequisites & Foundational Knowledge](#️-prerequisites--foundational-knowledge)
 3. [📦 Track 1: The Junior & Entry-Level Foundations](#track-1-the-junior--entry-level-foundations-zero-to-hero)
-4. [🚀 Track 2: Master Jackson Feature Catalog](#track-2-master-jackson-feature-catalog)
+4. [🚀 Track 2: Master Jackson Feature Catalog & 25-Annotation Catalog with Sample Input/Output](#track-2-master-jackson-feature-catalog)
 5. [🏗️ Track 3: Framework Internals & Under-the-Hood Architecture](#track-3-framework-internals--under-the-hood-architecture)
 6. [⚙️ Track 4: Production Engineering, Performance & Zero-Allocation Tuning](#track-4-production-engineering-performance--zero-allocation-tuning)
 7. [🚨 Track 5: War Room Post-Mortems & Root Cause Analysis (RCAs)](#track-5-war-room-post-mortems--root-cause-analysis-rcas)
@@ -806,11 +806,1163 @@ objectMapper.registerModule(converterModule);
 
 ---
 
+## 2.12 Master Jackson Annotation Catalog: Exhaustive Syntax, Sample Input & Sample Output
+
+This catalog provides an exhaustive reference for the 25 most critical Jackson annotations used in enterprise microservices, event streams, and security pipelines. Each entry contains the **Java Class/Record**, the **Sample Input JSON / Object**, the **Sample Output JSON / Object**, and the exact under-the-hood transformation mechanics.
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                          JACKSON ANNOTATION TAXONOMY                              │
+│                                                                                   │
+│  Property Renaming & Aliasing:      @JsonProperty, @JsonNaming, @JsonAlias        │
+│  Inclusion & Exclusion:            @JsonIgnore, @JsonIgnoreProperties,            │
+│                                    @JsonIgnoreType, @JsonInclude                  │
+│  Structural Mutation:              @JsonUnwrapped, @JsonRootName, @JsonPropertyOrder│
+│  Raw & Custom Value Extraction:    @JsonValue, @JsonRawValue, @JsonFormat         │
+│  Polymorphic Typing:               @JsonTypeInfo, @JsonSubTypes, @JsonTypeName    │
+│  Dynamic & Polymorphic Fields:     @JsonAnyGetter, @JsonAnySetter                 │
+│  Lifecycle & Construction:         @JsonCreator, @JacksonInject, @JsonMerge       │
+│  Access Control & Security:        @JsonView, @JsonFilter                         │
+│  Object Graphs & Cycles:           @JsonIdentityInfo, @JsonManagedReference       │
+│  Custom Codecs:                    @JsonSerialize, @JsonDeserialize               │
+│  Enum & Fallbacks:                 @JsonEnumDefaultValue, @JsonSetter(nulls=...)  │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 1. `@JsonProperty`
+- **Purpose**: Maps an exact JSON key to a Java field, getter, setter, or constructor parameter. Supports access-level control (`READ_ONLY`, `WRITE_ONLY`, `AUTO`), required validation, and default values.
+- **Java Definition**:
+```java
+public record UserProfile(
+    @JsonProperty("user_id") 
+    Long id,
+
+    @JsonProperty(value = "full_name", required = true) 
+    String name,
+
+    @JsonProperty(value = "password_hash", access = JsonProperty.Access.WRITE_ONLY) 
+    String passwordHash,
+
+    @JsonProperty(value = "account_status", access = JsonProperty.Access.READ_ONLY) 
+    String status
+) {}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "user_id": 98412,
+  "full_name": "Alice Vance",
+  "password_hash": "$2a$12$e8Y7z...",
+  "account_status": "HACKED_ATTEMPT"
+}
+```
+- **Execution**:
+```java
+UserProfile profile = mapper.readValue(inputJson, UserProfile.class);
+String outputJson = mapper.writeValueAsString(profile);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "user_id": 98412,
+  "full_name": "Alice Vance",
+  "account_status": null
+}
+```
+- **Transformation Notes**:
+  - `password_hash` was consumed into `profile.passwordHash()` on deserialization, but omitted on serialization because `Access.WRITE_ONLY` hides it from API consumers.
+  - `account_status` in the input JSON was ignored during deserialization because `Access.READ_ONLY` prevents external callers from overwriting internal status fields.
+
+---
+
+### 2. `@JsonIgnore`
+- **Purpose**: Unconditionally strips a sensitive or transient property from serialization and ignores it during deserialization.
+- **Java Definition**:
+```java
+public class InternalEmployee {
+    public Long id;
+    public String name;
+
+    @JsonIgnore
+    public String internalRoutingToken;
+
+    @JsonIgnore
+    public BigDecimal salary;
+
+    public InternalEmployee(Long id, String name, String internalRoutingToken, BigDecimal salary) {
+        this.id = id;
+        this.name = name;
+        this.internalRoutingToken = internalRoutingToken;
+        this.salary = salary;
+    }
+    public InternalEmployee() {}
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "id": 101,
+  "name": "Sarah Connor",
+  "internalRoutingToken": "SECRET-NODE-99",
+  "salary": 185000.00
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "id": 101,
+  "name": "Sarah Connor"
+}
+```
+- **Transformation Notes**: Both `internalRoutingToken` and `salary` are excluded from the output JSON. Even if passed by an attacker in the input JSON, Jackson drops them without throwing an error.
+
+---
+
+### 3. `@JsonIgnoreProperties`
+- **Purpose**: Class-level annotation that suppresses known or unknown properties. `ignoreUnknown = true` prevents crashes when upstream microservices add new fields.
+- **Java Definition**:
+```java
+@JsonIgnoreProperties(
+    value = { "auditTimestamp", "internalNodeId" },
+    ignoreUnknown = true
+)
+public record OrderEvent(
+    String orderId,
+    BigDecimal totalAmount,
+    String currency
+) {}
+```
+- **Sample Input JSON (Deserialization with Unknown & Ignored Fields)**:
+```json
+{
+  "orderId": "ORD-9901",
+  "totalAmount": 149.95,
+  "currency": "USD",
+  "auditTimestamp": 1726056000000,
+  "internalNodeId": "k8s-pod-worker-04",
+  "future_feature_flag_v3": true,
+  "random_marketing_tag": "SUMMER_SALE"
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "orderId": "ORD-9901",
+  "totalAmount": 149.95,
+  "currency": "USD"
+}
+```
+- **Transformation Notes**: Without `ignoreUnknown = true`, Jackson would crash with `UnrecognizedPropertyException: Unrecognized field "future_feature_flag_v3"`. The explicitly listed fields (`auditTimestamp`, `internalNodeId`) are also stripped from serialization.
+
+---
+
+### 4. `@JsonIgnoreType`
+- **Purpose**: Prevents any property belonging to the annotated type from being serialized or deserialized across the entire application.
+- **Java Definition**:
+```java
+@JsonIgnoreType
+public class DatabaseConnectionHandle {
+    public String connectionString = "jdbc:postgresql://db.prod:5432/main";
+    public int poolSize = 30;
+}
+
+public class OrderRepositoryService {
+    public String serviceName = "OrderIngestionService";
+    public DatabaseConnectionHandle dbHandle = new DatabaseConnectionHandle();
+}
+```
+- **Input Java Object**: `new OrderRepositoryService()`
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "serviceName": "OrderIngestionService"
+}
+```
+- **Transformation Notes**: Jackson encounters `dbHandle` of type `DatabaseConnectionHandle`, detects `@JsonIgnoreType`, and silently skips the entire property, preventing credentials and native handles from leaking into logs or network streams.
+
+---
+
+### 5. `@JsonInclude`
+- **Purpose**: Controls property inclusion during serialization based on nullity, emptiness, or default values.
+- **Java Definition**:
+```java
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
+public class CustomerSearchFilter {
+    public String queryText;                 // Included if non-empty string
+    public List<String> categories;          // Excluded if null OR empty list
+    public Map<String, String> attributes;   // Excluded if null OR empty map
+    public String optionalRegion = "";      // Excluded because string is empty ("")
+    public Integer minScore;                 // Excluded if null
+}
+```
+- **Sample Java Object State**:
+```java
+CustomerSearchFilter filter = new CustomerSearchFilter();
+filter.queryText = "Mechanical Keyboard";
+filter.categories = List.of("Electronics", "Keyboards");
+filter.attributes = Collections.emptyMap(); // Empty map!
+filter.minScore = null;                     // Null!
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "queryText": "Mechanical Keyboard",
+  "categories": [
+    "Electronics",
+    "Keyboards"
+  ]
+}
+```
+- **Transformation Notes**: `attributes` (empty map), `optionalRegion` (empty string `""`), and `minScore` (`null`) are completely suppressed from the JSON payload, reducing network transmission size by over 60%.
+
+---
+
+### 6. `@JsonPropertyOrder`
+- **Purpose**: Enforces an explicit, deterministic ordering of JSON fields in output payloads. Mandatory for cryptographically signed canonical JSON and readable configuration exports.
+- **Java Definition**:
+```java
+@JsonPropertyOrder({ "id", "version", "event_type", "timestamp", "payload" })
+public record AuditLogEntry(
+    String version,
+    Long id,
+    String payload,
+    String event_type,
+    long timestamp
+) {}
+```
+- **Sample Java Object**:
+```java
+AuditLogEntry entry = new AuditLogEntry("1.0", 501L, "{\"action\":\"LOGIN\"}", "USER_AUTH", 1726058000L);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "id": 501,
+  "version": "1.0",
+  "event_type": "USER_AUTH",
+  "timestamp": 1726058000,
+  "payload": "{\"action\":\"LOGIN\"}"
+}
+```
+- **Transformation Notes**: Despite the Record fields being declared in the order `version, id, payload, event_type, timestamp`, Jackson serializes the fields strictly matching the `@JsonPropertyOrder` array. You can also specify `@JsonPropertyOrder(alphabetic = true)` to sort keys alphabetically.
+
+---
+
+### 7. `@JsonAutoDetect`
+- **Purpose**: Overrides default visibility rules to allow Jackson to directly inspect private fields without needing public getters/setters, or restrict getter scanning.
+- **Java Definition**:
+```java
+@JsonAutoDetect(
+    fieldVisibility = JsonAutoDetect.Visibility.ANY,
+    getterVisibility = JsonAutoDetect.Visibility.NONE,
+    isGetterVisibility = JsonAutoDetect.Visibility.NONE
+)
+public class ImmutableToken {
+    private final String secretKey = "AES_SECRET_9872";
+    private final long expiresAt = 1726090000L;
+
+    // No public getters exist!
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "secretKey": "AES_SECRET_9872",
+  "expiresAt": 1726090000
+}
+```
+- **Transformation Notes**: Normally, Jackson requires public getters or public fields. With `fieldVisibility = ANY`, Jackson accesses private fields directly via reflection without requiring boilerplate accessor methods.
+
+---
+
+### 8. `@JsonRootName`
+- **Purpose**: Wraps the serialized JSON inside a root element key or unwraps a root element key upon deserialization.
+- **Java Definition**:
+```java
+@JsonRootName(value = "order_manifest", namespace = "billing")
+public record OrderManifest(
+    String manifestId,
+    int itemCount
+) {}
+```
+- **Mapper Configuration**:
+```java
+ObjectMapper rootMapper = new ObjectMapper();
+rootMapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+rootMapper.enable(DeserializationFeature.UNWRAP_ROOT_VALUE);
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "order_manifest": {
+    "manifestId": "MNF-8812",
+    "itemCount": 42
+  }
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "order_manifest": {
+    "manifestId": "MNF-8812",
+    "itemCount": 42
+  }
+}
+```
+- **Transformation Notes**: Jackson encloses the object attributes within the `"order_manifest"` root envelope. If `WRAP_ROOT_VALUE` is enabled and the root key is missing in the input payload, Jackson throws `MismatchedInputException`.
+
+---
+
+### 9. `@JsonValue`
+- **Purpose**: Indicates that a single method or field represents the entire serialized representation of the object or Enum.
+- **Java Definition**:
+```java
+public enum HttpStatusCategory {
+    SUCCESS(200, "Category: 2xx Success"),
+    CLIENT_ERROR(400, "Category: 4xx Client Error"),
+    SERVER_ERROR(500, "Category: 5xx Server Error");
+
+    private final int code;
+    private final String description;
+
+    HttpStatusCategory(int code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+
+    @JsonValue
+    public String toApiCode() {
+        return code + "_" + name();
+    }
+}
+
+public record ApiResponse(String message, HttpStatusCategory category) {}
+```
+- **Sample Java Object**: `new ApiResponse("Processed", HttpStatusCategory.SUCCESS)`
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "message": "Processed",
+  "category": "200_SUCCESS"
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "message": "Processed",
+  "category": "200_SUCCESS"
+}
+```
+- **Transformation Notes**: Instead of serializing the enum as its default name (`"SUCCESS"`), Jackson executes the `@JsonValue` annotated method `toApiCode()` and writes `"200_SUCCESS"`. On deserialization, Jackson matches `"200_SUCCESS"` back to `HttpStatusCategory.SUCCESS`.
+
+---
+
+### 10. `@JsonRawValue`
+- **Purpose**: Injects a String property directly into the output JSON stream as verbatim, unescaped, raw JSON markup.
+- **Java Definition**:
+```java
+public class DynamicWebhookDelivery {
+    public String webhookId = "WH-10928";
+
+    @JsonRawValue
+    public String rawPayload = "{\"event\":\"PAYMENT_SETTLED\",\"amount\":99.50,\"tags\":[\"ACH\",\"USD\"]}";
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "webhookId": "WH-10928",
+  "rawPayload": {
+    "event": "PAYMENT_SETTLED",
+    "amount": 99.50,
+    "tags": [
+      "ACH",
+      "USD"
+    ]
+  }
+}
+```
+- **Contrast Without `@JsonRawValue`**:
+```json
+{
+  "webhookId": "WH-10928",
+  "rawPayload": "{\"event\":\"PAYMENT_SETTLED\",\"amount\":99.50,\"tags\":[\"ACH\",\"USD\"]}"
+}
+```
+- **Transformation Notes**: Without `@JsonRawValue`, Jackson escapes all quotes with `\"`, outputting a JSON string. With `@JsonRawValue`, it inserts raw structural JSON nodes without quoting or escaping.
+
+---
+
+### 11. `@JsonFormat`
+- **Purpose**: Customizes the exact temporal pattern, timezone, locale, and shape (`STRING` vs `NUMBER`) for dates, times, and numbers.
+- **Java Definition**:
+```java
+public record InvoiceSchedule(
+    String invoiceId,
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss", timezone = "America/New_York")
+    Date dueDateTime,
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    LocalDate billingDate,
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
+    BigDecimal amountFormatted
+) {}
+```
+- **Sample Java Object**:
+```java
+InvoiceSchedule schedule = new InvoiceSchedule(
+    "INV-2026-001",
+    new Date(1773081000000L),
+    LocalDate.of(2026, 3, 15),
+    new BigDecimal("1250000.50")
+);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "invoiceId": "INV-2026-001",
+  "dueDateTime": "2026-03-09 13:30:00",
+  "billingDate": "2026-03-15",
+  "amountFormatted": "1250000.50"
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "invoiceId": "INV-2026-001",
+  "dueDateTime": "2026-03-09 13:30:00",
+  "billingDate": "2026-03-15",
+  "amountFormatted": "1250000.50"
+}
+```
+- **Transformation Notes**: `billingDate` is parsed cleanly using the ISO pattern `yyyy-MM-dd`. `amountFormatted` is converted into a String representation, preventing JavaScript 64-bit float precision truncation in frontend web apps.
+
+---
+
+### 12. `@JsonUnwrapped`
+- **Purpose**: Flattens the properties of a nested child object directly into the parent JSON object, eliminating intermediate nested JSON structures. Supports namespace prefixes and suffixes.
+- **Java Definition**:
+```java
+public record GeoCoordinates(double latitude, double longitude) {}
+
+public record PhysicalAddress(
+    String street,
+    String city,
+    String postalCode,
+    @JsonUnwrapped(prefix = "geo_") GeoCoordinates coordinates
+) {}
+
+public record CustomerDeliveryProfile(
+    String customerId,
+    @JsonUnwrapped(prefix = "shipping_") PhysicalAddress shippingAddress
+) {}
+```
+- **Sample Java Object**:
+```java
+CustomerDeliveryProfile profile = new CustomerDeliveryProfile(
+    "CUST-7701",
+    new PhysicalAddress("100 Tech Blvd", "Austin", "78701", new GeoCoordinates(30.2672, -97.7431))
+);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "customerId": "CUST-7701",
+  "shipping_street": "100 Tech Blvd",
+  "shipping_city": "Austin",
+  "shipping_postalCode": "78701",
+  "shipping_geo_latitude": 30.2672,
+  "shipping_geo_longitude": -97.7431
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "customerId": "CUST-7701",
+  "shipping_street": "100 Tech Blvd",
+  "shipping_city": "Austin",
+  "shipping_postalCode": "78701",
+  "shipping_geo_latitude": 30.2672,
+  "shipping_geo_longitude": -97.7431
+}
+```
+- **Transformation Notes**: On deserialization, Jackson collects all `shipping_*` fields and reconstructs `PhysicalAddress`, and nests `shipping_geo_*` into `GeoCoordinates`, maintaining clean domain models while matching flat database schemas or CSV outputs.
+
+---
+
+### 13. `@JsonView`
+- **Purpose**: Provides role-based field filtering during serialization and deserialization without requiring distinct DTO classes.
+- **Java Definition**:
+```java
+public class SecurityViews {
+    public interface Public {}
+    public interface Internal extends Public {}
+    public interface SuperAdmin extends Internal {}
+}
+
+public record BankAccountRecord(
+    @JsonView(SecurityViews.Public.class)
+    String bankName,
+
+    @JsonView(SecurityViews.Public.class)
+    String accountHolderName,
+
+    @JsonView(SecurityViews.Internal.class)
+    String accountNumber,
+
+    @JsonView(SecurityViews.SuperAdmin.class)
+    String ssnTaxId,
+
+    @JsonView(SecurityViews.SuperAdmin.class)
+    BigDecimal rawBalance
+) {}
+```
+- **Execution**:
+```java
+BankAccountRecord account = new BankAccountRecord("Chase", "John Doe", "1122334455", "999-00-1111", new BigDecimal("54210.00"));
+
+// 1. Serialize for Public View:
+String publicJson = mapper.writerWithView(SecurityViews.Public.class).writeValueAsString(account);
+
+// 2. Serialize for SuperAdmin View:
+String adminJson = mapper.writerWithView(SecurityViews.SuperAdmin.class).writeValueAsString(account);
+```
+- **Public View Output JSON**:
+```json
+{
+  "bankName": "Chase",
+  "accountHolderName": "John Doe"
+}
+```
+- **SuperAdmin View Output JSON**:
+```json
+{
+  "bankName": "Chase",
+  "accountHolderName": "John Doe",
+  "accountNumber": "1122334455",
+  "ssnTaxId": "999-00-1111",
+  "rawBalance": 54210.00
+}
+```
+- **Transformation Notes**: `SecurityViews.SuperAdmin` extends `SecurityViews.Internal`, which extends `SecurityViews.Public`. Therefore, the `SuperAdmin` view serializes all properties, whereas the `Public` view includes only properties annotated with `SecurityViews.Public.class`.
+
+---
+
+### 14. `@JsonManagedReference` & `@JsonBackReference`
+- **Purpose**: Breaks infinite recursion cycles in parent-child bidirectional relationships (e.g., JPA `@OneToMany` and `@ManyToOne`).
+- **Java Definition**:
+```java
+public class DepartmentNode {
+    public Long id;
+    public String departmentName;
+
+    @JsonManagedReference
+    public List<EmployeeNode> staff = new ArrayList<>();
+
+    public DepartmentNode(Long id, String name) { this.id = id; this.departmentName = name; }
+}
+
+public class EmployeeNode {
+    public Long id;
+    public String fullName;
+
+    @JsonBackReference
+    public DepartmentNode department;
+
+    public EmployeeNode(Long id, String fullName, DepartmentNode department) {
+        this.id = id;
+        this.fullName = fullName;
+        this.department = department;
+    }
+}
+```
+- **Input Java Object Graph**:
+```java
+DepartmentNode dept = new DepartmentNode(10L, "Engineering");
+EmployeeNode emp1 = new EmployeeNode(101L, "Alice", dept);
+EmployeeNode emp2 = new EmployeeNode(102L, "Bob", dept);
+dept.staff.add(emp1);
+dept.staff.add(emp2);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "id": 10,
+  "departmentName": "Engineering",
+  "staff": [
+    {
+      "id": 101,
+      "fullName": "Alice"
+    },
+    {
+      "id": 102,
+      "fullName": "Bob"
+    }
+  ]
+}
+```
+- **Transformation Notes**: `@JsonManagedReference` serializes the child collection normally. `@JsonBackReference` on the child prevents serializing the parent reference back, terminating the circular loop. During deserialization, Jackson automatically re-binds the child's `department` field to the parent instance!
+
+---
+
+### 15. `@JsonIdentityInfo`
+- **Purpose**: Resolves arbitrary object graph cycles by assigning unique identity tokens (`@id`) to objects and serializing subsequent occurrences as reference IDs.
+- **Java Definition**:
+```java
+@JsonIdentityInfo(
+    generator = ObjectIdGenerators.PropertyGenerator.class,
+    property = "id"
+)
+public class ProjectTask {
+    public Long id;
+    public String title;
+    public List<ProjectTask> dependencies = new ArrayList<>();
+
+    public ProjectTask(Long id, String title) { this.id = id; this.title = title; }
+    public ProjectTask() {}
+}
+```
+- **Input Java Object Graph (Circular Dependency: Task 1 depends on Task 2; Task 2 depends on Task 1)**:
+```java
+ProjectTask t1 = new ProjectTask(1L, "Database Migration");
+ProjectTask t2 = new ProjectTask(2L, "API Deployment");
+t1.dependencies.add(t2);
+t2.dependencies.add(t1);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "id": 1,
+  "title": "Database Migration",
+  "dependencies": [
+    {
+      "id": 2,
+      "title": "API Deployment",
+      "dependencies": [
+        1
+      ]
+    }
+  ]
+}
+```
+- **Transformation Notes**: When Jackson traverses back to `t1` from `t2`, it recognizes that `id: 1` has already been serialized. Instead of re-serializing `t1` (which causes `StackOverflowError`), it emits the integer ID `1`. On deserialization, Jackson reconstructs the bidirectional cyclic graph in memory.
+
+---
+
+### 16. `@JsonFilter`
+- **Purpose**: Enables dynamic, runtime programmatic property filtering using `PropertyFilter` and `SimpleFilterProvider`.
+- **Java Definition**:
+```java
+@JsonFilter("dynamicFieldFilter")
+public record SensitivePayload(
+    String publicId,
+    String username,
+    String email,
+    String creditCardNumber
+) {}
+```
+- **Execution Code**:
+```java
+SimpleFilterProvider filters = new SimpleFilterProvider()
+    .addFilter("dynamicFieldFilter", SimpleBeanPropertyFilter.serializeAllExcept("creditCardNumber"));
+
+String resultJson = mapper.writer(filters).writeValueAsString(
+    new SensitivePayload("PID-99", "morpheus", "morpheus@matrix.org", "4111-2222-3333-4444")
+);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "publicId": "PID-99",
+  "username": "morpheus",
+  "email": "morpheus@matrix.org"
+}
+```
+- **Transformation Notes**: Unlike static `@JsonIgnore`, `@JsonFilter` allows the calling controller or service to decide at runtime which fields to omit based on the current tenant's subscription or GDPR preferences.
+
+---
+
+### 17. `@JsonCreator` & `@JacksonInject`
+- **Purpose**: `@JsonCreator` defines the explicit constructor or factory method for deserialization. `@JacksonInject` injects context objects (e.g., current tenant ID, HTTP request IP, database connection) directly into the object during deserialization.
+- **Java Definition**:
+```java
+public class InjectedOrderRequest {
+    private final String orderId;
+    private final BigDecimal amount;
+    private final String tenantId;
+
+    @JsonCreator
+    public InjectedOrderRequest(
+        @JsonProperty("order_id") String orderId,
+        @JsonProperty("amount") BigDecimal amount,
+        @JacksonInject("currentTenantId") String tenantId
+    ) {
+        this.orderId = orderId;
+        this.amount = amount;
+        this.tenantId = tenantId;
+    }
+
+    public String getOrderId() { return orderId; }
+    public BigDecimal getAmount() { return amount; }
+    public String getTenantId() { return tenantId; }
+}
+```
+- **Sample Input JSON**:
+```json
+{
+  "order_id": "ORD-7001",
+  "amount": 250.00
+}
+```
+- **Execution**:
+```java
+InjectableValues injectValues = new InjectableValues.Std().addValue("currentTenantId", "TENANT_CORP_EU");
+InjectedOrderRequest request = mapper.reader(injectValues)
+    .forType(InjectedOrderRequest.class)
+    .readValue(inputJson);
+```
+- **Hydrated Java Object State**:
+```text
+InjectedOrderRequest{orderId='ORD-7001', amount=250.00, tenantId='TENANT_CORP_EU'}
+```
+- **Transformation Notes**: Even though `tenantId` does not appear in the external JSON payload, Jackson injects `"TENANT_CORP_EU"` directly into the constructor parameter, enforcing multi-tenant isolation.
+
+---
+
+### 18. `@JsonAnyGetter` & `@JsonAnySetter`
+- **Purpose**: Handles unmapped, dynamic, or dynamic key-value pairs by packing them into a `Map<String, Object>` on deserialization and unpacking them as root properties on serialization.
+- **Java Definition**:
+```java
+public class FlexibleMetadataEvent {
+    @JsonProperty("event_name")
+    public String eventName;
+
+    private Map<String, Object> dynamicAttributes = new HashMap<>();
+
+    @JsonAnyGetter
+    public Map<String, Object> getDynamicAttributes() {
+        return dynamicAttributes;
+    }
+
+    @JsonAnySetter
+    public void setDynamicAttribute(String key, Object value) {
+        this.dynamicAttributes.put(key, value);
+    }
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "event_name": "PAGE_VIEW",
+  "browser": "Chrome",
+  "screen_resolution": "3840x2160",
+  "session_duration_sec": 420
+}
+```
+- **Hydrated Java State**:
+  - `eventName` = `"PAGE_VIEW"`
+  - `dynamicAttributes` = `{"browser": "Chrome", "screen_resolution": "3840x2160", "session_duration_sec": 420}`
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "event_name": "PAGE_VIEW",
+  "browser": "Chrome",
+  "screen_resolution": "3840x2160",
+  "session_duration_sec": 420
+}
+```
+- **Transformation Notes**: Without an explicit DTO containing `browser` or `screen_resolution`, `@JsonAnySetter` intercepts every unknown field and routes it into the map. On serialization, `@JsonAnyGetter` unpacks the map keys as sibling JSON attributes.
+
+---
+
+### 19. `@JsonSetter` & `@JsonGetter`
+- **Purpose**: Defines explicit property mutators and accessors, and configures null-coercion policies (`nulls = Nulls.SKIP`, `Nulls.AS_EMPTY`, `Nulls.FAIL`).
+- **Java Definition**:
+```java
+public class UserSubscription {
+    private String planName = "BASIC_FREE";
+    private List<String> permissions = new ArrayList<>();
+
+    @JsonSetter(nulls = Nulls.SKIP)
+    public void setPlanName(String planName) {
+        this.planName = planName;
+    }
+
+    @JsonSetter(nulls = Nulls.AS_EMPTY)
+    public void setPermissions(List<String> permissions) {
+        this.permissions = permissions;
+    }
+
+    @JsonGetter("active_plan")
+    public String getPlanName() {
+        return planName;
+    }
+
+    @JsonGetter("granted_permissions")
+    public List<String> getPermissions() {
+        return permissions;
+    }
+}
+```
+- **Sample Input JSON (Explicit Nulls Sent by Client)**:
+```json
+{
+  "planName": null,
+  "permissions": null
+}
+```
+- **Execution & Hydrated Object State**:
+```java
+UserSubscription sub = mapper.readValue(inputJson, UserSubscription.class);
+// sub.getPlanName() == "BASIC_FREE" (null was SKIPPED, keeping the default)
+// sub.getPermissions() == Collections.emptyList() (null coerced to AS_EMPTY)
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "active_plan": "BASIC_FREE",
+  "granted_permissions": []
+}
+```
+- **Transformation Notes**: `Nulls.SKIP` prevents incoming `null` from wiping out existing defaults (`"BASIC_FREE"`). `Nulls.AS_EMPTY` instantiates an empty `ArrayList` instead of setting the field to `null`, preventing downstream `NullPointerException`s.
+
+---
+
+### 20. `@JsonNaming`
+- **Purpose**: Class-level annotation that applies a global naming strategy (e.g., `snake_case`, `kebab-case`, `lowerCamelCase`) across all un-annotated properties.
+- **Java Definition**:
+```java
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record DeviceTelemetry(
+    String deviceSerialNumber,
+    double cpuTemperatureCelsius,
+    long networkPacketsTransmitted,
+    boolean isBatteryCharging
+) {}
+```
+- **Sample Java Object**:
+```java
+DeviceTelemetry telemetry = new DeviceTelemetry("DEV-9092", 48.5, 1054320L, true);
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "device_serial_number": "DEV-9092",
+  "cpu_temperature_celsius": 48.5,
+  "network_packets_transmitted": 1054320,
+  "is_battery_charging": true
+}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "device_serial_number": "DEV-9092",
+  "cpu_temperature_celsius": 48.5,
+  "network_packets_transmitted": 1054320,
+  "is_battery_charging": true
+}
+```
+- **Transformation Notes**: Eliminates the need to decorate every single field with `@JsonProperty("...")`. The strategy converts camelCase field names into snake_case keys automatically for both reading and writing.
+
+---
+
+### 21. `@JsonAlias`
+- **Purpose**: Defines one or more alternative JSON keys accepted during deserialization. Ideal for backward compatibility when transitioning from legacy API schemas.
+- **Java Definition**:
+```java
+public record PaymentNotification(
+    @JsonAlias({ "txn_id", "transactionIdentifier", "id", "payment_reference" })
+    String transactionId,
+
+    @JsonAlias({ "amt", "total", "charge_amount" })
+    BigDecimal amount
+) {}
+```
+- **Sample Input JSON 1 (Legacy V1 Webhook)**:
+```json
+{
+  "txn_id": "TXN-001A",
+  "amt": 50.00
+}
+```
+- **Sample Input JSON 2 (Third-Party Provider B)**:
+```json
+{
+  "payment_reference": "TXN-001A",
+  "charge_amount": 50.00
+}
+```
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "transactionId": "TXN-001A",
+  "amount": 50.00
+}
+```
+- **Transformation Notes**: Both input JSON payloads deserialize cleanly into the same Java record. Note: `@JsonAlias` affects **only deserialization**; serialization always uses the canonical field name (`transactionId`).
+
+---
+
+### 22. `@JsonTypeInfo`, `@JsonSubTypes` & `@JsonTypeName`
+- **Purpose**: Enforces secure, explicit polymorphic subtyping across inheritance hierarchies using a discriminator field.
+- **Java Definition**:
+```java
+@JsonTypeInfo(
+    use = JsonTypeInfo.Id.NAME,
+    include = JsonTypeInfo.As.PROPERTY,
+    property = "channel_type"
+)
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = EmailAlert.class, name = "EMAIL"),
+    @JsonSubTypes.Type(value = SmsAlert.class, name = "SMS"),
+    @JsonSubTypes.Type(value = SlackAlert.class, name = "SLACK")
+})
+public sealed interface NotificationAlert permits EmailAlert, SmsAlert, SlackAlert {}
+
+@JsonTypeName("EMAIL")
+public record EmailAlert(String recipientEmail, String subject, String body) implements NotificationAlert {}
+
+@JsonTypeName("SMS")
+public record SmsAlert(String phoneNumber, String textMessage) implements NotificationAlert {}
+
+@JsonTypeName("SLACK")
+public record SlackAlert(String channelId, String messageText) implements NotificationAlert {}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "channel_type": "SMS",
+  "phoneNumber": "+1-555-0199",
+  "textMessage": "Your verification code is 491823"
+}
+```
+- **Hydrated Java Object**: `SmsAlert[phoneNumber=+1-555-0199, textMessage=Your verification code is 491823]`
+- **Sample Output JSON (Serialization of EmailAlert)**:
+```json
+{
+  "channel_type": "EMAIL",
+  "recipientEmail": "devops@corp.internal",
+  "subject": "Deployment Succeeded",
+  "body": "Release v2.4.0 is live."
+}
+```
+- **Transformation Notes**: Jackson inspects the discriminator property `"channel_type"`. When it encounters `"SMS"`, it delegates directly to `SmsAlert.class`. It injects `"channel_type": "EMAIL"` when serializing an `EmailAlert` instance.
+
+---
+
+### 23. `@JsonSerialize` & `@JsonDeserialize`
+- **Purpose**: Binds custom serializers, deserializers, or converters to specific fields or classes.
+- **Java Definition**:
+```java
+public class CentToDollarSerializer extends JsonSerializer<Long> {
+    @Override
+    public void serialize(Long cents, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        if (cents == null) { gen.writeNull(); return; }
+        gen.writeString("$" + BigDecimal.valueOf(cents, 2).toPlainString());
+    }
+}
+
+public class DollarToCentDeserializer extends JsonDeserializer<Long> {
+    @Override
+    public Long deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+        String text = p.getText();
+        if (text == null || text.isBlank()) return null;
+        String clean = text.replace("$", "").trim();
+        return new BigDecimal(clean).movePointRight(2).longValue();
+    }
+}
+
+public record ProductListing(
+    String sku,
+
+    @JsonSerialize(using = CentToDollarSerializer.class)
+    @JsonDeserialize(using = DollarToCentDeserializer.class)
+    Long priceInCents
+) {}
+```
+- **Sample Input JSON (Deserialization)**:
+```json
+{
+  "sku": "MACBOOK-M3",
+  "priceInCents": "$1999.99"
+}
+```
+- **Hydrated Java Record**: `ProductListing[sku=MACBOOK-M3, priceInCents=199999]`
+- **Sample Output JSON (Serialization)**:
+```json
+{
+  "sku": "MACBOOK-M3",
+  "priceInCents": "$1999.99"
+}
+```
+- **Transformation Notes**: The internal Java domain stores money strictly as an integer long `199999` to prevent floating-point rounding errors, while the external JSON contracts format it as a human-friendly string `"$1999.99"`.
+
+---
+
+### 24. `@JsonEnumDefaultValue`
+- **Purpose**: Designates a fallback enum value when deserializing an unrecognized or newly added enum string, preventing API breakages during rolling deployments.
+- **Java Definition**:
+```java
+public enum AccountTier {
+    FREE,
+    PRO,
+    ENTERPRISE,
+
+    @JsonEnumDefaultValue
+    UNKNOWN_TIER
+}
+
+public record SubscriptionEvent(
+    String accountId,
+    AccountTier tier
+) {}
+```
+- **Mapper Configuration**:
+```java
+ObjectMapper enumMapper = new ObjectMapper();
+enumMapper.enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE);
+```
+- **Sample Input JSON (Upstream sent a new enum value "ULTRA_TIER" not in our codebase)**:
+```json
+{
+  "accountId": "ACC-5521",
+  "tier": "ULTRA_TIER"
+}
+```
+- **Hydrated Java Object State**: `SubscriptionEvent[accountId=ACC-5521, tier=UNKNOWN_TIER]`
+- **Transformation Notes**: Without `@JsonEnumDefaultValue` and the feature flag, Jackson throws `InvalidFormatException: Cannot deserialize value of type AccountTier from String "ULTRA_TIER"`. With this configuration, it gracefully falls back to `UNKNOWN_TIER`.
+
+---
+
+### 25. `@JsonMerge`
+- **Purpose**: Enables shallow or deep merge patch semantics, merging new JSON attributes directly into an existing object state rather than replacing the object.
+- **Java Definition**:
+```java
+public class UserSettings {
+    public String theme = "DARK";
+    public boolean notificationsEnabled = true;
+
+    @JsonMerge
+    public Map<String, String> featureFlags = new HashMap<>();
+
+    public UserSettings() {
+        featureFlags.put("beta_search", "ENABLED");
+        featureFlags.put("ai_summary", "DISABLED");
+    }
+}
+```
+- **Existing Object State in Memory**:
+  - `theme`: `"DARK"`
+  - `featureFlags`: `{"beta_search": "ENABLED", "ai_summary": "DISABLED"}`
+- **Sample Input Merge JSON**:
+```json
+{
+  "theme": "HIGH_CONTRAST",
+  "featureFlags": {
+    "ai_summary": "ENABLED",
+    "export_pdf": "ENABLED"
+  }
+}
+```
+- **Execution**:
+```java
+UserSettings existingSettings = new UserSettings();
+UserSettings mergedSettings = mapper.readerForUpdating(existingSettings).readValue(patchJson);
+```
+- **Sample Output JSON (Serialization of Merged Object)**:
+```json
+{
+  "theme": "HIGH_CONTRAST",
+  "notificationsEnabled": true,
+  "featureFlags": {
+    "beta_search": "ENABLED",
+    "ai_summary": "ENABLED",
+    "export_pdf": "ENABLED"
+  }
+}
+```
+- **Transformation Notes**: Without `@JsonMerge`, the incoming `featureFlags` map would completely overwrite the existing map, destroying `"beta_search"`. With `@JsonMerge`, Jackson merges keys into the existing map: `"ai_summary"` is updated to `"ENABLED"`, `"export_pdf"` is added, and `"beta_search"` is preserved.
+
+---
+
 # TRACK 3: FRAMEWORK INTERNALS & UNDER-THE-HOOD ARCHITECTURE
 
 ## 3.1 The Deserialization Pipeline: Tokenizer $\to$ BeanDeserializer
 
+```mermaid
+flowchart TD
+    subgraph INGEST ["Byte Stream Ingestion"]
+        IS["InputStream / byte[] Payload"]
+        BR["BufferRecycler<br/>(Recycles char[] & byte[] in TLS / QueuePool)"]
+    end
+
+    subgraph PARSER ["Tokenization Engine"]
+        JP["UTF8StreamJsonParser<br/>(Byte-level state machine)"]
+        DC["DeserializationContext<br/>(Config & Type Resolution)"]
+    end
+
+    subgraph DESER ["Bean Deserialization Subsystem"]
+        DCache[("DeserializerCache<br/>(Thread-Safe ConcurrentHashMap)")]
+        BD["BeanDeserializer<br/>(Target Class Type Handler)"]
+        INST["Instantiate Target<br/>(Reflection / MethodHandle / Canonical Constructor)"]
+        LOOP["Property Hydration Loop<br/>SettableBeanProperty.deserializeAndSet()"]
+    end
+
+    subgraph OUTPUT ["Hydrated Entity"]
+        HO["Return Fully Hydrated Java POJO / Record"]
+    end
+
+    IS --> BR
+    BR --> JP
+    JP -->|"Emits START_OBJECT"| DC
+    DC --> BD
+    DCache -.->|"Lookup / Cache Hit"| BD
+    BD --> INST
+    INST --> LOOP
+    JP -->|"Emits FIELD_NAME & VALUE_*"| LOOP
+    LOOP -->|"Emits END_OBJECT"| HO
+
+    classDef ingest fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef parser fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef deser fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef out fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class IS,BR ingest;
+    class JP,DC parser;
+    class DCache,BD,INST,LOOP deser;
+    class HO out;
 ```
+
+#### Architectural Breakdown: The Jackson Deserialization Runtime Pipeline
+
+1. **Visual Architecture & Component Topology**:
+   - **Ingestion & Buffer Recycling Substrate**: Incoming raw network streams (`InputStream`, byte buffers) pass through a reusable `BufferRecycler` that reuses character and byte arrays from thread-local storage or lock-free object pools.
+   - **Tokenization Engine**: `UTF8StreamJsonParser` operates directly on raw UTF-8 bytes without creating intermediate `java.lang.String` objects. It coordinates with `DeserializationContext` to govern date parsing, timezone handling, and custom contextual attributes.
+   - **Bean Deserialization Subsystem**: `ObjectMapper` queries `DeserializerCache` to retrieve a pre-compiled `BeanDeserializer`. If missing, the class is introspected via reflection or `MethodHandles`, creating a collection of `SettableBeanProperty` accessors.
+   - **Hydrated Entity Output**: Assembles the target Java instance (via default constructor reflection or canonical Record creator arrays) and returns the completed, validated Java object graph.
+
+2. **Execution Flow & Lifecycle State Machine**:
+   - **Step 1: Buffer Allocation & Token Initialization**: `JsonFactory` checks out a recycled byte buffer from `BufferRecycler`. The parser consumes bytes and advances to the first `JsonToken.START_OBJECT`.
+   - **Step 2: Deserializer Resolution**: `DeserializationContext` resolves the matching `JsonDeserializer<T>` from `DeserializerCache`. Polymorphic annotations (`@JsonTypeInfo`) trigger subtype resolution via `PolymorphicTypeValidator`.
+   - **Step 3: Target Instantiation**: If standard POJO, zero-arg constructor is invoked. If Record or `@JsonCreator`, parameter bindings are buffered into a property array until all mandatory arguments are present.
+   - **Step 4: Property Iteration Loop**: Loops through `START_OBJECT` to `END_OBJECT`. For each `FIELD_NAME`, the parser matches the token against registered `SettableBeanProperty` instances, recurses child properties if nested, and invokes setter methods.
+
+3. **Low-Level JVM & Memory Mechanics**:
+   - **Direct UTF-8 Byte Parsing**: HotSpot CPU branch predictors excel in `UTF8StreamJsonParser` because Jackson decodes ASCII and UTF-8 code points directly in CPU cache lines without intermediary heap allocation.
+   - **MethodHandle & Bytecode Acceleration**: High-performance Jackson modules (`blackbird`, `afterburner`) replace traditional `Method.invoke()` reflection with dynamically generated `MethodHandle` call sites that JIT compilers (C2) can inline directly into peak machine code.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **DeserializerCache Contention & Leakage**: Using dynamically constructed `JavaType` parameters or unbounded type lookups can bloat `DeserializerCache`, triggering memory pressure.
+   - **Virtual Thread Buffer Leak**: In Java 21, spawning unbounded virtual threads doing Jackson parsing with ThreadLocal buffer recyclers causes memory exhaustion. Remedy: upgrade to Jackson 2.16+ and configure `trackReusableBuffers=true` or use pool recyclers.
+
+<details>
+<summary>View Legacy ASCII Deserialization Pipeline</summary>
+
+```text
 ┌────────────────────────────────────────────────────────────────────────┐
 │                      JACKSON DESERIALIZATION PIPELINE                  │
 │                                                                        │
@@ -835,6 +1987,8 @@ objectMapper.registerModule(converterModule);
 │                  Return Hydrated Object                                │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

@@ -48,21 +48,15 @@ Before writing custom SQL in Spring, developers must understand the foundational
 - **Spring SQL / `NamedParameterJdbcTemplate` (The Formula 1 Race Car):** It has no leather seats or automatic air conditioning. It is stripped down to bare carbon fiber and a roaring engine.
   - *When do you use it?* When you need to insert 500,000 records in 2 seconds, execute analytical reporting queries across 15 tables, or stream millions of rows without blowing up your JVM Heap RAM, **Spring JDBC provides raw, blazing-fast speed and 100% control over the generated SQL**!
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             DATABASE INGESTION PATHWAYS                          │
-│                                                                                  │
-│  [ High Overhead / Complex Graph ]                                               │
-│  Java Object ──► [ Hibernate/JPA ] ──► Dirty Checking ──► 1st Level Cache ──┐    │
-│                                                                              │    │
-│                                                                              ▼    │
-│  [ Zero Overhead / High Performance ]                                   [ SQL Engine ]
-│  Java Record ──► [ NamedParameterJdbcTemplate ] ──► Direct Batch Packet ─────┘    │
-│                  - No Reflection Session Overhead                                │
-│                  - Direct PreparedStatement Binding                              │
-│                  - Deterministic Query Execution Plans                           │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
+| Ingestion Pathway | Processing Pipeline & Mechanics | Reflection & Proxy Overhead | Memory & Heap Footprint | Throughput & Batch Performance | Determinism & Tuning Scope |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **High Overhead / Complex Graph (Hibernate / JPA)** | Java Entity ──► Persistence Context ──► Dirty-Check Snapshot ──► ActionQueue ──► Flush | High (Byte Buddy runtime proxies, reflection field access, interceptors) | High (Entity duplicates maintained in L1 cache for snapshot comparison) | Moderate ($\sim 5,000 - 15,000 \text{ ops/sec}$); batch insert requires explicit clear/flush | Low (Hibernate generates queries dynamically; implicit N+1 risks) |
+| **Zero Overhead / High Performance (Spring JDBC Template)** | Java Record ──► `NamedParameterJdbcTemplate` ──► Direct Parameter Index Binding ──► JDBC Socket Packet | Zero (Direct getter access on Java Records/DTOs; zero dynamic proxies) | Minimal (Transient record streamed directly into PreparedStatement buffer) | Ultra-High ($\sim 100,000+ \text{ ops/sec}$); bulk array batch updates via wire protocol | Deterministic (100% hand-crafted SQL; predictable query execution plans) |
+
+> [!NOTE]
+> **Data Ingestion Pipelines:**
+> - **ORM Graph Pathway:** `Java Entity` ──► `Hibernate ActionQueue` ──► `Dirty Checking Snapshot` ──► `L1 Cache Hydration` ──► `Flush Engine` ──► `SQL Driver`
+> - **Direct JDBC Pathway:** `Java Record` ──► `NamedParameterJdbcTemplate` ──► `Direct Parameter Index Binding` ──► `Binary PreparedStatement Batch` ──► `SQL Socket`
 
 ---
 
@@ -219,7 +213,7 @@ public class AccountJdbcRepository {
    }
    ```
    - **Sample Output**:
-     ```
+     ```text
      Account[id=101, accountNumber="ACC-8921", balance=15450.50, status="ACTIVE"]
      ```
 
@@ -478,23 +472,17 @@ public class AccountJdbcRepository {
 
 ## 3.1 Spring JDBC Exception Translation Architecture
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   SPRING JDBC EXCEPTION TRANSLATION                    │
-│                                                                        │
-│   java.sql.SQLException (Vendor Error Code: 1062 / 23505)              │
-│                          │                                             │
-│                          ▼                                             │
-│   [ SQLErrorCodeSQLExceptionTranslator ] ◄── reads sql-error-codes.xml │
-│                          │                                             │
-│                          ▼ Maps vendor code to Spring Hierarchy         │
-│   org.springframework.dao.DataAccessException (Unchecked)              │
-│       ├── DuplicateKeyException                                        │
-│       ├── DataIntegrityViolationException                              │
-│       ├── CannotAcquireLockException                                   │
-│       └── QueryTimeoutException                                        │
-└────────────────────────────────────────────────────────────────────────┘
-```
+| Vendor SQLException Component | Translation Mechanism | Resolution Rules (`sql-error-codes.xml`) | Unified Spring Exception | Handling & Recovery Strategy |
+| :--- | :--- | :--- | :--- | :--- |
+| **PostgreSQL Error 23505 / MySQL 1062** | `SQLErrorCodeSQLExceptionTranslator` | Matches vendor unique constraint violation error code | `DuplicateKeyException` (extends `DataIntegrityViolationException`) | Idempotent upsert fallback or client 409 Conflict HTTP response |
+| **PostgreSQL Error 23503 / MySQL 1452** | `SQLErrorCodeSQLExceptionTranslator` | Matches foreign key constraint failure code | `DataIntegrityViolationException` | Fail-fast validation; reject invalid relational reference |
+| **PostgreSQL Error 40P01 / MySQL 1213** | `SQLErrorCodeSQLExceptionTranslator` | Matches deadlock detected error code | `CannotAcquireLockException` | Exponential backoff retry via Spring `@Retryable` |
+| **PostgreSQL Error 57014 / MySQL 1317** | `SQLErrorCodeSQLExceptionTranslator` | Matches statement execution timeout | `QueryTimeoutException` | Circuit breaker trip; review query index cardinality and execution plan |
+| **Generic / Unknown Vendor Code** | `SQLStateSQLExceptionTranslator` | Fallback translator evaluating 5-character ANSI SQLState string | `UncategorizedSQLException` | Alert on-call SRE; log complete SQLState and error code for triage |
+
+> [!IMPORTANT]
+> **Exception Translation Pipeline:**
+> `Raw java.sql.SQLException (Vendor Error Code)` ──► `SQLErrorCodeSQLExceptionTranslator` ──► `sql-error-codes.xml Evaluation` ──► `Spring org.springframework.dao.DataAccessException (Unchecked Hierarchy)`
 
 ---
 

@@ -6,7 +6,125 @@
 
 ## Guide Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph L8 ["Layer 8: Production Key Management & Anti-Patterns"]
+        direction LR
+        K1["Cloud KMS Envelope Encryption<br/>(KEK wrapping DEK in RAM)"]
+        K2["Constant-Time Verification<br/>(MessageDigest.isEqual timing mitigation)"]
+        K3["Char[] Wiping vs String Interning<br/>(Arrays.fill zeroing memory)"]
+    end
+
+    subgraph L7 ["Layer 7: Secure Remote Access Protocols"]
+        direction LR
+        S1["SSH Transport Layer (RFC 4253)<br/>(Diffie-Hellman Key Exchange)"]
+        S2["SSH Userauth (RFC 4252)<br/>(authorized_keys / public key verify)"]
+        S3["SSH Connection & Port Forwarding<br/>(Local -L, Remote -R, Dynamic SOCKS -D)"]
+    end
+
+    subgraph L6 ["Layer 6: Network Transport Security & Zero-Trust (mTLS)"]
+        direction LR
+        T1["TLS 1.2 Handshake (2-RTT)<br/>(RSA/DHE Key Exchange, CBC MAC-then-Encrypt)"]
+        T2["TLS 1.3 Handshake (1-RTT)<br/>(ECDHE only, AES-GCM/ChaCha20, 0-RTT Anti-Replay)"]
+        T3["mTLS Mutual Authentication<br/>(Dual X.509 handshake in Istio / Service Mesh)"]
+    end
+
+    subgraph L5 ["Layer 5: PKI, Certificates & TrustStores"]
+        direction LR
+        P1["X.509 Certificate Chain<br/>(Root CA -> Intermediate CA -> Leaf SAN)"]
+        P2["Revocation Protocols<br/>(CRL Distribution Points vs OCSP Stapling)"]
+        P3["Java KeyStore (PKCS12) vs TrustStore<br/>(Private keys + certs vs Trusted Root CAs)"]
+    end
+
+    subgraph L4 ["Layer 4: Password Hardness & Cryptographic Hashing"]
+        direction LR
+        H1["Password KDFs: Argon2id, BCrypt, PBKDF2<br/>(Time, Memory & Parallelism cost params)"]
+        H2["HMAC & Cryptographic Hashes<br/>(HMAC-SHA256, SHA-3 sponge function)"]
+    end
+
+    subgraph L3 ["Layer 3: Asymmetric Cryptography & Digital Signatures"]
+        direction LR
+        A1["RSA-OAEP with SHA-256<br/>(Optimal Asymmetric Encryption Padding)"]
+        A2["Modern Elliptic Curves<br/>(ECDH x25519, EdDSA Ed25519, NIST secp256r1)"]
+        A3["Post-Quantum Cryptography (PQC)<br/>(ML-KEM Kyber, ML-DSA Dilithium)"]
+    end
+
+    subgraph L2 ["Layer 2: Symmetric AEAD & Hardware Acceleration"]
+        direction LR
+        E1["AES-256-GCM AEAD<br/>(CTR encryption + GMAC authentication tag)"]
+        E2["Nonce/IV Catastrophe Protection<br/>(12-byte cryptographically random IV)"]
+        E3["ChaCha20-Poly1305<br/>(High-speed software cipher for mobile/ARM)"]
+    end
+
+    subgraph L1 ["Layer 1: JCA / JCE Engine & Hardware Security Modules"]
+        direction LR
+        J1["JCA Engine Architecture<br/>(Cipher, Mac, MessageDigest, KeyStore SPIs)"]
+        J2["Security Providers<br/>(SUN, SunEC, BouncyCastleProvider)"]
+        J3["Hardware Security Modules (HSM)<br/>(PKCS#11 native C-slot integration)"]
+    end
+
+    L8 --> L7
+    L7 --> L6
+    L6 --> L5
+    L5 --> L4
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+
+    classDef l8 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+    classDef l7 fill:#1e1e2e,stroke:#fab387,stroke-width:2px,color:#cdd6f4;
+    classDef l6 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l5 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l4 fill:#1e1e2e,stroke:#94e2d5,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89dceb,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class K1,K2,K3 l8;
+    class S1,S2,S3 l7;
+    class T1,T2,T3 l6;
+    class P1,P2,P3 l5;
+    class H1,H2 l4;
+    class A1,A2,A3 l3;
+    class E1,E2,E3 l2;
+    class J1,J2,J3 l1;
 ```
+
+#### Architectural Breakdown: The 8-Layer Java & Spring Cryptography Engineering Substrate
+
+1. **Visual Architecture & Cryptographic Substrates**:
+   - **Layer 1 (JCA/JCE Engine & HSM Substrate)**: Pluggable provider architecture. HotSpot exposes Service Provider Interfaces (`CipherSpi`, `KeyStoreSpi`) fulfilled by providers (`SUN`, `SunEC`, `BC` for Bouncy Castle, or `SunPKCS11` backed by hardware security modules/HSMs).
+   - **Layer 2 (Symmetric AEAD & Ciphers)**: Authenticated Encryption with Associated Data. Uses AES-256-GCM (accelerated via CPU `AES-NI` instructions) and ChaCha20-Poly1305. Guarantees confidentiality, authenticity, and integrity with dynamic 12-byte initialization vectors (IVs).
+   - **Layer 3 (Asymmetric Cryptography & Post-Quantum)**: Public-key encryption (RSA-OAEP) and digital signatures. Integrates Edwards-curve Digital Signature Algorithm (Ed25519), Montgomery curve key agreement (X25519), and NIST Post-Quantum standards (ML-KEM Kyber, ML-DSA Dilithium).
+   - **Layer 4 (Password Hardness & Cryptographic Hashing)**: SHA-256/SHA-3 cryptographic sponge functions, HMAC message authentication codes, and memory-hard Key Derivation Functions (Argon2id, BCrypt, PBKDF2) engineered to defeat GPU/ASIC brute-force cracking.
+   - **Layer 5 (PKI, X.509 Certificates & TrustStores)**: Public Key Infrastructure establishing trust chains (Root CA $\to$ Intermediate CA $\to$ Leaf Certificate with SAN). Contrasts Java KeyStores (`.p12` containing private keys and certificates) with TrustStores (containing trusted public Root CAs).
+   - **Layer 6 (Network Transport Security & Zero-Trust mTLS)**: Encrypted transport layer. Contrasts legacy TLS 1.2 (2-RTT handshake, cipher negotiation vulnerabilities) with modern TLS 1.3 (1-RTT handshake, ephemeral ECDHE mandatory, 0-RTT replay considerations) and mutual TLS (mTLS) for microservice zero-trust identity verification.
+   - **Layer 7 (Secure Remote Access Protocols - SSH)**: RFC 4253/4252 cryptographic transport, host key verification (`known_hosts`), public-key client authorization (`authorized_keys`), and TCP encrypted port forwarding.
+   - **Layer 8 (Production Key Management & Anti-Patterns)**: Cloud KMS Envelope Encryption (KEK wrapping local ephemeral DEKs), constant-time byte comparisons to eliminate side-channel timing attacks, and secure in-memory credential zeroization (`char[]` wiping).
+
+2. **Execution Flow & Protocol Handshakes**:
+   - **TLS 1.3 Handshake**: Client transmits `ClientHello` alongside its `KeyShare` (ephemeral Diffie-Hellman public parameter). The server replies with `ServerHello` + its `KeyShare` + encrypted certificate + encrypted authentication tag. Symmetric session keys are derived after only 1 round-trip time (1-RTT), cutting connection latency by 50% compared to TLS 1.2.
+   - **KMS Envelope Encryption Pipeline**:
+     1. App requests a data key from Cloud KMS (AWS KMS, GCP KMS, HashiCorp Vault).
+     2. KMS uses its root Key Encryption Key (KEK) to generate and return a Plaintext Data Encryption Key (DEK) and an Encrypted DEK.
+     3. App encrypts payload via AES-256-GCM using Plaintext DEK in RAM.
+     4. App immediately overwrites Plaintext DEK in RAM via `Arrays.fill(keyBytes, (byte) 0)`.
+     5. Ciphertext and Encrypted DEK are stored together in the database. Decryption involves passing Encrypted DEK back to KMS to unwrap.
+
+3. **Low-Level Mathematical & Kernel Mechanics**:
+   - **The Nonce-Reuse GHASH Catastrophe**: In AES-GCM, the keystream is generated by encrypting the nonce and counter: $S_i = E_K(\text{Nonce} \parallel i)$. If two distinct messages $P_1, P_2$ are encrypted under the identical Key and Nonce, the ciphertexts satisfy $C_1 \oplus C_2 = P_1 \oplus P_2$. keysteam cancels out. Furthermore, because GCM authentication tags evaluate a polynomial over the Galois field $\text{GF}(2^{128})$ keyed by $H = E_K(0^{128})$, subtracting two authentication tags produces a polynomial whose roots directly yield the secret hash key $H$. An attacker armed with $H$ can forge valid authentication tags for arbitrary forged payloads without knowing the AES master key.
+   - **Side-Channel Timing Attacks & Constant-Time Equals**: Standard byte comparisons (`Arrays.equals()`) terminate early upon encountering the first mismatching byte. Attackers measure microsecond network timing variances to guess HMAC signatures byte-by-byte. `MessageDigest.isEqual()` XORs all bytes and accumulates differences into an integer mask (`digesta[i] ^ digestb[i]`), ensuring identical execution time regardless of mismatch position.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **Expired Intermediate CA Outage**: A downstream microservice fails with `sun.security.validator.ValidatorException: PKIX path building failed`. Triage commands:
+     - `openssl s_client -connect api.partner.com:443 -showcerts`: Check full certificate chain returned by the remote server.
+     - `keytool -list -v -keystore $JAVA_HOME/lib/security/cacerts -alias root-ca`: Verify presence of root cert in JVM default truststore.
+   - **String Immutability Memory Leak**: Capturing passwords or private keys in `String` objects places sensitive secrets into the JVM heap string pool where they cannot be zero-wiped, leaving them exposed to memory scrapers and heap dumps (`jcmd <PID> GC.heap_dump`). Always use `char[]` or `byte[]` and explicitly invoke `Arrays.fill(secret, (byte) 0)` in `finally` blocks.
+
+<details>
+<summary>View Legacy ASCII Overview</summary>
+
+```text
 ========================================================================================================================
                                      JAVA & SPRING ENTERPRISE CRYPTOGRAPHY & SECURITY
 ========================================================================================================================
@@ -20,6 +138,8 @@
  [Layer 8: Beginner Mistakes, Anti-Patterns & Matrix]       --> 5 Engineering Traps (AES-ECB, String Passwords, Master Matrix)
 ========================================================================================================================
 ```
+
+</details>
 
 ---
 

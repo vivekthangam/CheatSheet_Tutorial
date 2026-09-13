@@ -61,28 +61,16 @@ Imagine going to an international airport for a flight:
 3. **The Filter Chain (The Security Checkpoints):**
    - You cannot teleport to the departure gate; you must walk through a metal detector (`CorsFilter`), baggage scanner (`CsrfFilter`), passport control (`JwtAuthenticationFilter`), and ticket inspection (`AuthorizationFilter`).
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                      SPRING SECURITY FILTER CHAIN (The Security Checkpoint)            │
-│                                                                                        │
-│  Inbound HTTP Request ──► [ 1. CorsFilter (Border Gate) ]                              │
-│                                  │                                                     │
-│                                  ▼                                                     │
-│                           [ 2. CsrfFilter (Anti-Forged Token Check) ]                  │
-│                                  │                                                     │
-│                                  ▼                                                     │
-│                           [ 3. JwtAuthenticationFilter (Passport & Biometrics) ]       │
-│                                  │ Extract Bearer Token, Validate Signature            │
-│                                  ▼                                                     │
-│                           [ 4. SecurityContextHolder ] (Passenger Cleared & Tagged)    │
-│                                  │ Holds: Principal, GrantedAuthorities, Credentials   │
-│                                  ▼                                                     │
-│                           [ 5. AuthorizationFilter (Boarding Gate: Checks Ticket Role) │
-│                                  │ hasRole('ADMIN') / hasAuthority('order:write')      │
-│                                  ▼                                                     │
-│                     [ DispatcherServlet ──► Your Controller ]                          │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Spring Security 6 Filter Chain Architecture
+
+| Execution Order | Filter Component | Core Responsibility | Security Context & Protocol Action |
+| :--- | :--- | :--- | :--- |
+| **Step 1** | `CorsFilter` | Evaluates cross-origin requests, pre-flight `OPTIONS` calls | Validates `Access-Control-Allow-Origin` headers before security processing |
+| **Step 2** | `CsrfFilter` | Cross-Site Request Forgery validation | Checks `_csrf` token on state-changing methods (`POST`, `PUT`, `DELETE`) |
+| **Step 3** | `JwtAuthenticationFilter` | Bearer token extraction and cryptographic verification | Validates RS256/HS256 signature, decodes claims, verifies expiration |
+| **Step 4** | `SecurityContextHolder` | In-memory authentication state persistence | Binds `Authentication` (`Principal`, `Authorities`) to `ThreadLocal` context |
+| **Step 5** | `AuthorizationFilter` | Role and authority access decision | Evaluates SpEL rules (`hasRole('ADMIN')`, `hasAuthority('order:write')`) |
+| **Step 6** | `DispatcherServlet` | Request routing to Spring MVC controller | Dispatches authenticated, authorized request to controller endpoint |
 
 ---
 
@@ -534,34 +522,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 ## 3.1 The Delegation Pipeline: Tomcat to `SecurityFilterChain`
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        SERVLET CONTAINER (Tomcat)                      │
-│                                                                        │
-│   HTTP Request ──► [ Standard Servlet Filters (Logging, Tracing) ]     │
-│                             │                                          │
-│                             ▼                                          │
-│                  [ DelegatingFilterProxy ]                             │
-│                             │ (Bridge: looks up Spring Bean)           │
-│                             ▼                                          │
-│                  [ FilterChainProxy (Bean) ]                           │
-│                             │                                          │
-│                             ▼                                          │
-│                  List<SecurityFilterChain>                             │
-│                             │ Matches RequestMatcherPattern            │
-│                             ▼                                          │
-│         [ SecurityFilterChain (14 - 18 Security Filters) ]             │
-│           ├── DisableEncodeUrlFilter                                   │
-│           ├── CorsFilter                                               │
-│           ├── CsrfFilter                                               │
-│           ├── JwtAuthenticationFilter                                  │
-│           ├── ExceptionTranslationFilter                               │
-│           └── AuthorizationFilter                                      │
-│                             │                                          │
-│                             ▼                                          │
-│                     [ DispatcherServlet ]                              │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Servlet Container to SecurityFilterChain Delegation Architecture
+
+| Pipeline Stage | Component | Execution Context | Core Responsibility |
+| :--- | :--- | :--- | :--- |
+| **Servlet Pipeline** | Servlet Container (Tomcat / Jetty) | Servlet Container Thread | Receives raw TCP connection, invokes standard servlet filters (logging, tracing) |
+| **Bridge Layer** | `DelegatingFilterProxy` | Servlet Context / Spring Bridge | Standard servlet filter looking up the `springSecurityFilterChain` bean from `ApplicationContext` |
+| **Master Filter Proxy** | `FilterChainProxy` | Spring Managed Bean | Inspects incoming URI against registered `SecurityFilterChain` patterns |
+| **Active Chain Selection** | `List<SecurityFilterChain>` | In-Memory Chain Router | Selects the first matching chain (e.g. `/api/**` vs `/public/**` vs `/actuator/**`) |
+| **Security Filters** | `SecurityFilterChain` (14-18 filters) | Ordered Filter Pipeline | Sequentially executes `CorsFilter`, `CsrfFilter`, `JwtAuthenticationFilter`, `AuthorizationFilter` |
+| **Target Endpoint** | `DispatcherServlet` | Spring MVC Core | Once all filters pass, dispatches request to target `@RestController` |
 
 ---
 
@@ -569,13 +539,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 Authentication is decoupled from authorization via the `AuthenticationManager` interface. The standard implementation is **`ProviderManager`**:
 
-```
-[ AuthenticationManager (ProviderManager) ]
-       │
-       ├──► Try Provider 1: [ JwtAuthenticationProvider ]  ──► (Cannot handle UsernamePassword -> skips)
-       ├──► Try Provider 2: [ DaoAuthenticationProvider ]  ──► (Validates username/hash against DB)
-       └──► Try Provider 3: [ LdapAuthenticationProvider ] ──► (Fallback)
-```
+### ProviderManager Authentication Resolution Matrix
+
+| Authentication Provider | Supported Token Type | Verification Mechanism | Fallback / Skip Condition |
+| :--- | :--- | :--- | :--- |
+| **`JwtAuthenticationProvider`** | `BearerTokenAuthenticationToken` | Validates cryptographic signature and claims against public key | If token is username/password, `supports()` returns `false` (skipped) |
+| **`DaoAuthenticationProvider`** | `UsernamePasswordAuthenticationToken` | Loads entity via `UserDetailsService`, verifies hash via `PasswordEncoder` | If credentials invalid, throws `BadCredentialsException` |
+| **`LdapAuthenticationProvider`** | `UsernamePasswordAuthenticationToken` | Fallback enterprise corporate directory bind / LDAP query | Attempted only if previous providers fail or are chained |
 
 ---
 

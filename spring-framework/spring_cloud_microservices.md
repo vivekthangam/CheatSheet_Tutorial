@@ -63,33 +63,30 @@ Before decomposing architectures into distributed microservices, engineers must 
   - *The Advantage:* If Island 2 has a storm, Island 1 and Island 3 keep functioning. You can upgrade Island 1 without touching Island 2!
   - *The New Challenge:* How do boats (network calls) find each island? What happens if high waves (network timeouts) sink a boat? That is the exact role of **Spring Cloud**.
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 THE MICROSERVICES TOPOLOGY                             │
-│                                                                                        │
-│   Client Request (Mobile / Web)                                                        │
-│           │                                                                            │
-│           ▼                                                                            │
-│   ┌─────────────────────────────────────────────────────────┐                          │
-│   │               SPRING CLOUD API GATEWAY                  │                          │
-│   │  - Single entry door (Airport Security & Ticket Check)  │                          │
-│   │  - Rate Limiting (Redis token bucket)                   │                          │
-│   │  - JWT Verification & Token Relay                       │                          │
-│   └────────────────────────────┬────────────────────────────┘                          │
-│                                │                                                       │
-│                ┌───────────────┴───────────────┐                                       │
-│                ▼                               ▼                                       │
-│       ┌─────────────────┐             ┌─────────────────┐                              │
-│       │  ORDER SERVICE  │──OpenFeign─►│ PAYMENT SERVICE │                              │
-│       │  (Port 8081)    │◄─CircuitBkr─│  (Port 8082)    │                              │
-│       └────────┬────────┘             └────────┬────────┘                              │
-│                │                               │                                       │
-│                └───────────────┬───────────────┘                                       │
-│                                ▼                                                       │
-│                     [ EUREKA SERVICE REGISTRY ]                                        │
-│                     (Dynamic Phonebook of Instances)                                   │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![Spring Cloud Distributed Systems Architectural Blueprint](../assets/images/spring/spring_cloud_distributed_systems.jpg)
+
+### Distributed Systems Architecture: Core Subsystems Breakdown
+
+| Subsystem Layer | Core Component | Underlying Technology | Engineering Responsibilities & Wire Protocols |
+| :--- | :--- | :--- | :--- |
+| **1. Edge Ingress & Gateway** | API Gateway Service | Spring Cloud Gateway (Netty / Project Reactor) | Non-blocking reverse proxy routing, SSL termination, Redis token-bucket rate limiting, JWT token relay, CORS enforcement. |
+| **2. Service Registry & Discovery**| Service Directory | Netflix Eureka / HashiCorp Consul / Spring Cloud K8s | Dynamic instance registration, ephemeral IP/port cataloging, 30s heartbeat health checks, self-preservation mode during network partitions. |
+| **3. Client-Side Load Balancing** | Smart Routing Client | Spring Cloud LoadBalancer | Decoupled client-side instance selection (Round-Robin, Weighted Random), reactive health ping caching, eliminates intermediate proxy latency hops. |
+| **4. Declarative RPC / HTTP** | Inter-Service Invocation | Spring Cloud OpenFeign / RestClient / WebClient | Contract-first declarative REST interface mapping, automated JSON serialization/deserialization, connection pooling, header propagation. |
+| **5. Resilience & Fault Isolation**| Fault Tolerance Engine | Resilience4j (CircuitBreaker, RateLimiter, Bulkhead) | Sliding-window failure rate tracking, fast-failing open state, graceful fallback execution, bulkhead thread/semaphore isolation. |
+| **6. Distributed Tracing & Telemetry**| Observability Plane | Micrometer Tracing + Brave / OpenTelemetry | W3C `traceparent` context propagation, Span creation, distributed log correlation, OTLP telemetry push to Tempo / Zipkin / Prometheus. |
+| **7. Centralized Configuration** | Config Management | Spring Cloud Config Server + Git / Vault / Spring Cloud Bus | Externalized property management, encrypted secrets handling, Kafka/RabbitMQ event bus for runtime zero-downtime `@RefreshScope` updates. |
+
+### Microservices Topology & Request Journey
+
+| Stage | Component | Protocol / Port | Technical Mechanics |
+| :--- | :--- | :--- | :--- |
+| **1. Ingress Request** | External Client (Web / Mobile) | HTTPS / 443 | Client dispatches REST / GraphQL request to centralized ingress domain |
+| **2. Edge Gateway** | Spring Cloud API Gateway | Port 8080 (Reactive Netty) | Evaluates predicates, checks Redis rate limiter, validates OAuth2 JWT, injects `X-Forwarded-*` headers |
+| **3. Registry Lookup** | Eureka / Consul Discovery | Port 8761 (HTTP Heartbeat) | Gateway queries local cache of healthy instances registered under service ID `ORDER-SERVICE` |
+| **4. Internal Routing** | Order Service Instance | Port 8081 (Spring Boot Web) | Gateway routes request directly to Order Service instance via client-side load balanced IP:Port |
+| **5. Inter-Service RPC** | Payment Service Invocation | OpenFeign (HTTP/2 / REST) | Order Service calls Payment Service (Port 8082) via declarative OpenFeign interface with W3C trace propagation |
+| **6. Fault Protection** | Resilience4j Circuit Breaker | In-Process Sliding Window | Monitors Payment Service error rate; trips circuit and executes fallback logic if failure threshold exceeds 50% |
 
 ---
 
@@ -223,6 +220,19 @@ spring:
 
 ## 2.2 Resilience4j Circuit Breaker & Fallback Architecture
 
+![Resilience4j Circuit Breaker and Fault Tolerance Architectural Blueprint](../assets/images/spring/spring_resilience_circuit_breaker.jpg)
+
+### Circuit Breaker & Isolation Subsystems Breakdown
+
+| Subsystem | State / Mode | Trigger & Invariant Condition | Execution Path & Latency Profile | Recovery Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **Circuit Breaker** | **CLOSED** | Failure rate < threshold (e.g. < 50% over sliding window) | Requests dispatched to target microservice; sliding window records outcome | Standard nominal execution; zero overhead. |
+| **Circuit Breaker** | **OPEN** | Failure rate $\ge$ 50% or slow-call rate $\ge$ 50% | Requests short-circuited immediately ($< 1\text{ms}$ fail-fast); fallback method executed | Waits `waitDurationInOpenState` (e.g. 10s) before transitioning to HALF_OPEN. |
+| **Circuit Breaker** | **HALF_OPEN** | Trial probe period | Permits configured probe calls (e.g. 3 requests) to test target service health | If probe calls succeed: transitions to CLOSED. If any probe call fails: transitions back to OPEN. |
+| **Bulkhead Isolation** | **ThreadPool / Semaphore** | Concurrent execution limit reached | Enforces isolation boundary preventing thread pool exhaustion across microservices | Rejects excess requests with `BulkheadFullException` or queues up to capacity. |
+| **Rate Limiter** | **Token Bucket** | Call rate exceeds limit per refresh period | Regulates request cadence to protect downstream dependencies from overload | Blocks or fails fast with `RequestNotPermitted`. |
+| **Time Limiter** | **Future / Mono Timeout** | Execution exceeds deadline (e.g. 2000ms) | Cancels downstream async task, releases thread back to pool | Emits `TimeoutException` and invokes fallback. |
+
 ```yaml
 # application.yml
 resilience4j:
@@ -302,30 +312,17 @@ management:
 
 ## 3.1 Spring Cloud Gateway Pipeline
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   SPRING CLOUD GATEWAY REACTIVE ENGINE                 │
-│                                                                        │
-│   Incoming HTTP Request ──► [ Netty EventLoop Thread ]                 │
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ RoutePredicateHandlerMapping ]             │
-│                                      │ Matches Path / Header Predicate │
-│                                      ▼                                 │
-│                           [ FilteringWebHandler ]                      │
-│                                      │                                 │
-│         ┌────────────────────────────┼────────────────────────────┐    │
-│         ▼                            ▼                            ▼    │
-│   GlobalFilter 1               GlobalFilter 2               RouteFilter│
-│   (Metrics / Tracing)          (Token Relay)                (RateLimit)│
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ Netty RoutingFilter ]                      │
-│                                      │ Asynchronous non-blocking call  │
-│                                      ▼                                 │
-│                           Downstream Microservice                      │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Spring Cloud Gateway Reactive Engine Pipeline
+
+| Pipeline Stage | Internal Gateway Class | Execution Thread Pool | Technical Operation |
+| :--- | :--- | :--- | :--- |
+| **1. Socket Ingress** | Netty Channel Pipeline | Netty `EventLoopGroup` (Worker) | Non-blocking NIO accept of HTTP request; wraps payload into reactive `ServerWebExchange` |
+| **2. Route Resolution** | `RoutePredicateHandlerMapping` | Netty EventLoop Thread | Tests request against configured Route Predicates (`Path`, `Header`, `Method`, `Weight`); locates matching route |
+| **3. Filter Pipeline** | `FilteringWebHandler` | Project Reactor `Mono` / `Flux` | Chains ordered Global Filters and Gateway Filters into a non-blocking reactive filter chain |
+| **4. Pre-Filter: Security** | `JwtAuthenticationTokenFilter` | Reactive Non-Blocking Thread | Extracts Bearer JWT, validates signature/claims against JWKS endpoint, propagates identity headers |
+| **5. Pre-Filter: Limiting** | `RequestRateLimiterGatewayFilterFactory` | Redis Reactive Commands (`Lettuce`) | Executes token-bucket Lua script against Redis cluster; rejects with HTTP 429 if capacity exceeded |
+| **6. Downstream Dispatch**| `NettyRoutingFilter` | Netty Reactive `HttpClient` | Dispatches asynchronous non-blocking outbound HTTP request to target downstream microservice URI |
+| **7. Post-Filter: Metrics**| `GatewayMetricsFilter` | EventLoop Reactor Stream | Records route execution latency and HTTP status code into Micrometer `MeterRegistry` upon response arrival |
 
 ---
 

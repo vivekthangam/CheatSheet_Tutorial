@@ -8,7 +8,93 @@
 
 ## Architecture Blueprint: The Java I/O & NIO Substrate
 
+![Java I/O: Blocking I/O vs Event-Driven Multiplexing NIO](../../assets/images/io/bio_vs_nio_multiplexing.jpg)
+
+```mermaid
+flowchart TB
+    subgraph L4 ["Layer 4: High-Level Asynchronous I/O (NIO.2 / JSR 203)"]
+        direction LR
+        A1["AsynchronousFileChannel<br/>(Thread Pool Driven)"]
+        A2["AsynchronousSocketChannel<br/>(CompletionHandler / Future)"]
+        A3["WatchService<br/>(OS inotify File Events)"]
+        A4["Path & Files NIO API<br/>(Atomic Operations & POSIX)"]
+    end
+
+    subgraph L3 ["Layer 3: I/O Multiplexing & Reactor Substrate"]
+        direction LR
+        S1["Selector Engine<br/>(epoll_wait multiplexer)"]
+        SK["SelectionKey Bitmask<br/>OP_READ | OP_WRITE | OP_ACCEPT | OP_CONNECT"]
+        RE["Netty EventLoop / Reactor Pattern<br/>(BossGroup -> WorkerGroup)"]
+    end
+
+    subgraph L2 ["Layer 2: Channels & Zero-Copy Data Transport"]
+        direction LR
+        C1["SocketChannel & ServerSocketChannel<br/>(Non-blocking TCP streams)"]
+        C2["FileChannel & MappedByteBuffer<br/>(mmap virtual page fault engine)"]
+        C3["Zero-Copy DMA Pipeline<br/>FileChannel.transferTo() / sendfile(2)"]
+    end
+
+    subgraph L1 ["Layer 1: Memory Buffers & Pointer Mechanics"]
+        direction LR
+        B1["DirectByteBuffer<br/>(C-heap malloc off-heap | DMA page-aligned)"]
+        B2["HeapByteBuffer<br/>(Managed byte[] array | GC pinned copy)"]
+        B3["Pointer State Registers<br/>0 <= mark <= position <= limit <= capacity<br/>(flip, compact, rewind, clear)"]
+    end
+
+    subgraph L0 ["Layer 0: OS Kernel, Syscalls & Hardware Substrate"]
+        direction LR
+        K1["Linux epoll Engine<br/>epoll_create1, epoll_ctl, epoll_wait (rbtree + rdllist)"]
+        K2["DMA Controller & Page Cache<br/>Scatter-Gather DMA (NETIF_F_SG), Ring Buffers"]
+        K3["OS Sockets & File Descriptors<br/>SO_RCVBUF, SO_SNDBUF, task_struct, files_struct"]
+    end
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
+
+    classDef l4 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l0 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+
+    class A1,A2,A3,A4 l4;
+    class S1,SK,RE l3;
+    class C1,C2,C3 l2;
+    class B1,B2,B3 l1;
+    class K1,K2,K3 l0;
 ```
+
+#### Architectural Breakdown: The 5-Layer Java I/O & NIO Engineering Substrate
+
+1. **Visual Architecture & Layer Anatomy**:
+   - **Layer 0 (OS Kernel, Syscalls & Hardware Substrate)**: Foundation of enterprise I/O. Uses native Linux kernel primitives: `epoll_create1()`, `epoll_ctl()`, and `epoll_wait()`. Maintains a kernel Red-Black tree (`struct rb_root rbr`) for registered file descriptors and a Ready Doubly-Linked List (`struct list_head rdllist`) populated by hardware NIC interrupts via the `ep_poll_callback` function.
+   - **Layer 1 (Memory Buffers & Pointer Mechanics)**: Data containers governed by `java.nio.Buffer`. `HeapByteBuffer` stores data inside the garbage-collected heap in a `byte[]`. `DirectByteBuffer` allocates native process virtual memory via `Unsafe.allocateMemory()`, enabling zero-copy DMA page-aligned memory access outside the JVM garbage collector's domain.
+   - **Layer 2 (Channels & Data Transport)**: Bidirectional conduits connecting user applications to OS file descriptors. Includes `SocketChannel`, `ServerSocketChannel`, and `FileChannel`. Enables hardware-level Scatter-Gather Zero-Copy transfers (`transferTo()`) and virtual memory address mapping (`mmap()` via `MappedByteBuffer`).
+   - **Layer 3 (Multiplexing & Reactor Substrate)**: Decouples concurrency from thread count. A single `Selector` thread monitors thousands of channels simultaneously using an event-driven Reactor pattern (`BossGroup` accepting new connections, `WorkerGroup` dispatching I/O readiness events).
+   - **Layer 4 (High-Level Asynchronous I/O - NIO.2)**: Proactor model abstractions introduced in Java 7 (`AsynchronousSocketChannel`, `AsynchronousFileChannel`) backed by an OS-managed thread pool or POSIX AIO / Windows I/O Completion Ports (IOCP).
+
+2. **Execution Flow & State Machine Transitions**:
+   - **Step 1: Registration**: Channel is set to non-blocking (`channel.configureBlocking(false)`) and registered with a `Selector` for specific interest bitmasks (`SelectionKey.OP_READ | OP_WRITE`). Under the hood, HotSpot invokes `epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev)`.
+   - **Step 2: Polling & Event Wakeup**: The single event loop thread invokes `selector.select()`, trapping into `epoll_wait()`. The thread is put to sleep in the Linux kernel wait queue with zero CPU utilization. When network packets arrive at the physical NIC, the hardware DMA controller writes packets to the kernel ring buffer and fires a CPU hardware interrupt (IRQ), moving the socket's file descriptor to the `rdllist` and waking `selector.select()`.
+   - **Step 3: Dispatching**: The selector returns the count of ready channels. The application iterates through `selector.selectedKeys()`, removes the key to prevent reprocessing, and reads data via `DirectByteBuffer` with zero intermediate user-kernel memory copies.
+
+3. **Low-Level Kernel & JVM Mechanics**:
+   - **Level-Triggered vs. Edge-Triggered epoll**: Linux `epoll` supports two modes. Java NIO operates in **Level-Triggered (`EPOLLLT`)** mode: as long as there is unread data remaining in the kernel socket receive buffer (`SO_RCVBUF`), calls to `select()` will continue returning the channel as ready. In contrast, Edge-Triggered (`EPOLLET`, used by Netty native epoll transport) only fires on state changes, requiring non-blocking loops until `EAGAIN` to prevent deadlocks.
+   - **JNI Pinning Overhead Avoidance**: When calling standard `InputStream.read(byte[])`, HotSpot cannot pass the array pointer directly to `sys_read` because the GC could move the array during memory compaction. HotSpot must allocate a temporary native C-buffer, issue `read()`, copy the data into the Java array, and deallocate the native buffer. Direct byte buffers eliminate this double copy completely.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **The Infamous Linux epoll 100% CPU Spin Bug (JDK-6403933)**: A subtle Linux kernel issue where a closed remote socket causes `epoll_wait` to return `POLLHUP` or `POLLERR`, but Java NIO fails to handle the unexpected condition, returning 0 ready channels immediately without blocking. The loop spins indefinitely, pegging a CPU core at 100%. Mitigate by upgrading JDKs or leveraging Netty's `io.netty.selectorAutoRebuildThreshold` which detects empty spin cycles (>512 times) and automatically recreates the selector and re-registers all channels.
+   - **Direct Memory OOM & Leaks**: High-throughput microservices allocating unpooled direct buffers can trigger `java.lang.OutOfMemoryError: Direct buffer memory`. SRE triage:
+     - `jcmd <PID> VM.native_memory baseline` and `jcmd <PID> VM.native_memory detail.diff`.
+     - Inspect `java.nio.Bits.count` and `totalCapacity` via JMX.
+     - Tune `-XX:MaxDirectMemorySize=4G` and deploy Netty's jemalloc-inspired `PooledByteBufAllocator`.
+
+<details>
+<summary>View Legacy ASCII Blueprint</summary>
+
+```text
 +-----------------------------------------------------------------------------------+
 | Layer 4: High-Level Asynchronous I/O (NIO.2 / JSR 203 - Java 7+)                  |
 | - AsynchronousFileChannel, AsynchronousSocketChannel, WatchService, Path, Files   |
@@ -29,6 +115,8 @@
 | - OS Page Cache, Socket Buffers (SO_RCVBUF, SO_SNDBUF), File Descriptors (FD)    |
 +-----------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 720" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080d19" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="amberHead" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ef4444" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1150" height="720" fill="url(#bg3)" />
+  <rect x="15" y="15" width="1120" height="690" rx="10" fill="none" stroke="#1e293b" stroke-width="2" />
+
+  <!-- Header -->
+  <rect x="225" y="25" width="700" height="50" rx="8" fill="url(#amberHead)" />
+  <text x="575" y="57" fill="#ffffff" font-family="'Segoe UI', sans-serif" font-size="20" font-weight="bold" text-anchor="middle">BEHAVIORAL PATTERNS: COMMUNICATION &amp; COORDINATION</text>
+
+  <!-- Patterns Grid: 11 Patterns -->
+  <g transform="translate(40, 95)">
+    <!-- 13. Chain of Resp -->
+    <rect x="0" y="0" width="340" height="125" rx="6" fill="#1e293b" stroke="#f59e0b" />
+    <text x="15" y="24" fill="#fbbf24" font-weight="bold" font-size="13">13. Chain of Responsibility</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Sequential processing filter pipeline.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10" font-family="monospace">AuthHandler -> RateLimit -> Sanitize</text>
+    <text x="15" y="90" fill="#38bdf8" font-size="10">If any link fails, execution aborts immediately.</text>
+    <text x="15" y="110" fill="#a78bfa" font-size="10">FastAPI / Flask middleware pipeline.</text>
+
+    <!-- 14. Command -->
+    <rect x="365" y="0" width="340" height="125" rx="6" fill="#1e293b" stroke="#f59e0b" />
+    <text x="15" y="24" fill="#fbbf24" font-weight="bold" font-size="13">14. Command</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Encapsulates actions as first-class objects.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10" font-family="monospace">cmd.execute() | cmd.compensate() (Undo)</text>
+    <text x="15" y="90" fill="#34d399" font-size="10">Foundation of Transactional Saga Orchestrators,</text>
+    <text x="15" y="110" fill="#34d399" font-size="10">job queues (Celery), and undo/redo stacks.</text>
+
+    <!-- 15. Interpreter -->
+    <rect x="730" y="0" width="340" height="125" rx="6" fill="#1e293b" stroke="#f59e0b" />
+    <text x="15" y="24" fill="#fbbf24" font-weight="bold" font-size="13">15. Interpreter</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Evaluates sentences in a formal grammar.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10" font-family="monospace">AndExpr(GreaterThan(age, 18), HasFlag(vip))</text>
+    <text x="15" y="90" fill="#f87171" font-size="10">Rule engines, SQL AST parsers, dynamic</text>
+    <text x="15" y="110" fill="#f87171" font-size="10">discount criteria evaluators.</text>
+
+    <!-- Row 2 -->
+    <!-- 16. Iterator -->
+    <rect x="0" y="145" width="250" height="125" rx="6" fill="#1e293b" stroke="#10b981" />
+    <text x="15" y="24" fill="#34d399" font-weight="bold" font-size="13">16. Iterator</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Lazy sequential traversal.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10" font-family="monospace">__iter__ and __next__</text>
+    <text x="15" y="90" fill="#38bdf8" font-size="10">Python generator `yield`</text>
+    <text x="15" y="110" fill="#94a3b8" font-size="10">100M rows with O(1) RAM.</text>
+
+    <!-- 17. Mediator -->
+    <rect x="275" y="145" width="250" height="125" rx="6" fill="#1e293b" stroke="#06b6d4" />
+    <text x="15" y="24" fill="#38bdf8" font-weight="bold" font-size="13">17. Mediator</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Hub decoupling N-to-N.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">WebSocket ChatHub routes</text>
+    <text x="15" y="90" fill="#94a3b8" font-size="10">all peer-to-peer traffic</text>
+    <text x="15" y="110" fill="#34d399" font-size="10">eliminating mesh chaos.</text>
+
+    <!-- 18. Memento -->
+    <rect x="550" y="145" width="250" height="125" rx="6" fill="#1e293b" stroke="#8b5cf6" />
+    <text x="15" y="24" fill="#a78bfa" font-weight="bold" font-size="13">18. Memento</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Point-in-time snapshots.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10" font-family="monospace">editor.create_snapshot()</text>
+    <text x="15" y="90" fill="#94a3b8" font-size="10">HistoryManager stack.</text>
+    <text x="15" y="110" fill="#cbd5e1" font-size="10">Undo/Redo &amp; rollback.</text>
+
+    <!-- 19. Observer -->
+    <rect x="825" y="145" width="245" height="125" rx="6" fill="#1e293b" stroke="#ec4899" />
+    <text x="15" y="24" fill="#f472b6" font-weight="bold" font-size="13">19. Observer</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Pub/Sub event fan-out.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">Market publisher pushes</text>
+    <text x="15" y="90" fill="#94a3b8" font-size="10">price ticks to subscribers</text>
+    <text x="15" y="110" fill="#38bdf8" font-size="10">using async listeners.</text>
+
+    <!-- Row 3 -->
+    <!-- 20. State -->
+    <rect x="0" y="290" width="250" height="125" rx="6" fill="#1e293b" stroke="#3b82f6" />
+    <text x="15" y="24" fill="#60a5fa" font-weight="bold" font-size="13">20. State</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">FSM alters behavior.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">Pending -> Paid -> Shipped</text>
+    <text x="15" y="90" fill="#cbd5e1" font-size="10">Prevents illegal state</text>
+    <text x="15" y="110" fill="#cbd5e1" font-size="10">transitions declaratively.</text>
+
+    <!-- 21. Strategy -->
+    <rect x="275" y="290" width="250" height="125" rx="6" fill="#1e293b" stroke="#10b981" />
+    <text x="15" y="24" fill="#34d399" font-weight="bold" font-size="13">21. Strategy</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Swappable algorithms.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">Tax engines &amp; Multi-LLM</text>
+    <text x="15" y="90" fill="#94a3b8" font-size="10">routers (OpenAI, Anthropic,</text>
+    <text x="15" y="110" fill="#94a3b8" font-size="10">Gemini fallback).</text>
+
+    <!-- 22. Template Method -->
+    <rect x="550" y="290" width="250" height="125" rx="6" fill="#1e293b" stroke="#eab308" />
+    <text x="15" y="24" fill="#facc15" font-weight="bold" font-size="13">22. Template Method</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Fixed algorithmic skeleton.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">Ingest -> Parse -> Train</text>
+    <text x="15" y="90" fill="#cbd5e1" font-size="10">Subclasses override hooks;</text>
+    <text x="15" y="110" fill="#cbd5e1" font-size="10">structure remains locked.</text>
+
+    <!-- 23. Visitor -->
+    <rect x="825" y="290" width="245" height="125" rx="6" fill="#1e293b" stroke="#a855f7" />
+    <text x="15" y="24" fill="#c084fc" font-weight="bold" font-size="13">23. Visitor</text>
+    <text x="15" y="48" fill="#cbd5e1" font-size="11">Operations separate from AST.</text>
+    <text x="15" y="70" fill="#94a3b8" font-size="10">Double dispatch mechanism.</text>
+    <text x="15" y="90" fill="#cbd5e1" font-size="10">Evaluates node trees</text>
+    <text x="15" y="110" fill="#cbd5e1" font-size="10">without mutating classes.</text>
+  </g>
+
+  <!-- Bottom Tip Banner -->
+  <g transform="translate(40, 550)">
+    <rect width="1070" height="120" rx="8" fill="#0f172a" stroke="#334155" />
+    <text x="30" y="35" fill="#f8fafc" font-size="14" font-weight="bold">Behavioral Mastery in Modern Python:</text>
+    <text x="30" y="62" fill="#94a3b8" font-size="12">Use Python 3.12+ `match/case` to simplify Strategy and State pattern dispatches without polymorphic bloat.</text>
+    <text x="30" y="85" fill="#94a3b8" font-size="12">Combine `asyncio.Queue` with Command and Observer patterns for ultra-high throughput event processing engines.</text>
+  </g>
+</svg>

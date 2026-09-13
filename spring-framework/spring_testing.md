@@ -47,25 +47,15 @@ Before engineering test suites in Spring Boot 3, developers must master context 
 - **Sliced Testing (Testing the Dashboard Electronics):** You connect the car dashboard to a test battery. You press the speedometer button to verify the needle moves, without starting the real gas engine.
 - **Integration Testing with Testcontainers (The Crash Test Track):** You put the entire assembled car on a real road track, fill the tank with real gasoline (real Dockerized PostgreSQL database), and verify that pressing the brake pedal actually brings the car to a safe stop.
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              THE ENTERPRISE TEST PYRAMID                               │
-│                                                                                        │
-│                                  / \                                                   │
-│                                 /   \   Full Integration Tests                         │
-│                                /     \  @SpringBootTest + Testcontainers               │
-│                               /       \ (Slowest, Highest Fidelity)                    │
-│                              /─────────\                                               │
-│                             /           \  Sliced Context Tests                        │
-│                            /             \ @WebMvcTest, @DataJpaTest                   │
-│                           /               \ (Fast, Isolated Slice)                     │
-│                          /─────────────────\                                           │
-│                         /                   \  Pure Unit Tests                         │
-│                        /                     \ Plain JUnit 5 + Mockito                 │
-│                       /                       \ (Instant, No Spring Context)           │
-│                      /─────────────────────────\                                       │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Tier | Test Layer | Framework Tooling & Annotations | Execution Latency | Context Footprint | Production Fidelity | Primary Focus & Verification Scope |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tier 3 (Top 10%)** | **Full Integration Tests** | `@SpringBootTest`, Testcontainers, `@ServiceConnection` | Slow ($3\text{s} - 10\text{s}$) | Complete `ApplicationContext` + Docker containers (PostgreSQL, Kafka, Redis) | **Highest (100%)** | End-to-end user transactions, cross-service workflows, real database schema constraints, wire-level protocol serialization. |
+| **Tier 2 (Mid 20%)** | **Sliced Context Tests** | `@WebMvcTest`, `@DataJpaTest`, `@JsonTest`, MockMvc | Fast ($200\text{ms} - 800\text{ms}$) | Targeted slice only (e.g., Controllers + Security filters, or JPA Repositories + EntityManager) | **Medium (High for targeted slice)** | HTTP request routing, input validation, serialization/deserialization, query generation, SQL dialect execution. |
+| **Tier 1 (Base 70%)** | **Pure Unit Tests** | Plain JUnit 5 (`@ExtendWith(MockitoExtension.class)`), AssertJ | Instant ($<1\text{ms} - 10\text{ms}$) | Zero Spring context; pure JVM heap allocation | **Isolated** | Business domain algorithms, math calculation, branching logic, boundary conditions, edge cases without I/O overhead. |
+
+> [!NOTE]
+> **Execution Flow Pipeline:**
+> `Pure Unit Tests (Plain JUnit 5 / Mockito)` ──► `Sliced Context Tests (@WebMvcTest / @DataJpaTest)` ──► `Full Integration Tests (@SpringBootTest + Testcontainers @ServiceConnection)`
 
 ---
 
@@ -394,27 +384,19 @@ class OrderServiceUnitTest {
 
 ## 3.1 Spring TestContext Framework Lifecycle
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   SPRING TEST CONTEXT LIFECYCLE                        │
-│                                                                        │
-│   TestClass Loaded ──► [ TestContextManager ]                          │
-│                                │                                       │
-│                                ▼                                       │
-│                      [ ContextCache Lookup ]                           │
-│                      - Key: MergedContextConfiguration                 │
-│                                │                                       │
-│                ┌───────────────┴───────────────┐                       │
-│                ▼                               ▼                       │
-│          [ Cache HIT ]                   [ Cache MISS ]                │
-│          Reuses active                   Boots new ApplicationContext  │
-│          ApplicationContext              Stores in ContextCache map    │
-│                │                               │                       │
-│                └───────────────┬───────────────┘                       │
-│                                ▼                                       │
-│   BeforeTestMethod ──► Run Test ──► AfterTestMethod                    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+| Lifecycle Phase | Engine Component | Operational Mechanics & Responsibilities | Cache State & Thread Safety | Latency Impact |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Class Loading** | `TestContextManager` | Instantiated per test class. Coordinates test execution listeners, prepares test instance, and registers test context lifecycle callbacks. | Thread-safe test runner coordinator | Negligible ($<1\text{ms}$) |
+| **2. Key Generation** | `MergedContextConfiguration` | Synthesizes test class annotations, `@ContextConfiguration`, `@ActiveProfiles`, property overrides, and bean overriding configurations into an immutable cache key. | Computes deterministic hash code across profiles, initializers, and locations | Microseconds ($<0.5\text{ms}$) |
+| **3. Cache Lookup** | `ContextCache` (`LruCache`) | Checks the static concurrent in-memory `ContextCache` map using the `MergedContextConfiguration` key. | Concurrent read lock on internal LRU cache map (default max 32 contexts) | Instant ($<0.1\text{ms}$) |
+| **4a. Cache HIT** | `ApplicationContext` Reuse | If an active `ApplicationContext` matching the key already exists, it is retrieved and reused directly for the test suite without re-initialization. | Reuses existing JVM singleton beans and connection pools across test classes | **Zero boot cost** ($<2\text{ms}$) |
+| **4b. Cache MISS** | Cold Boot & Registration | Cold boots a brand new `ApplicationContext`, executes all `BeanFactoryPostProcessor` and `BeanPostProcessor` beans, and registers the context in `ContextCache`. | Synchronized write lock into static `ContextCache` map | **High boot penalty** ($2\text{s} - 8\text{s}$) |
+| **5. Test Execution** | `TestExecutionListener` Chain | Triggers `beforeTestMethod`, injects autowired test fields, executes `@Test` method, and executes `afterTestMethod`. | Invokes rollback on `@Transactional` test methods | Test logic bound |
+| **6. Context Eviction** | Invalidation Handler | If `@DirtiesContext` is annotated or an unrecoverable failure occurs, evicts the context from `ContextCache` and shuts down bean destruction callbacks. | Context destroyed; JVM garbage collector reclaims memory | High subsequent cost (forces cold reboot on next class) |
+
+> [!IMPORTANT]
+> **TestContext Execution Pipeline:**
+> `Test Class Loaded` ──► `TestContextManager` ──► `MergedContextConfiguration Key Computed` ──► `ContextCache Lookup` ──► `[Cache HIT: Reuse Active Context | Cache MISS: Bootstrap New Context & Store]` ──► `TestExecutionListeners (Before -> Run -> After)`
 
 ---
 

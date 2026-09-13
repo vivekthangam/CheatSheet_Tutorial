@@ -49,27 +49,16 @@ A production-grade engineering handbook for building ultra-high-throughput, non-
 
 ### The Architecture Comparison
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        TRADITIONAL SPRING MVC (Thread-per-Request)                     │
-│                                                                                        │
-│   Request 1 ──► [ Thread 1 ] ──► Blocks on DB Query (100ms) ──────────► Response 1    │
-│   Request 2 ──► [ Thread 2 ] ──► Blocks on Remote REST (200ms) ───────► Response 2    │
-│   Request N ──► 200 Threads Max (Tomcat pool exhausted ──► Queue Full ──► Latency Spike│
-└────────────────────────────────────────────────────────────────────────────────────────┘
+### Architecture Comparison: Spring MVC (Thread-per-Request) vs. Spring WebFlux (Event Loop)
 
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        SPRING WEBFLUX (Netty Non-Blocking Event Loop)                  │
-│                                                                                        │
-│   Request 1 ──┐                                                                        │
-│   Request 2 ──┼──► [ 1 Netty Event Loop Thread ] ──► Registers Socket Callback         │
-│   Request N ──┘            │                                    │                      │
-│                            ▼                                    ▼                      │
-│                  Zero Thread Blocking!             Socket emits data ready event       │
-│                  Handles 50,000+ concurrent        Event Loop dispatches response      │
-│                  connections on 8 CPU cores!                                           │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Architectural Dimension | Spring MVC (Servlet / Tomcat) | Spring WebFlux (Project Reactor / Netty) | Engineering Implications |
+| :--- | :--- | :--- | :--- |
+| **Concurrency Model** | Thread-per-request (`ThreadPoolExecutor`) | Event Loop Model (`Netty EventLoopGroup`) | WebFlux uses $2 \times \text{CPU cores}$ threads vs. Tomcat's 200–500 worker threads |
+| **Thread State During I/O** | **Blocked / Waiting**: Thread sleeps while waiting for RDBMS / HTTP response | **Non-Blocking**: Thread immediately returns to loop; OS registers socket callback via `epoll` | Zero CPU cycles wasted on dormant waiting threads |
+| **Memory Footprint** | High: ~1MB stack allocated per thread ($500\text{ threads} \approx 500\text{MB}$ stack) | Ultra-Low: Tiny fixed set of worker threads ($16\text{ threads} \approx 16\text{MB}$ stack) | Drastically reduces JVM memory baseline and Garbage Collection pauses |
+| **Saturation Failure Mode**| Thread pool starvation $\to$ connection queue overflow $\to$ latency cliff / HTTP 504 | CPU bound $\to$ graceful backpressure request throttling (`request(N)`) | Highly resilient under traffic spikes; maintains stable response times |
+| **Scalability Ceiling** | ~1,000–3,000 concurrent active connections per node | 50,000–100,000+ concurrent active connections per node | Ideal for streaming, Server-Sent Events (SSE), WebSockets, and high-fanout microservice gateways |
+| **Data Access Layer** | Synchronous JDBC / JPA (Hibernate) | Asynchronous R2DBC / Reactive Mongo / Cassandra | Blocking JDBC drivers freeze Netty event loop unless wrapped in `Schedulers.boundedElastic()` |
 
 ---
 
@@ -280,7 +269,7 @@ record ProductDto(String id, String name, Double price) {}
    }
    ```
    - **Sample Output**:
-     ```
+     ```text
      EnrichedOrder[id="ORD-99", finalAmount=118.0, customerRating="GOLD"]
      ```
 

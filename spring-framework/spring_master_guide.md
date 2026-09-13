@@ -88,26 +88,79 @@ The Reactive Streams specification defines non-blocking backpressure:
 
 # TRACK 1: JUNIOR & ENTRY-LEVEL FOUNDATIONS (ZERO-TO-HERO)
 
-## 1.1 The Real-World Mental Model (The Hotel Concierge & Security Guards)
+## 1.1 The Real-World Mental Model & Architectural Blueprint
 
-```
-+-------------------------------------------------------------------------------+
-|                       THE SPRING APPLICATION HOTEL                            |
-|                                                                               |
-|  [ The Hotel Concierge / Butler (The ApplicationContext / IoC Container) ]    |
-|  Purchases, inspects, and wires all hotel appliances at startup               |
-|                                     │                                         |
-|                                     ▼                                         |
-|  [ The Hotel Appliances (Spring Beans: @Service, @Repository, @Component) ]   |
-|  Singleton instances shared across all guest requests                         |
-|                                     │                                         |
-|                                     ▼                                         |
-|  [ The Gatehouse Security Guard (CGLIB Dynamic Proxy: AOP) ]                  |
-|  Intercepts method calls: Opens transactions, validates JWTs, caches results  |
-+-------------------------------------------------------------------------------+
-```
+In enterprise Java architectures, Spring operates as the foundational control plane and runtime container:
+1. **The ApplicationContext (The Intelligent Concierge)**: Ingests configuration sources, discovers component definitions, validates dependency trees, constructs bean instances, and wires dependencies into immutable object graphs.
+2. **The Spring Beans (The Managed Appliances)**: Reusable, thread-safe singleton services, repositories, and components registered within the container.
+3. **The Dynamic Proxy Layer (The Gatehouse Interceptor)**: Dynamically wraps beans with runtime bytecode proxies (CGLIB or JDK Dynamic Proxies) to inject orthogonal cross-cutting concerns (transactions, security, caching, tracing) transparently.
 
----
+![Spring Boot 3 Core and IoC Container Architectural Blueprint](../assets/images/spring/spring_core_ioc_architecture.jpg)
+
+### Deep-Dive Architectural Breakdown: Spring Boot 3 Core & IoC Container Blueprint
+
+The architectural blueprint above decodes the seven mission-critical subsystems, registration mechanics, and lifecycle phases driving the Spring container:
+
+#### 1. ApplicationContext Bootstrapping & Environment Ingestion
+- **Entry Point**: Bootstrapping begins with `SpringApplication.run()`. The bootstrap phase initializes the `Environment` abstraction (`StandardEnvironment` for web or non-web contexts), combining JVM system properties, OS environment variables, configuration profiles (`application.yml`), and command-line arguments.
+- **Context Synthesis**: Spring instantiates the specialized container instance—typically `AnnotationConfigServletWebServerApplicationContext` for Spring MVC or `AnnotationConfigReactiveWebServerApplicationContext` for WebFlux. It applies `ApplicationContextInitializer` hooks and emits `ApplicationStartingEvent` and `ApplicationEnvironmentPreparedEvent` lifecycle signals.
+
+#### 2. Bean Definition Registry & Source Scanning
+- **Scanning Infrastructure**: The container utilizes `ClassPathBeanDefinitionScanner` and `AnnotatedBeanDefinitionReader` to discover candidates decorated with stereotype annotations (`@Component`, `@Service`, `@Repository`, `@Controller`, `@Configuration`).
+- **BeanDefinition Metadata Object**: Raw classes are not instantiated immediately. The container parses bytecode into `BeanDefinition` metadata records stored in `DefaultListableBeanFactory`. Each definition encapsulates:
+  - Concrete class type, constructor arguments, and property overrides.
+  - Scope (`singleton`, `prototype`, `request`, `session`).
+  - Lazy initialization flags (`@Lazy`), primary flags (`@Primary`), and qualifier names.
+  - Factory method references for `@Bean` annotated configurations.
+
+#### 3. Factory Post-Processing (`BeanFactoryPostProcessor` SPI)
+- **Metadata Mutation Before Instantiation**: Executes after all `BeanDefinition`s are registered, but **before a single bean instance is constructed in memory**.
+- **`ConfigurationClassPostProcessor`**: Detects `@Configuration` classes and generates CGLIB subclasses (when `proxyBeanMethods = true`) to enforce singleton semantics across intra-class `@Bean` method calls.
+- **`PropertySourcesPlaceholderConfigurer`**: Parses and resolves `${property.key:defaultValue}` expressions inside bean definitions, injecting live values from the active `Environment`.
+
+#### 4. BeanPostProcessor (BPP) Pipeline & Metadata Interception
+- **Extensible Interception Hooks**: Beans implementing `BeanPostProcessor` intercept every newly created bean during initialization:
+  - `postProcessBeforeInitialization(Object bean, String beanName)`: Invoked before any initialization callbacks.
+  - `postProcessAfterInitialization(Object bean, String beanName)`: Invoked after initialization callbacks; **this is the exact phase where dynamic AOP proxies are created**.
+- **Core Engine BPPs**:
+  - `AutowiredAnnotationBeanPostProcessor`: Injects dependencies for `@Autowired` and `@Value` fields/methods.
+  - `CommonAnnotationBeanPostProcessor`: Resolves JSR-250 lifecycle hooks (`@PostConstruct`, `@PreDestroy`) and `@Resource`.
+  - `AbstractAutoProxyCreator`: Evaluates pointcuts against the bean's methods. If matches occur, wraps the target bean in a CGLIB or JDK Dynamic Proxy.
+
+#### 5. Three-Level Singleton Cache (`DefaultSingletonBeanRegistry`)
+To resolve circular references between singleton beans safely, Spring employs a hierarchical three-tier cache architecture:
+| Cache Level | Cache Field Name | Underlying Data Structure | Role & Lifecycle State |
+| :--- | :--- | :--- | :--- |
+| **Level 1 (Singleton Cache)** | `singletonObjects` | `ConcurrentHashMap<String, Object>` | Holds fully initialized, post-processed, ready-to-use singleton bean instances. |
+| **Level 2 (Early Singleton Objects)** | `earlySingletonObjects` | `HashMap<String, Object>` | Holds partially constructed beans (instantiated, but property injection or BPPs incomplete) exposed to break circular loops. |
+| **Level 3 (Singleton Factories)** | `singletonFactories` | `HashMap<String, ObjectFactory<?>>` | Holds anonymous factory lambdas capable of returning early proxy references (`SmartInstantiationAwareBeanPostProcessor`) on-demand. |
+
+#### 6. AOP Proxying Architecture: CGLIB Bytecode Subclassing vs JDK Dynamic Proxies
+- **CGLIB / Byte Buddy (`TargetClass$$EnhancerBySpringCGLIB`)**:
+  - Generates a synthetic child subclass of the target bean at runtime.
+  - Overrides public/protected methods to execute the interceptor chain (`MethodInterceptor`).
+  - Default proxy engine in Spring Boot 2 & 3 (`spring.aop.proxy-target-class=true`).
+  - *Hard Constraint*: Classes and methods marked `final` cannot be overridden; self-invocation (`this.method()`) bypasses the proxy subclass.
+- **JDK Dynamic Proxies (`java.lang.reflect.Proxy`)**:
+  - Dynamically implements the interfaces exposed by the target class via `InvocationHandler`.
+  - Requires target beans to implement interfaces; cannot cast the generated proxy back to the concrete class implementation.
+
+#### 7. Deterministic 12-Step Bean Lifecycle Sequence
+Every managed bean transitions through an exact, sequential lifecycle pipeline managed by the container:
+| Step # | Phase Name | Invocation Mechanism | Internal Action Taken |
+| :--- | :--- | :--- | :--- |
+| **Step 1** | Instantiation | Constructor Reflection / Factory Method | JVM creates raw object instance via constructor injection. |
+| **Step 2** | Populate Properties | `AutowiredAnnotationBeanPostProcessor` | Setter and field dependencies resolved and injected. |
+| **Step 3** | Set Bean Name | `BeanNameAware.setBeanName()` | Container passes the registered bean identifier string. |
+| **Step 4** | Set Bean Factory | `BeanFactoryAware.setBeanFactory()` | Passes internal `BeanFactory` reference to the bean. |
+| **Step 5** | Set Application Context | `ApplicationContextAware.setApplicationContext()` | Passes enclosing `ApplicationContext` container reference. |
+| **Step 6** | Pre-Initialization | `BPP.postProcessBeforeInitialization()` | Invokes `@PostConstruct` methods via `CommonAnnotationBeanPostProcessor`. |
+| **Step 7** | Initializing Bean | `InitializingBean.afterPropertiesSet()` | Interface callback verifying all properties are configured. |
+| **Step 8** | Custom Init Method | `@Bean(initMethod = "customInit")` | Invokes custom XML or annotation-declared initializer. |
+| **Step 9** | Post-Initialization | `BPP.postProcessAfterInitialization()` | Wraps target with AOP proxies (`@Transactional`, `@Async`, `@Cacheable`). |
+| **Step 10** | Bean Ready | Registered into `singletonObjects` | Bean available for concurrent dependency injection across application threads. |
+| **Step 11** | Pre-Destroy | `CommonAnnotationBeanPostProcessor` | Invoked on container shutdown; executes methods annotated with `@PreDestroy`. |
+| **Step 12** | Disposable Bean | `DisposableBean.destroy()` / `destroyMethod` | Releases open connections, thread pools, and system resources. |
 
 ## 1.2 Spring Core IoC: `@Component`, `@Service`, `@Repository` & Constructor Injection
 
@@ -292,23 +345,20 @@ public class GlobalExceptionHandler {
 
 # TRACK 2: MASTER SPRING FRAMEWORKS & MODULES CATALOG
 
-```
-Spring Ecosystem Component Matrix:
-+-----------------------+-----------------------------+-------------------------------+-----------------------+
-| Module                | Core Objective              | Threading Model               | Production Use Case   |
-+-----------------------+-----------------------------+-------------------------------+-----------------------+
-| Spring Boot 3 Core    | Rapid App Bootstrapping     | Worker Pool / Virtual Threads | Microservices / APIs  |
-| Spring Security 6     | Zero-Trust Auth & RBAC      | SecurityContext / ThreadLocal | OAuth2, JWT, OIDC     |
-| Spring Data JPA       | Relational ORM Persistence  | Synchronous JDBC              | Transactional OLTP    |
-| Spring WebFlux        | High-Concurrency Streaming  | Netty EventLoop (Reactive)    | Edge Gateway, SSE     |
-| Spring Cloud          | Distributed Systems Routing | Hybrid                        | Service Mesh, Gateway |
-| Spring Kafka          | Event-Driven Architecture   | Polling Worker Threads        | Pub/Sub, Sagas        |
-| Spring Cache / Redis  | In-Memory Latency Reduction | Synchronous / Redis Lettuce   | Read-heavy registries |
-| Spring Batch          | High-Volume Chunk Jobs      | Multi-threaded / Partitioned  | EOD Reconciliation    |
-| Spring Actuator       | Production Observability    | In-process Metrics            | Prometheus / OTel     |
-| Spring Test           | Automated Verification      | Test Worker                   | Testcontainers / Mocks|
-+-----------------------+-----------------------------+-------------------------------+-----------------------+
-```
+### Spring Ecosystem Master Component Matrix
+
+| Module | Core Objective | Threading Model | Production Use Case |
+| :--- | :--- | :--- | :--- |
+| **Spring Boot 3 Core** | Rapid App Bootstrapping & Auto-Configuration | Worker Pool / Java 21 Virtual Threads | Microservices, REST APIs, CLI Daemons |
+| **Spring Security 6** | Zero-Trust Auth, RBAC & OAuth2/OIDC | `SecurityContext` / `ThreadLocal` | OAuth2 Resource Server, JWT Gateway |
+| **Spring Data JPA** | Relational ORM Persistence & Dirty Checking | Synchronous JDBC (HikariCP) | Transactional OLTP Workloads |
+| **Spring WebFlux** | High-Concurrency Non-Blocking Streaming | Netty EventLoop (Project Reactor) | Edge Gateways, SSE, WebSocket Streams |
+| **Spring Cloud** | Distributed Routing, Discovery & Config | Hybrid (Reactive Gateway + Client) | Service Mesh, Dynamic Routing, Resilience |
+| **Spring Kafka** | Enterprise Event-Driven Commit Log Messaging | Polling Worker Threads / Batch Listener | Event Sourcing, Pub/Sub, Saga Workflows |
+| **Spring Cache / Redis** | In-Memory Latency Reduction & Distributed State | Synchronous / Lettuce Netty Multiplexing | Read-heavy registries, Distributed Sessions |
+| **Spring Batch** | High-Volume Chunk-Oriented Processing | Multi-threaded / Partitioned Steps | End-of-Day Reconciliation, ETL Pipelines |
+| **Spring Actuator** | Production Health & Observability Telemetry | In-process Micrometer Metrics | Prometheus, OpenTelemetry, Grafana |
+| **Spring Test** | Deterministic Automated Verification | Isolated Test Workers (Testcontainers) | Integration Testing, Mocking, Sliced Contexts |
 
 ---
 
@@ -592,41 +642,13 @@ Spring provides two distinct data transformation subsystems depending on where d
 1. **The Conversion & Formatting SPI (`ConversionService`)**: Operates on HTTP query parameters, path variables, request headers, and form-data via Spring MVC's `WebDataBinder`.
 2. **The HTTP Message Conversion Pipeline (`HttpMessageConverter`)**: Operates on HTTP request and response bodies (`@RequestBody` / `@ResponseBody`), delegating parsing directly to JSON libraries (e.g., Jackson's `MappingJackson2HttpMessageConverter`).
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                         SPRING WEB DATA TRANSFORMATION PIPELINE                         │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  [ Incoming HTTP Request ]                                                             │
-│         │                                                                              │
-│         ├──► URI Path / Query / Header / Form  ──► [ WebDataBinder ]                   │
-│         │                                                │                             │
-│         │                                                ▼                             │
-│         │                                       [ ConversionService ]                  │
-│         │                                       ├── Converter<S, T>                    │
-│         │                                       ├── ConverterFactory<S, R>             │
-│         │                                       ├── GenericConverter                   │
-│         │                                       └── Formatter<T> (@DateTimeFormat)     │
-│         │                                                │                             │
-│         │                                                ▼                             │
-│         │                                       Populates Controller Method Arguments  │
-│         │                                       (@PathVariable, @RequestParam)         │
-│         │                                                                              │
-│         └──► HTTP Request Body (JSON/XML)      ──► [ DispatcherServlet ]               │
-│                                                          │                             │
-│                                                          ▼                             │
-│                                                 [ HttpMessageConverter ]               │
-│                                                 (MappingJackson2HttpMessageConverter)  │
-│                                                          │                             │
-│                                                          ▼                             │
-│                                                 [ Jackson ObjectMapper ]               │
-│                                                 (Jackson Converter<IN, OUT>)           │
-│                                                          │                             │
-│                                                          ▼                             │
-│                                                 Populates @RequestBody DTO Record      │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Spring Web Data Transformation Pipeline Architecture
+
+| Inbound Data Stream | Entry Mechanism | Processing Engine | Target Destination |
+| :--- | :--- | :--- | :--- |
+| **URI Path, Query, Header, Form-Data** | `WebDataBinder` | `ConversionService` (`Converter<S,T>`, `ConverterFactory`, `GenericConverter`, `Formatter<T>`) | Method parameters (`@PathVariable`, `@RequestParam`, `@RequestHeader`) |
+| **HTTP Request Body (JSON/XML)** | `DispatcherServlet` | `HttpMessageConverter` (`MappingJackson2HttpMessageConverter` wrapping `ObjectMapper`) | Strongly typed Record/DTO (`@RequestBody`) |
+| **Outbound Model / View** | Controller return | `HttpMessageConverter` serialization pipeline | HTTP Response body (`@ResponseBody` / `ResponseEntity<T>`) |
 
 ### 1. Spring Conversion SPI: The 4 Core Interfaces
 
@@ -693,18 +715,11 @@ public class WebConversionConfig implements WebMvcConfigurer {
 
 ### 4. Enterprise Boundary Separation: Where Converters Live
 
-```
-[ Client Request ]
-       │
-       ├── (1) Query Param: ?date=2026-09-11
-       │         └──► Spring Converter<String, LocalDate>
-       │
-       ├── (2) Request Body: {"unit_price": 1999}
-       │         └──► Jackson Converter<Long, Money>
-       │
-       └── (3) Database Persistence: INSERT INTO products (price) VALUES ('19.99 USD')
-                 └──► JPA AttributeConverter<Money, String>
-```
+| Request Ingestion Stage | Inbound Protocol & Payload | Conversion Interface | Runtime Execution Scope |
+| :--- | :--- | :--- | :--- |
+| **(1) Query Param / Header** | `GET /orders?date=2026-09-11` | Spring `Converter<String, LocalDate>` | Executed by `WebDataBinder` before controller method entry |
+| **(2) Request Payload** | `POST {"unit_price": 1999}` | Jackson `Converter<Long, Money>` | Executed by `MappingJackson2HttpMessageConverter` during JSON deserialization |
+| **(3) DB Persistence** | `INSERT INTO products VALUES ('19.99 USD')` | JPA `AttributeConverter<Money, String>` | Executed by Hibernate dialect layer during JDBC parameter binding |
 
 ---
 
@@ -714,31 +729,19 @@ public class WebConversionConfig implements WebMvcConfigurer {
 
 The Spring container bootstraps beans through an exact sequence of lifecycle callbacks:
 
-```
-+-------------------------------------------------------------------------------+
-|                      SPRING BEAN LIFECYCLE PIPELINE                           |
-|                                                                               |
-|  1. Class Instantiation (Constructor / Reflection)                            |
-|       │                                                                       |
-|  2. Populate Properties / Dependency Injection                                |
-|       │                                                                       |
-|  3. BeanNameAware / BeanFactoryAware / ApplicationContextAware Callbacks       |
-|       │                                                                       |
-|  4. BeanPostProcessor: postProcessBeforeInitialization()                      |
-|       │                                                                       |
-|  5. @PostConstruct Initialization Method                                      |
-|       │                                                                       |
-|  6. InitializingBean: afterPropertiesSet()                                    |
-|       │                                                                       |
-|  7. Custom init-method Defined in @Bean                                       |
-|       │                                                                       |
-|  8. BeanPostProcessor: postProcessAfterInitialization() (WRAP WITH PROXY!)    |
-|       │                                                                       |
-|  9. Bean is Ready for Production Use                                          |
-+-------------------------------------------------------------------------------+
-```
+| Execution Order | Lifecycle Phase | Invocation Hook / Mechanism | Proxy & State Implication |
+| :--- | :--- | :--- | :--- |
+| **1. Instantiation** | Constructor Execution | Reflection / CGLIB Enhancer | Raw Java instance allocated on heap; fields unpopulated |
+| **2. Populate Properties** | Dependency Injection | `AutowiredAnnotationBeanPostProcessor` | `@Autowired` and `@Value` fields resolved and injected |
+| **3. Aware Callbacks** | Framework Notification | `BeanNameAware`, `BeanFactoryAware`, `ApplicationContextAware` | Injects container runtime infrastructure handles |
+| **4. BPP Pre-Initialization** | Before Init Hooks | `BeanPostProcessor.postProcessBeforeInitialization()` | Processes JSR-250 `@PostConstruct` annotations |
+| **5. InitializingBean** | Framework Contract | `InitializingBean.afterPropertiesSet()` | Core validation that required properties are non-null |
+| **6. Custom Init** | Custom Configuration | `@Bean(initMethod = "init")` | Custom initializer method executed |
+| **7. BPP Post-Initialization** | Proxy Creation | `BeanPostProcessor.postProcessAfterInitialization()` | **CRITICAL: Dynamic AOP Proxies created here** (`@Transactional`, `@Async`) |
+| **8. Production Ready** | Cache Registration | Inserted into `DefaultSingletonBeanRegistry` | Exposed for concurrent injection across all request threads |
+| **9. Destruction** | Teardown Phase | `@PreDestroy` -> `DisposableBean.destroy()` -> `destroyMethod` | Closes network sockets, flushes buffers, terminates thread pools |
 
-- **Crucial Rule**: Dynamic proxies for `@Transactional`, `@Async`, and `@Cacheable` are wrapped at **Step 8** (`postProcessAfterInitialization`). If you execute code inside a constructor or `@PostConstruct`, proxy advice has NOT yet been applied!
+- **Crucial Rule**: Dynamic proxies for `@Transactional`, `@Async`, and `@Cacheable` are wrapped at **Step 7** (`postProcessAfterInitialization`). If you execute code inside a constructor or `@PostConstruct`, proxy advice has NOT yet been applied!
 
 ---
 
@@ -766,14 +769,12 @@ When a method with `@Transactional` is invoked through its CGLIB proxy:
 
 ## 3.4 Hibernate 6 Dirty Checking, Entity Life-Cycles & Caches
 
-```
-Transient (new Order()) ──persist()──► Persistent (Managed in 1st Level Session Cache)
-                                             │
-                                       detach() / evict()
-                                             │
-                                             ▼
-                                          Detached ──merge()──► Persistent
-```
+| Entity State | Description & Lifecycle Boundary | Persistence Context Status | Database Synchronization Action |
+| :--- | :--- | :--- | :--- |
+| **Transient** | Newly instantiated via Java constructor (`new Order()`). | Not associated with any `EntityManager`. | No database representation; no SQL generated. |
+| **Persistent (Managed)** | Associated with active Persistence Context via `em.persist()` or `findById()`. | Managed in First-Level Session Cache with baseline dirty-check snapshot. | Tracked for changes; automatically flushed on transaction commit. |
+| **Detached** | Persistence Context closed, transaction ended, or `em.detach()` invoked. | No longer managed by active session. | Updates ignored unless explicitly re-attached via `em.merge()`. |
+| **Removed** | Marked for deletion via `em.remove()`. | Scheduled for removal within the ActionQueue. | Emits SQL `DELETE` during next transaction flush. |
 
 - **First-Level Cache**: Bound to the active `EntityManager` / Hibernate Session. When you call `findById(1L)` twice within the same `@Transactional` method, Hibernate issues **only 1 SQL query**; the second call returns the reference directly from the First-Level Cache.
 - **Dirty Checking**: At transaction commit time, Hibernate compares the entity's current in-memory field state against a hidden snapshot captured when it was loaded. If any field changed, Hibernate automatically executes SQL `UPDATE` without calling `save()`.
@@ -784,13 +785,12 @@ Transient (new Order()) ──persist()──► Persistent (Managed in 1st Leve
 
 Unlike traditional Spring MVC which allocates 1 platform thread per HTTP request (Tomcat default 200 threads), WebFlux uses **Netty with $1 \times \text{CPU Core}$ EventLoop threads**:
 
-```
-Client Requests ──► [ Netty Acceptor Socket ]
-                           │
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-       [ EventLoop 1 ] [ EventLoop 2 ] [ EventLoop 3 ] (CPU Non-Blocking Workers)
-```
+| Architectural Tier | Netty Non-Blocking Engine | Thread Confinement Mechanics | High-Concurrency Profile |
+| :--- | :--- | :--- | :--- |
+| **Acceptor Socket** | Single Parent EventLoop Group | Accepts incoming TCP SYN packets, manages handshakes | $O(1)$ socket registration on OS multiplexer (`epoll`/`kqueue`) |
+| **Worker EventLoops** | Child EventLoop Group ($N = \text{CPU Cores}$) | Round-robin socket channel assignment | Continuously processes I/O events without thread switching |
+| **Thread Confinement** | Single-threaded per channel | All read/write operations for a given socket stay on 1 thread | Zero lock contention, zero volatile memory synchronization penalties |
+| **Blocking Offloading** | `Schedulers.boundedElastic()` | Dedicated worker pool for legacy JDBC/blocking calls | Caps thread creation to $10 \times \text{CPU Cores}$, prevents EventLoop stalls |
 
 - If an EventLoop thread blocks on an I/O operation for 200ms, thousands of other requests assigned to that EventLoop stall immediately.
 - To execute blocking calls safely in WebFlux:
@@ -805,7 +805,17 @@ Client Requests ──► [ Netty Acceptor Socket ]
 
 ## 4.1 Hexagonal / Clean Architecture Blueprint for Spring Boot 3
 
-```
+| Architectural Layer | Package Path | Canonical Artifacts | Responsibilities & Dependency Rules |
+| :--- | :--- | :--- | :--- |
+| **Pure Domain (Core)** | `domain/model/` | `Order.java`, `OrderId.java` | Core business logic and invariants. **Strict Invariant**: Zero Spring or persistence dependencies. |
+| **Driving Ports (Inbound)** | `domain/port/in/` | `PlaceOrderUseCase.java` | Interfaces exposing use-case operations to external clients. |
+| **Driven Ports (Outbound)** | `domain/port/out/` | `OrderPersistencePort.java`, `PaymentGatewayPort.java` | Interfaces declaring data persistence and third-party gateway interactions. |
+| **Application Layer** | `application/service/` | `OrderApplicationService.java` | Orchestrates domain entities and executes use-case flows; coordinates transactions. |
+| **Driving Adapters (Inbound)** | `infrastructure/adapter/in/web/` | `OrderRestController.java` | Spring MVC REST controllers translating incoming HTTP JSON payloads into domain requests. |
+| **Driven Adapters (Outbound)** | `infrastructure/adapter/out/persistence/` | `OrderJpaEntity.java`, `OrderJpaAdapter.java` | JPA entities and adapter classes implementing domain persistence ports. |
+| **Dependency Wiring** | `infrastructure/config/` | `OrderBeanConfiguration.java` | Explicit Spring `@Configuration` beans injecting adapters into pure application services. |
+
+```text
 src/main/java/com/enterprise/order/
 ├── domain/                      # Pure Business Domain (Zero Spring dependencies!)
 │   ├── model/

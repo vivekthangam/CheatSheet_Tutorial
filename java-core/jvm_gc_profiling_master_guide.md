@@ -75,7 +75,85 @@ The Java Virtual Machine (JVM) divides process memory into distinct runtime data
 A running Java application is an OS process (PID). Its total Resident Set Size (RSS) is calculated as:
 $$\text{RSS} \approx \text{Heap} + \text{Metaspace} + \text{CodeCache} + (\text{Thread Count} \times \text{Stack Size}) + \text{Direct Buffers} + \text{JVM Native Overhead}$$
 
+![JVM Memory & Execution Substrate Architecture](../assets/images/jvm/jvm_memory_substrate_architecture.jpg)
+
+```mermaid
+graph TB
+    subgraph OS_RSS ["Linux OS Process Address Space (RSS)"]
+        subgraph Native_Mem ["JVM Native Memory (Off-Heap / OS Malloc)"]
+            Meta["Metaspace<br/>(Klass Metadata, Method Bytecode, Constant Pool)"]
+            CodeC["JIT Code Cache<br/>(Tier 1 C1 / Tier 2 C2 Native Machine Code)"]
+            Stacks["Thread Stacks (-Xss1m)<br/>(OS Pthreads, Local Variables, Stack Frames)"]
+            DirectBuf["Direct ByteBuffers<br/>(NIO Off-Heap Buffers, Netty Channels)"]
+            CHeap["Native C-Heap<br/>(glibc malloc arenas, jemalloc, JNI allocations)"]
+            GCMeta["GC Metadata<br/>(Card Tables, Remembered Sets, Marking Bitmaps)"]
+        end
+        subgraph Managed_Heap ["Managed JVM Heap (-Xms / -Xmx)"]
+            subgraph Young_Gen ["Young Generation"]
+                Eden["Eden Space<br/>(Thread-Local Allocation Buffers - TLAB)"]
+                S0["Survivor S0<br/>(FromSpace)"]
+                S1["Survivor S1<br/>(ToSpace)"]
+            end
+            subgraph Old_Gen ["Old Generation (Tenured)"]
+                Tenured["Tenured Space<br/>(Long-Lived Objects, Singletons, Caches)"]
+            end
+            subgraph Regional_Heap ["Region-Based Architecture (G1 / ZGC / Shenandoah)"]
+                Regs["Dynamic Heap Regions (1MB - 32MB)<br/>[Eden] [Survivor] [Old] [Humongous] [Free]"]
+            end
+        end
+    end
+    Eden -->|"Minor GC Evacuation"| S0
+    S0 -->|"Object Aging (Age++ )"| S1
+    S1 -->|"Tenuring (Age >= Threshold)"| Tenured
+    DirectBuf -.->|"DMA Zero-Copy I/O"| OS_RSS
 ```
+
+#### Visual Architecture & Deep Mechanics of JVM Memory Substrate
+
+##### 1. Visual Architecture & Node Anatomy
+* **Linux OS Process Address Space (RSS)**: Total physical and swapped memory pages allocated to the JVM PID by the OS kernel. Monitored via `/proc/<PID>/status` (`VmRSS`) and Kubernetes `memory.current`.
+* **Managed JVM Heap (`-Xms` / `-Xmx`)**: Partition of memory managed exclusively by HotSpot garbage collectors:
+  - **Eden Space**: Landing zone for newly instantiated objects. Uses per-thread **Thread-Local Allocation Buffers (TLABs)** for lock-free pointer bumping.
+  - **Survivor Spaces (`S0` and `S1`)**: Equal-sized semi-spaces acting as staging buffers to age transient objects.
+  - **Tenured Space (Old Generation)**: Stores long-lived enterprise application state (singletons, caches, pooled connections).
+  - **Humongous Regions (G1 GC)**: Spans of contiguous regions for individual objects exceeding 50% of `G1HeapRegionSize`.
+* **Native Memory (Off-Heap Space)**:
+  - **Metaspace**: Holds class metadata, runtime constant pools, and method bytecode.
+  - **JIT Code Cache**: Holds native x86_64/ARM machine code compiled by C1 and C2 JIT compilers.
+  - **Thread Stacks**: 1 MB native stack per OS pthread allocated via `mmap`.
+  - **Direct ByteBuffers**: Off-heap buffers used by Java NIO channels and Netty for kernel zero-copy transfer.
+  - **Native C-Heap**: Unmanaged heap utilized by internal HotSpot subsystems and JNI C/C++ libraries.
+
+##### 2. Execution Flow & State Transitions
+1. **Thread Allocation**: Object creation lands in thread's local TLAB inside Eden without global locking.
+2. **TLAB Exhaustion**: Thread requests new TLAB chunk from Eden via atomic CAS bump.
+3. **Minor GC Evacuation**: Full Eden triggers Stop-The-World Young GC. Live objects in Eden and `FromSpace` copy to `ToSpace`.
+4. **Age Promotion**: Mark Word age bits increment. Once `age >= MaxTenuringThreshold`, objects promote to Tenured Old Gen.
+5. **Major/Concurrent GC**: When Old Gen occupancy crosses IHOP (default 45%), background concurrent marking initiates.
+
+##### 3. Low-Level Kernel & JVM Mechanics
+* **Deterministic RSS Formula**:
+  $$\text{RSS} = \text{Heap} + \text{Metaspace} + \text{CodeCache} + (\text{Thread Count} \times \text{Stack Size}) + \text{DirectMemory} + \text{GC Metadata} + \text{Native C-Heap}$$
+* **Cgroup Limit Enforcement**: If RSS breaches `memory.max` in Kubernetes, the Linux kernel OOM Killer terminates the pod with Exit Code 137.
+* **glibc Malloc Arena Overhead**: Up to $8 \times \text{vCPUs}$ native arenas multiply virtual memory fragmentation; mitigated by `MALLOC_ARENA_MAX=2` or `jemalloc`.
+
+##### 4. Production Failure Modes & SRE Diagnostics
+* **Kubernetes Exit 137 (OOMKilled)**: Occurs when container limits equal `-Xmx` without factoring native overhead.
+* **DirectByteBuffer Silent Leak**: Off-heap buffers bypass GC pause metrics and cause unexpected host memory exhaustion.
+* **Production Diagnostic Runbook**:
+  ```bash
+  # Enable Native Memory Tracking
+  java -XX:NativeMemoryTracking=detail -XX:+UnlockDiagnosticVMOptions -jar app.jar
+  
+  # Check live native memory diffs
+  jcmd <PID> VM.native_memory baseline
+  jcmd <PID> VM.native_memory detail.diff
+  ```
+
+<details>
+<summary>Text Representation (ASCII Blueprint)</summary>
+
+```text
 +--------------------------------------------------------------------------------+
 |                        OS Process Address Space (RSS)                          |
 |  +-------------------------------------+  +---------------------------------+  |
@@ -89,6 +167,8 @@ $$\text{RSS} \approx \text{Heap} + \text{Metaspace} + \text{CodeCache} + (\text{
 |                                           +---------------------------------+  |
 +--------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ### 3. Bytecode Execution & Just-In-Time (JIT) Compilation
 - **Interpreter**: Executes bytecode sequentially with minimal startup latency.

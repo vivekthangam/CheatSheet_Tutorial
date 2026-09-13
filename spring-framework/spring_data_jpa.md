@@ -74,23 +74,14 @@ Imagine you are an accountant inspecting a client's paper invoice:
    - If numbers changed (**Dirty Checking**): Hibernate automatically writes and runs `UPDATE orders SET price = 99.00 WHERE id = 1`!
    - *Notice:* You **NEVER need to call `repository.save(order)`** if the entity is already managed inside a `@Transactional` method!
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        TRANSACTION BOUNDARY (@Transactional)                           │
-│                                                                                        │
-│  1. DB Read ──► SQL SELECT ──► [ First-Level Cache (Persistence Context) ]             │
-│                                      │                                                 │
-│                                      ▼                                                 │
-│                        Original Snapshot vs Managed Entity                             │
-│                                      │                                                 │
-│  2. Business Logic ──► entity.setStatus("APPROVED")  (No repo.save() needed!)          │
-│                                      │                                                 │
-│  3. Tx Commit ──► Dirty Checking detects modification                                 │
-│                                      │                                                 │
-│                                      ▼                                                 │
-│  4. Flush ──────► SQL UPDATE emitted to Database                                       │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Persistence Context & Transaction Boundary Execution Pipeline
+
+| Pipeline Step | Architectural Event | Mechanism & In-Memory State | Database / SQL Action |
+| :--- | :--- | :--- | :--- |
+| **1. Ingestion / Read** | `findById(1L)` | Loads entity into Persistence Context; captures baseline snapshot in L1 session cache | Executes `SELECT ... FROM orders WHERE id = ?` |
+| **2. In-Memory Mutation** | `order.setStatus("APPROVED")` | Mutates in-memory managed Java object; no `repository.save()` required | Zero SQL generated; mutation held entirely in heap |
+| **3. Transaction Commit** | Method exit (`@Transactional`) | Hibernate dirty checker compares live entity state against baseline snapshot | Identifies state difference (`status: "PENDING"` -> `"APPROVED"`) |
+| **4. Session Flush** | `ActionQueue` execution | Generates and orders DML operations; flushes to JDBC connection | Executes `UPDATE orders SET status = ? WHERE id = ?` |
 
 ---
 
@@ -265,29 +256,16 @@ A JPA entity exists in one of four states within the `EntityManager` boundary:
 3. **Detached**: Has a persistent identifier, but its `PersistenceContext` has closed (e.g., across HTTP request boundaries or after `entityManager.clear()`). Modifications are not tracked unless re-attached via `entityManager.merge()`.
 4. **Removed**: Scheduled for SQL `DELETE` upon the next flush.
 
-```
-       new Entity()
-            │
-            ▼
-     ┌──────────────┐   persist() / save()    ┌──────────────┐
-     │  TRANSIENT   │ ──────────────────────► │   MANAGED    │ ◄─── find() / query()
-     └──────────────┘                         └──────────────┘
-                                                 │   ▲
-                              detach() / close() │   │ merge()
-                                                 ▼   │
-                                              ┌──────────────┐
-                                              │   DETACHED   │
-                                              └──────────────┘
-                                                 │
-                                                 │ remove()
-                                                 ▼
-                                              ┌──────────────┐
-                                              │   REMOVED    │
-                                              └──────────────┘
-                                                 │
-                                                 ▼ (flush -> SQL DELETE)
-                                                Gone
-```
+> [!NOTE]
+> **JPA Entity Lifecycle Execution Pipeline**:
+> `new Entity()` ➔ **TRANSIENT** `[No DB ID, Unmanaged]` ➔ `persist() / save()` ➔ **MANAGED** `[DB ID Assigned, PersistenceContext Tracked]` ⇄ `detach() / close()` / `merge()` ⇄ **DETACHED** `[DB ID Present, Unmanaged]` ➔ `remove()` ➔ **REMOVED** `[Scheduled for SQL DELETE]` ➔ `flush()` ➔ **DATABASE DELETION**
+
+| Lifecycle State | Persistence Context Tracked | Primary Key Present | Snapshot / Dirty Checking | Database Synchronization (Flush) | Transition Methods & Triggers |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **TRANSIENT** | ❌ No | ❌ No (null) | ❌ Disabled | None | Initial state via `new Entity()`. Transitions to Managed via `persist()`, `save()`, or cascading. |
+| **MANAGED** | ✅ Yes (First-Level Cache) | ✅ Yes | ✅ Enabled (Hibernate baseline snapshot comparison) | Automatic SQL `INSERT` / `UPDATE` on transaction commit or manual `flush()` | Direct DB query (`find()`, JPQL/HQL), `persist()`, or `merge()`. Transitions to Detached via `detach()`, `clear()`, `close()`. Transitions to Removed via `remove()`. |
+| **DETACHED** | ❌ No | ✅ Yes | ❌ Disabled | None (mutations ignored unless re-attached) | Created when Session closes or via explicit `detach()`, `clear()`. Re-attached to Managed via `merge()` (creates a managed copy). |
+| **REMOVED** | ✅ Yes (Marked for deletion) | ✅ Yes | ❌ Disabled | Executes SQL `DELETE` during transaction commit or next `flush()` | Triggered by `remove()`. Entity becomes transient/garbage collected after flush. |
 
 ### High-Performance Identifier Generators: Pooled-lo Optimizer
 Never use `GenerationType.IDENTITY` in high-throughput enterprise systems because it forces immediate SQL `INSERT` execution to fetch the generated key, completely disabling Hibernate's JDBC batching engine. Instead, utilize `GenerationType.SEQUENCE` configured with the **`pooled-lo`** optimizer:
@@ -744,32 +722,25 @@ The `ActionQueue` executes statements during flush in a strictly deterministic o
 7. `CollectionRecreateAction`
 8. `EntityDeleteAction`
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        HIBERNATE ACTION QUEUE                          │
-│                                                                        │
-│  [ Insert Actions ] ──► [ Update Actions ] ──► [ Delete Actions ]       │
-│           │                      │                      │              │
-│           ▼                      ▼                      ▼              │
-│   order_inserts=true     order_updates=true     Batch Execution Group  │
-│           │                      │                      │              │
-│           └──────────────────────┴──────────────────────┘              │
-│                                  │                                     │
-│                                  ▼                                     │
-│                   java.sql.PreparedStatement.executeBatch()             │
-└────────────────────────────────────────────────────────────────────────┘
-```
+| Execution Order | Action Type | Configuration Prerequisite | Underlying Mechanism / JDBC Dispatch |
+| :--- | :--- | :--- | :--- |
+| **1. Orchestration** | `OrphanRemovalAction` | Cascade delete on orphan relationships | Resolves dependent entity removals prior to parent mutations |
+| **2. Insertions** | `EntityInsertAction` | `hibernate.order_inserts=true` | Groups identical SQL insert statements to maximize batch size |
+| **3. Updates** | `EntityUpdateAction` | `hibernate.order_updates=true` | Orders updates by entity class and PK to prevent database deadlocks |
+| **4. Collections** | `QueuedOperationCollectionAction` / `CollectionRemoveAction` / `CollectionUpdateAction` / `CollectionRecreateAction` | Cascade settings on `@OneToMany` / `@ManyToMany` | Synchronizes join tables and collection snapshot diffs |
+| **5. Deletions** | `EntityDeleteAction` | Standard session flush | Executes deletions in reverse dependency order |
+| **6. Batch Execution** | `Batch Execution Group` | `hibernate.jdbc.batch_size=N` | Flushes grouped statements via `java.sql.PreparedStatement.executeBatch()` |
 
 ---
 
 ## 3.2 Second-Level (L2) Cache Architecture
 While the First-Level (L1) Cache is scoped to a single `EntityManager` transaction, the Second-Level (L2) Cache is shared across all application threads and `EntityManagerFactory` instances.
 
-```
-Thread 1 (Tx 1) ──► [ L1 Cache ] ──┐
-                                   ├──► [ L2 Cache (Shared: Caffeine/Redis) ] ──► Database
-Thread 2 (Tx 2) ──► [ L1 Cache ] ──┘
-```
+| Cache Tier | Scope & Lifecycle | Storage Implementation | Concurrency & Thread Isolation | Database Access Boundary |
+| :--- | :--- | :--- | :--- | :--- |
+| **First-Level (L1)** | Scoped to individual `EntityManager` / Hibernate `Session` | In-memory `PersistenceContext` Map (`<EntityKey, Object>`) | Thread-bound (strictly isolated per transactional thread) | Hits L2 cache before issuing SQL queries to database |
+| **Second-Level (L2)** | Process/Cluster-wide scoped across all `EntityManagerFactory` instances | Shared in-memory or distributed cache (Caffeine, Redis, Hazelcast, Ehcache) | Shared across concurrent threads using soft-locks or read-only guarantees | Intercepts L1 cache misses; serves hits without database I/O |
+| **Database Tier** | Persistent disk-backed storage (PostgreSQL, MySQL, Oracle) | RDBMS Tables & B-Tree / WAL Indexes | ACID transactions, row-level locks, MVCC isolation | Terminal data source queried only on L1 + L2 cache misses |
 
 ```java
 @Entity

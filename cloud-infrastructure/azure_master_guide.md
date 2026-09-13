@@ -16,12 +16,57 @@ Before modern enterprise hyperscale clouds, large global corporations operated h
 2. **The Hybrid Network Wall**: Connecting corporate branch offices in London, Tokyo, and New York required expensive, slow MPLS circuits with zero elasticity and months of provisioning lead time.
 3. **The Governance Abyss**: Without centralized hierarchy, rogue business units spun up unapproved shadow IT servers on corporate credit cards without security guardrails or audit compliance.
 
+```mermaid
+flowchart LR
+    classDef branch fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef link fill:#0f172a,stroke:#f59e0b,stroke-width:2px,color:#fbbf24,stroke-dasharray: 4 4
+    classDef datacenter fill:#1e1e2e,stroke:#ef4444,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef risk fill:#450a0a,stroke:#dc2626,stroke-width:2px,color:#fca5a5,rx:8,ry:8
+
+    subgraph Perimeter["Geographic Corporate Branches (Siloed Access)"]
+        London["🏢 London Office<br/><code>Remote Workforce</code>"]:::branch
+        NY["🏢 New York HQ<br/><code>Corporate Center</code>"]:::branch
+        Tokyo["🏢 Tokyo Branch<br/><code>Regional Office</code>"]:::branch
+    end
+
+    subgraph Transit["Disjointed Transit Infrastructure"]
+        VPN["🔒 Unmanaged IPSec VPN<br/><code>Split-Tunnel Latency</code>"]:::link
+        MPLS["⚡ Dedicated MPLS WAN<br/><code>$50k/mo Sunk CapEx</code>"]:::link
+        Shadow["⚠️ Shadow IT Direct Egress<br/><code>Bypassing Security Proxies</code>"]:::link
+    end
+
+    subgraph LegacyDC["Siloed Enterprise Core & Security Failures"]
+        LocalDC["🖥️ Local AD Domain Controller<br/><code>Unpatched Windows 2012 R2</code>"]:::datacenter
+        CorpDC["🏛️ Central Corporate Data Center<br/><code>Manual Patching Cycles</code>"]:::datacenter
+        PublicSvc["🌐 Unaudited Public Server<br/><code>Open Port 3389 / S3 Bucket</code>"]:::risk
+
+        FileShare["📁 Legacy File Share (SMBv1)<br/><code>No Encryption at Rest</code>"]:::risk
+        LegacyApp["⚙️ Custom Legacy App Server<br/><code>Monolithic Vulnerabilities</code>"]:::risk
+        Leak["🚨 Unaudited PII Data Breach!<br/><code>Regulatory Fines ($20M+)</code>"]:::risk
+    end
+
+    London --> VPN --> LocalDC --> FileShare
+    NY --> MPLS --> CorpDC --> LegacyApp
+    Tokyo --> Shadow --> PublicSvc --> Leak
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 Fragmented Traditional Enterprise IT (Siloed, Disjointed, Vulnerable):
 [London Office] ──(Custom VPN)──> [Local AD DC] ──> File Share (No Encryption at Rest)
 [New York HQ]   ──(MPLS $50k/mo)─> [Corporate DC]──> Custom App Server (Manual Patching)
 [Tokyo Branch]  ──(Shadow IT)───> Public Server ──> Unaudited PII Data Leak!
 ```
+
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: The Fragmentation Crisis
+1. **Node Anatomy & Topology**: Disparate corporate branch offices operate independent Active Directory forests without federated trust relationships. Network perimeters rely on static point-to-point IPSec tunnels terminating on aging edge firewalls with single points of failure (SPOF).
+2. **Execution Flow & State Transitions**: Remote workers authenticate against local domain controllers using legacy NTLMv2 hashes. Upon network join, unencrypted SMBv1 shares are mapped over the WAN, exposing corporate intellectual property to lateral movement and cleartext packet sniffing.
+3. **Low-Level Protocol Mechanics**: Point-to-point VPN encapsulation incurs 56-byte IPSec header overhead per packet, causing MTU black holes (dropping packets exceeding 1500 bytes when DF flag is set). Lack of centralized revocation means terminated employees retain Active Directory Kerberos TGT tickets valid for up to 10 hours.
+4. **Production Failure Modes & SRE Forensics**: Branch offices bypass corporate security proxies via "Shadow IT" internet breakouts to avoid high-latency MPLS circuits. Rogue cloud instances spun up with public IP addresses (e.g., exposed RDP port 3389) become primary entry points for ransomware campaigns and multi-million dollar regulatory compliance breaches.
 
 ### The Industrial Solution: Microsoft Azure (The Unified Global Enterprise Fabric)
 Microsoft Azure organizes enterprise cloud computing into a **strict, sovereign organizational hierarchy** backed by native enterprise identity:
@@ -29,7 +74,58 @@ Microsoft Azure organizes enterprise cloud computing into a **strict, sovereign 
 - **The 4-Tier Governance Hierarchy**: Management Groups govern Subscriptions; Subscriptions isolate billing and quotas; Resource Groups group lifecycle-coupled resources; Resources are the actual running services.
 - **Enterprise Azure Hybrid Cloud Fabric**: Seamlessly bridges on-premises Hyper-V/VMware data centers to Azure via ExpressRoute, Azure Arc, and Azure Stack.
 
+```mermaid
+flowchart TD
+    classDef root fill:#1e1e2e,stroke:#6366f1,stroke-width:3px,color:#f8fafc,rx:10,ry:10
+    classDef mg fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef sub fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef rg fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef res fill:#1e1e2e,stroke:#ec4899,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+
+    Root["👑 Root Management Group (Tenant Level)<br/><code>Microsoft Entra ID Tenant Root: Policy & RBAC Baseline</code>"]:::root
+
+    subgraph MGTier["Management Group Tier (Inherited Governance Scope)"]
+        PlatMG["🛡️ Platform Management Group<br/><code>Shared Infrastructure & Core Foundations</code>"]:::mg
+        LandingMG["🚀 Landing Zones Management Group<br/><code>Business Application Workloads</code>"]:::mg
+        DecomMG["📦 Decommissioned / Sandbox MG<br/><code>Isolated Experimentation & Sunset</code>"]:::mg
+    end
+
+    subgraph SubTier["Subscription Tier (Billing, Quotas & Hard API Limits)"]
+        ConnSub["🌐 Connectivity Sub<br/><code>Hub VNet, ExpressRoute, Azure Firewall</code>"]:::sub
+        IdSub["🔑 Identity Sub<br/><code>Entra Domain Services, Key Vaults</code>"]:::sub
+        MgmtSub["📊 Management Sub<br/><code>Log Analytics, Sentinel SIEM</code>"]:::sub
+        ProdSub["🏭 Production Sub<br/><code>AKS, Cosmos DB, VMSS</code>"]:::sub
+        NonProdSub["🧪 Non-Production Sub<br/><code>Dev, Test, QA Environments</code>"]:::sub
+    end
+
+    subgraph RGTier["Resource Group Tier (Lifecycle & Deployment Boundaries)"]
+        RGNetwork["📁 rg-hub-networking-prod"]:::rg
+        RGSecurity["📁 rg-identity-security-prod"]:::rg
+        RGCluster["📁 rg-aks-workloads-prod"]:::rg
+        RGDatabase["📁 rg-data-stores-prod"]:::rg
+    end
+
+    subgraph ResTier["Resource Tier (Concrete Cloud Workloads)"]
+        ResFirewall["🔥 Azure Firewall Premium<br/><code>Private IP: 10.0.1.4</code>"]:::res
+        ResVault["🔐 Azure Key Vault HSM<br/><code>Private Endpoint Enabled</code>"]:::res
+        ResAKS["☸️ Azure Kubernetes Cluster<br/><code>Azure CNI + Cilium Overlay</code>"]:::res
+        ResCosmos["🌌 Cosmos DB Global Account<br/><code>Multi-Region Writes</code>"]:::res
+    end
+
+    Root --> PlatMG & LandingMG & DecomMG
+    PlatMG --> ConnSub & IdSub & MgmtSub
+    LandingMG --> ProdSub & NonProdSub
+
+    ConnSub --> RGNetwork --> ResFirewall
+    IdSub --> RGSecurity --> ResVault
+    ProdSub --> RGCluster --> ResAKS
+    ProdSub --> RGDatabase --> ResCosmos
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 Microsoft Azure 4-Tier Governance Hierarchy:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ ROOT MANAGEMENT GROUP (Tenant Level / Enterprise Security Guardrails)   │
@@ -46,13 +142,70 @@ Microsoft Azure 4-Tier Governance Hierarchy:
 └────────────────────────────────┘             └────────────────────────────────┘
 ```
 
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: Azure 4-Tier Enterprise Governance
+1. **Node Anatomy & Hierarchical Topology**: Governance descends from the Entra ID Tenant Root Management Group (`/providers/Microsoft.Management/managementGroups/<TenantID>`) down to individual Azure resource instances. Management Groups provide policy aggregation scopes; Subscriptions provide isolated billing units and Azure Resource Manager (ARM) quota boundaries; Resource Groups enforce atomic deployment lifecycles.
+2. **Policy Evaluation & Inheritance Engine**: Azure Policy operates on a downward inheritance model. A policy assigned at Root (e.g., `Deny-Public-IP-On-NICs`) applies unconditionally to all child Management Groups, Subscriptions, and Resource Groups. Child scopes cannot override parent `Deny` effects; ARM evaluates policies using logical `AND` operators across all hierarchical levels during pre-flight ARM template validation.
+3. **Low-Level Azure Resource Manager (ARM) Mechanics**: Every API request to `https://management.azure.com/` is routed through the ARM API Gateway. Subscriptions maintain independent token bucket rate limits: **12,000 read requests/hour** and **1,200 write requests/hour**. Distributing workloads across multiple Landing Zone subscriptions prevents large Terraform or CI/CD deployments from triggering HTTP 429 rate limit throttling.
+4. **Production Governance Failure Modes & SRE Guardrails**:
+   - **Subscription Quota Deadlocks**: Attempting to scale an AKS node pool in a single subscription hits VM family core quotas (e.g., standard `Dsv5` quota), causing cluster auto-scaler failures during traffic surges. Solution: Implement multi-subscription Landing Zones with dedicated quota allocations.
+   - **Direct Resource-Level RBAC Bloat**: Assigning roles (`Contributor`) directly to individual VMs or Storage Accounts exhausts the **5,000 role assignment limit per subscription** and creates invisible security blind spots during de-provisioning. Solution: Enforce RBAC strictly at Resource Group or Management Group scopes mapped to Entra Security Groups.
+
 ---
 
 ## 2. The 5 Core Building Blocks
 
 Every enterprise workload on Azure is constructed from five foundational pillars:
 
+```mermaid
+flowchart TD
+    classDef idSec fill:#1e1e2e,stroke:#6366f1,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef net fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef comp fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef stor fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef data fill:#1e1e2e,stroke:#ec4899,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+
+    subgraph P1["1. IDENTITY & GOVERNANCE (The Corporate Gatekeeper)"]
+        Entra["🔑 Microsoft Entra ID (OIDC / OAuth2)"]:::idSec
+        RBAC["🛡️ Azure RBAC & PIM (Just-In-Time)"]:::idSec
+        Policy["📜 Azure Policy & Management Groups"]:::idSec
+    end
+
+    subgraph P2["2. NETWORKING & PERIMETER (The Enterprise Highway)"]
+        VNet["🌐 Azure Virtual Networks (RFC 1918)"]:::net
+        FW["🔥 Azure Firewall Premium & NSGs"]:::net
+        WAN["⚡ Virtual WAN & ExpressRoute (Private Peering)"]:::net
+    end
+
+    subgraph P3["3. COMPUTE RUNTIMES (The Processing Fabric)"]
+        AKS["☸️ Azure Kubernetes Service (AKS Engine)"]:::comp
+        VMSS["🖥️ Virtual Machine Scale Sets (Spot / On-Demand)"]:::comp
+        ACA["📦 Azure Container Apps & Functions (Serverless)"]:::comp
+    end
+
+    subgraph P4["4. STORAGE TIERS (The Distributed Persistence Layer)"]
+        Blob["🗄️ Azure Blob Storage (Hot / Cool / Cold / Archive)"]:::stor
+        ADLS["📊 Azure Data Lake Storage Gen2 (Hierarchical Namespace)"]:::stor
+        Files["📁 Azure Files & NetApp Files (SMBv3 / NFSv4.1)"]:::stor
+    end
+
+    subgraph P5["5. MANAGED DATA & MESSAGING (The Intelligent Data Platform)"]
+        SQL["🗃️ Azure SQL Managed Instance & Flexible PostgreSQL"]:::data
+        Cosmos["🌌 Azure Cosmos DB (Multi-Region / Multi-Model NoSQL)"]:::data
+        Bus["📨 Azure Service Bus & Event Hubs (AMQP / Kafka)"]:::data
+    end
+
+    P1 -- "Authorizes & Audits Access" --> P2
+    P2 -- "Secures Network Data Plane" --> P3
+    P3 -- "Persists Ephemeral I/O" --> P4
+    P4 -- "Hydrates Structured State" --> P5
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ 1. IDENTITY & GOVERNANCE (The Corporate Directorate & Policy Guard)     │
 │    Microsoft Entra ID, Azure RBAC, Management Groups, Azure Policy      │
@@ -83,6 +236,16 @@ Every enterprise workload on Azure is constructed from five foundational pillars
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: The 5 Core Enterprise Pillars
+1. **Building Block Topology & Inter-Service Dependencies**: Cloud enterprise architectures form a strict directed acyclic graph (DAG). Identity establishes cryptographic trust anchors; Networking provisions RFC 1918 private subnets, routing tables, and security perimeters; Compute runtimes execute inside isolated subnets with ephemeral disks; Storage persists files and blobs; Managed Data engines process distributed transactional state.
+2. **Runtime Lifecycle & Authentication Handshake**: A container in AKS or an instance in VMSS retrieves a managed identity token from the Azure Instance Metadata Service (IMDS at `http://169.254.169.254/metadata/identity/oauth2/token`). IMDS returns an Entra ID JSON Web Token (JWT). The application attaches this bearer token to establish a mutual TLS connection over a Private Endpoint (Private Link) directly to Cosmos DB or Azure SQL—eliminating hardcoded database passwords and rotation overhead entirely.
+3. **Low-Level Network & Storage Plane Offload**: Networking layers interact via Azure Virtual Filtering Platform (VFP) virtual switch flow rules inside the Hyper-V host. Storage requests travel over NVMe-over-Fabrics (NVMe-oF) storage clusters with hardware-accelerated RDMA, delivering single-digit microsecond latencies for Premium SSD v2 and Ultra Disk tiers.
+4. **Cross-Pillar Production Failure Scenarios**:
+   - **IMDS Token Throttling**: Hundreds of pods on a single AKS worker node querying IMDS concurrently trigger HTTP 429 throttling (IMDS limits are 70 requests/second per VM). Solution: Implement token caching via the Azure Identity SDK or leverage Azure Workload Identity with projected service account tokens.
+   - **Private Link Asymmetric Routing**: When compute routes to storage via an intermediate firewall appliance without Source NAT (SNAT), return packets bypass the firewall, causing TCP RST drops. Solution: Maintain symmetric routing with SNAT or route Private Link traffic directly via VNet service endpoints/private DNS zones.
+
 | Building Block | Physical World Analogy | Technical Definition | Key Architectural Rule |
 | :--- | :--- | :--- | :--- |
 | **1. Identity (Entra ID & RBAC)** | The Corporate Biometric Badge & Security Clearance | Entra ID authenticates identities (Users, Managed Identities); Azure RBAC authorizes actions on Azure resource management scopes (`Owner`, `Contributor`, `Reader`). | **Never assign permissions at resource level**. Assign RBAC at Resource Group or Subscription level using Entra Security Groups. |
@@ -97,7 +260,50 @@ Every enterprise workload on Azure is constructed from five foundational pillars
 
 Understanding how traffic flows through an enterprise Azure deployment:
 
+```mermaid
+flowchart TD
+    classDef edge fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef hub fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef fw fill:#1e1e2e,stroke:#ef4444,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef comp fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef data fill:#1e1e2e,stroke:#8b5cf6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+
+    Client["🌐 External Internet Client / Enterprise Branch<br/><code>HTTPS Request (TLS 1.3 / HTTP/2)</code>"]:::edge
+
+    subgraph Tier1["1. Global Edge Ingress & Anycast Routing"]
+        AFD["🌍 Azure Front Door (Anycast Layer 7 Edge)<br/><code>Terminates TLS at nearest Edge PoP</code><br/><code>WAF: Managed OWASP 3.2 Rules + Bot Defense</code>"]:::edge
+    end
+
+    subgraph Tier2["2. Hub Virtual Network (Central Ingress & Security Transit)"]
+        AppGW["🚪 Azure Application Gateway v2 (WAF)<br/><code>Private Ingress Subnet: 10.0.1.0/24</code><br/><code>SSL Offloading & Cookie-Based Session Affinity</code>"]:::hub
+        AzFW["🛡️ Azure Firewall Premium (IDPS Inspection)<br/><code>AzureFirewallSubnet: 10.0.2.0/24</code><br/><code>TLS Inspection + FQDN Filtering (Egress SNAT)</code>"]:::fw
+    end
+
+    subgraph Tier3["3. Spoke Workload Virtual Network (Compute Tier)"]
+        AKSIngress["☸️ Ingress Controller (Internal NGINX / AGIC)<br/><code>aks-ingress-subnet: 10.1.1.0/24</code>"]:::comp
+        AKSPods["📦 Microservice Pods (Azure CNI Overlay)<br/><code>Entra Workload Identity Integration</code>"]:::comp
+    end
+
+    subgraph Tier4["4. Sovereign Data Persistence Tier (Private Link Isolated)"]
+        PE["🔒 Azure Private Endpoint NIC<br/><code>Private IP: 10.1.2.50 (privatelink.database.windows.net)</code>"]:::data
+        CosmosDB["🌌 Azure Cosmos DB / SQL Managed Instance<br/><code>Multi-Region Replicas | Customer-Managed Key (CMK)</code>"]:::data
+        Vault["🔐 Azure Key Vault HSM Premium<br/><code>Envelope Encryption Root Key (RSA 4096)</code>"]:::data
+    end
+
+    Client -->|1. Anycast BGP Routing| AFD
+    AFD -->|2. Encrypted Origin Tunnel| AppGW
+    AppGW -->|3. UDR 0.0.0.0/0 Next-Hop| AzFW
+    AzFW -->|4. VNet Peering Transit| AKSIngress
+    AKSIngress -->|5. Cluster Service Mesh| AKSPods
+    AKSPods -->|6. Entra OIDC Bearer Token| PE
+    PE -->|7. Private Substrate Fabric| CosmosDB
+    CosmosDB -.->|CMK Unwrapping| Vault
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ 1. GLOBAL TRAFFIC ROUTING: Azure Front Door (Anycast Layer 7 Edge)      │
 │    Terminates client TLS 1.3 at nearest PoP ──> WAF inspects OWASP Top 10│
@@ -119,6 +325,21 @@ Understanding how traffic flows through an enterprise Azure deployment:
 │    Managed Keys (CMK) residing in Azure Key Vault Premium (HSM)         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: End-to-End Enterprise Packet Journey
+1. **Traffic Path & Component Topology**: Dual-layer ingress decouples edge DDoS/WAF mitigation from internal microservice routing. Front Door absorbs volumetric and Layer 7 DDoS attacks across more than 190 Edge Points of Presence worldwide before traffic touches the regional virtual network.
+2. **Packet Flow, NAT & TLS Offloading Stages**:
+   - The client establishes a TLS 1.3 handshake at the nearest Microsoft Anycast Edge PoP.
+   - Front Door terminates client TLS, validates WAF rate limits, and opens a pre-warmed HTTP/2 persistent connection to the Hub Application Gateway public/private frontend.
+   - Application Gateway performs header inspection and forwards packets across Azure Firewall Premium via subnet User Defined Route (UDR: `0.0.0.0/0` -> `10.0.2.4`).
+   - Azure Firewall performs Deep Packet Inspection (DPI) with IDPS signature matching against known CVE exploits.
+   - Packets traverse high-speed VNet Peering to the Spoke AKS cluster; worker node routing tables deliver packets directly to the destination pod IP via Azure CNI without overlay encapsulation overhead.
+3. **Low-Level Protocol Mechanics**: Private Link bypasses public DNS endpoints entirely. An Azure Private DNS Zone (`privatelink.documents.azure.com`) resolves the database hostname directly to an RFC 1918 private IP (`10.1.2.50`) within the Spoke subnet. Packets are encapsulated within Azure's underlying physical Virtual Filtering Platform (VFP) and routed across Microsoft's internal SDN substrate without ever traversing the public internet.
+4. **Production SRE Bottlenecks & Triage**:
+   - **SNAT Port Exhaustion on Outbound Egress**: Microservices making hundreds of external third-party API calls over Azure Firewall exhaust the default 1,024 SNAT ports per public IP. Symptoms: Intermittent TCP connection timeouts (`ETIMEDOUT`). Remediation: Allocate multiple public IP addresses to the Azure Firewall or deploy Azure Virtual Network NAT Gateway to Spoke subnets.
+   - **Asymmetric Routing on UDRs**: If a Spoke subnet route points to the Azure Firewall private IP, but the return route bypasses the firewall via a direct peering path, the firewall's stateful TCP connection table drops return packets (`TCP RST / Drop`). Remediation: Ensure symmetrical routing tables or enforce Source NAT (SNAT) on private IP ranges within firewall policies.
 
 ---
 
@@ -347,11 +568,59 @@ resource "azurerm_subnet_network_security_group_association" "nsg_assoc" {
 
 A comprehensive architectural encyclopedia of the core Microsoft Azure services catalog detailing exact enterprise capabilities, engineering advantages, operational disadvantages, hard limits/quotas, and production implementation blueprints.
 
+```mermaid
+flowchart TB
+    classDef head fill:#1e1e2e,stroke:#6366f1,stroke-width:3px,color:#f8fafc,rx:10,ry:10
+    classDef comp fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef stor fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef data fill:#1e1e2e,stroke:#ec4899,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef net fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+
+    Catalog["🏛️ AZURE ENTERPRISE SERVICE EVALUATION MATRIX<br/><code>Architectural Selection Framework: Compute | Storage | Data | Networking</code>"]:::head
+
+    subgraph ComputeDomain["Compute & Container Runtimes"]
+        VM["🖥️ Azure VMs / VMSS<br/><code>Raw IaaS / Spot / Custom Kernels</code>"]:::comp
+        AKS["☸️ Azure Kubernetes Service<br/><code>Orchestrated Microservices / CNI</code>"]:::comp
+        ACA["📦 Container Apps & Functions<br/><code>Serverless Event-Driven / Scale-to-0</code>"]:::comp
+        AppSvc["🌐 Azure App Service<br/><code>PaaS Web Apps / Deployment Slots</code>"]:::comp
+    end
+
+    subgraph StorageDomain["Storage & Persistence Foundations"]
+        BlobSvc["🗄️ Azure Blob / ADLS Gen2<br/><code>Unstructured Big Data / Hierarchical</code>"]:::stor
+        FilesSvc["📁 Azure Files / NetApp Files<br/><code>POSIX / SMB Shares / Sub-ms HPC</code>"]:::stor
+        ManagedDisk["💾 Managed Disks (Ultra / Prem v2)<br/><code>NVMe-oF / Ephemeral Host Storage</code>"]:::stor
+    end
+
+    subgraph DataDomain["Intelligent Relational & NoSQL Data"]
+        CosmosSvc["🌌 Azure Cosmos DB<br/><code>Global Multi-Master / Multi-Model SLA</code>"]:::data
+        SQLSvc["🗃️ Azure SQL Managed Instance<br/><code>100% T-SQL Compatibility / Auto-Tune</code>"]:::data
+        PostgresSvc["🐬 Flexible PostgreSQL / MySQL<br/><code>Zone-Redundant HA / Open Source</code>"]:::data
+    end
+
+    subgraph NetworkDomain["Zero-Trust Network Fabric & Edge"]
+        VNetSvc["🌐 Virtual Networks & Peering<br/><code>RFC 1918 Private Cloud Transit</code>"]:::net
+        AFDSvc["🌍 Front Door & App Gateway<br/><code>Global Anycast L7 / Regional WAF</code>"]:::net
+        SecSvc["🔥 Azure Firewall & Bastion<br/><code>IDPS / TLS Inspection / Native JIT</code>"]:::net
+    end
+
+    Catalog --> ComputeDomain & StorageDomain & DataDomain & NetworkDomain
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ AZURE SERVICE EVALUATION MATRIX: COMPUTE, STORAGE, DATA & NETWORK           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
+
+#### 📊 Architectural Selection Framework & SLA Precedence
+- **Compute Sizing Rule**: Choose **AKS** for multi-tenant microservices requiring complex service meshing (Istio/Linkerd) and custom ingress. Choose **Azure Container Apps (ACA)** for event-driven microservices scaling to zero via KEDA without Kubernetes cluster maintenance overhead. Choose **VMSS** strictly for legacy stateful Windows workloads or specialized bare-metal GPU clusters.
+- **Storage Tiering Rule**: Premium SSD v2 and Ultra Disks decouple IOPS from storage capacity, allowing up to 160,000 IOPS and 4,000 MB/s per disk independently of allocated gigabytes. Azure NetApp Files (ANF) delivers bare-metal sub-millisecond NFS/SMB file access for high-performance computing (HPC) and SAP HANA workloads.
+- **Data Engine Decision**: Enforce Azure Cosmos DB for multi-region active-active writes with $99.999\%$ availability and sub-10ms latency SLAs. Leverage Azure SQL Managed Instance for legacy enterprise SQL Server applications requiring cross-database queries and SQL Agent jobs with zero code rewrites.
 
 ---
 
@@ -604,98 +873,47 @@ ApplicationIntent=ReadOnly;
   - **Max VNets per Subscription per Region**: 1,000.
   - **Subnet CIDR Limits**: `/8` (16 million IPs) to `/29` (8 IPs). Remember: **Azure reserves 5 IP addresses per subnet** (first 4 and last 1).
   - **Max VNet Peerings per VNet**: 500.
-- **Production Bicep Private Endpoint for Azure SQL**:
-```bicep
-resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
-  name: 'pe-sql-database'
-  location: 'eastus2'
-  properties: {
-    subnet: { id: '/subscriptions/.../subnets/snet-data' }
-    privateLinkServiceConnections: [{
-      name: 'sql-pl-connection'
-      properties: {
-        privateLinkServiceId: sqlServer.id
-        groupIds: ['sqlServer']
-      }
-    }]
-  }
-}
+- **Production Bic```mermaid
+flowchart TD
+    classDef backbone fill:#1e1e2e,stroke:#6366f1,stroke-width:3px,color:#f8fafc,rx:10,ry:10
+    classDef pop fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef region fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef dc fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#e0f2fe,rx:6,ry:6
+
+    Backbone["🌐 MICROSOFT GLOBAL ANYCAST FIBER BACKBONE<br/><code>175,000+ Miles Lit Subsea & Terrestrial Fiber | 200+ Edge PoPs | AS 8075</code>"]:::backbone
+
+    subgraph PoPTier["Distributed Anycast Edge Ingress Tier (Cold-Potato Ingestion)"]
+        Frankfurt["🇩🇪 Edge PoP: Frankfurt<br/><code>Anycast VIP Ingress</code><br/><code>Front Door SSL & WAF</code>"]:::pop
+        Singapore["🇸🇬 Edge PoP: Singapore<br/><code>Anycast VIP Ingress</code><br/><code>Front Door SSL & WAF</code>"]:::pop
+        LondonPoP["🇬🇧 Edge PoP: London<br/><code>Anycast VIP Ingress</code><br/><code>Front Door SSL & WAF</code>"]:::pop
+        NYPoP["🇺🇸 Edge PoP: New York<br/><code>Anycast VIP Ingress</code><br/><code>Front Door SSL & WAF</code>"]:::pop
+    end
+
+    subgraph RegionWest["Azure Region: West Europe (Amsterdam)"]
+        subgraph WEZones["Availability Zones (<2ms RTT Latency)"]
+            WE_Z1["🏢 Zone 1 Datacenter Array"]:::dc
+            WE_Z2["🏢 Zone 2 Datacenter Array"]:::dc
+            WE_Z3["🏢 Zone 3 Datacenter Array"]:::dc
+        end
+    end
+
+    subgraph RegionSEA["Azure Region: Southeast Asia (Singapore)"]
+        subgraph SEAZones["Availability Zones (<2ms RTT Latency)"]
+            SEA_Z1["🏢 Zone 1 Datacenter Array"]:::dc
+            SEA_Z2["🏢 Zone 2 Datacenter Array"]:::dc
+            SEA_Z3["🏢 Zone 3 Datacenter Array"]:::dc
+        end
+    end
+
+    Backbone <--> Frankfurt & Singapore & LondonPoP & NYPoP
+    Frankfurt <-->|"Sub-millisecond Private WAN"| WEZones
+    Singapore <-->|"Sub-millisecond Private WAN"| SEAZones
 ```
 
----
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
 
-## 9. Azure Front Door & Application Gateway
-
-- **Overview**: Azure Front Door is an Anycast global Layer 7 load balancer and CDN. Azure Application Gateway is a regional Layer 7 load balancer with Web Application Firewall (WAF v2).
-- **Pros (Advantages)**:
-  - Front Door provides global Anycast ingress at 190+ edge locations with instant failover across Azure regions.
-  - Application Gateway provides cookie-based session affinity, URL path-based routing, and SSL termination within a VNet.
-  - Native Azure WAF integration mitigates OWASP Top 10 vulnerabilities (SQLi, XSS) at the edge.
-- **Cons (Disadvantages & Costs)**:
-  - Front Door and Application Gateway incur high base hourly gateway charges plus data processing fees.
-  - Application Gateway requires a dedicated subnet with zero other resources permitted.
-- **Hard Limitations & Quotas**:
-  - **App Gateway Subnet Size**: Minimum `/24` recommended for auto-scaling capacity.
-  - **Front Door Max File Size**: **2 Gigabytes (GB)** (Files $>2\text{ GB}$ must use chunked transfer or direct Blob access).
-- **Production Terraform Application Gateway Definition**:
-```hcl
-resource "azurerm_application_gateway" "appgw" {
-  name                = "appgw-enterprise-prod"
-  resource_group_name = "rg-networking-prod"
-  location            = "eastus2"
-
-  sku {
-    name     = "WAF_v2"
-    tier     = "WAF_v2"
-    capacity = 2
-  }
-
-  gateway_ip_configuration {
-    name      = "appgw-ip-cfg"
-    subnet_id = azurerm_subnet.appgw_subnet.id
-  }
-
-  frontend_port {
-    name = "https-port"
-    port = 443
-  }
-}
-```
-
----
-
-## 10. Azure Key Vault & Microsoft Entra ID
-
-- **Overview**: Azure Key Vault secures cryptographic keys, API secrets, and TLS certificates backed by FIPS 140-2 Level 2/3 HSMs. Microsoft Entra ID is the enterprise cloud identity directory governing identity federation, conditional access, and RBAC.
-- **Pros (Advantages)**:
-  - Eliminates plaintext passwords in source code and CI/CD pipelines.
-  - Entra ID Conditional Access enforces real-time risk evaluation, device compliance, and phishing-resistant MFA.
-  - Automatic certificate renewal with Let's Encrypt and DigiCert.
-- **Cons (Disadvantages & Costs)**:
-  - Managed HSM tier is extremely expensive ($\approx \$3.20/\text{hour}$ or $\$2,300/\text{month}$).
-  - API rate limits: Over-querying Key Vault for secrets during application startup can trigger 429 Too Many Requests.
-- **Hard Limitations & Quotas**:
-  - **Max Secret Size**: **25 Kilobytes (KB)**.
-  - **Key Vault Transaction Limit**: 2,000 operations per 10 seconds per vault for software keys; 1,000 for HSM keys.
-  - **Entra ID Maximum Objects**: 500,000 default (expandable to millions with P1/P2 licenses).
-- **Production Azure CLI Secret Fetching**:
-```bash
-# Securely retrieve secret via Managed Identity in a script
-ACCESS_TOKEN=$(curl -s 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net' -H Metadata:true | jq -r .access_token)
-
-curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-  "https://corp-keyvault-prod.vault.azure.net/secrets/DbPassword?api-version=7.4" | jq -r .value
-```
-
----
-
-# TRACK 3: DEEP TECHNICAL INTERNALS, MECHANICS & ARCHITECTURE
-
-## 1. Microsoft Global Network & Anycast WAN Architecture
-
-Microsoft operates one of the top three largest telecommunications networks on Earth, spanning over **175,000 miles of terrestrial and subsea lit fiber optic cables**:
-
-```
+```text
 Microsoft Global WAN & Edge PoP Architecture:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ MICROSOFT GLOBAL ANYCAST FIBER BACKBONE (175,000+ Miles Dark Fiber)        │
@@ -717,6 +935,19 @@ Microsoft Global WAN & Edge PoP Architecture:
   └─────────────────────────┘     └─────────────────────────┘
 ```
 
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: Global Fiber WAN & Edge Ingress
+1. **Node Anatomy & Topology**: Microsoft's terrestrial and subsea optical mesh encompasses over 175,000 miles of lit fiber cables interconnecting over 60 Azure regions and 200+ Edge Points of Presence (PoPs). Regional data centers are grouped into tri-zone Availability Zones linked by dedicated, redundant dark fiber rings with an optical round-trip time (RTT) latency budget of $<2\text{ ms}$.
+2. **Execution Flow & Cold-Potato Routing**:
+   - When a user in London requests an endpoint hosted in West Europe, the client's DNS query resolves to an Anycast virtual IP (VIP) advertised globally by BGP Autonomous System (AS) 8075.
+   - The user's ISP routes packets to the nearest geographic Edge PoP in London via local internet peering (IXP).
+   - Under Microsoft's **Cold-Potato Routing** policy, packets enter Microsoft's private optical network immediately at the London PoP, bypassing public transit networks and congested tier-1 ISP links, traveling across dedicated DWDM (Dense Wavelength Division Multiplexing) fiber directly to the target region.
+3. **Low-Level Protocol & WAN Mechanics**: Edge PoPs utilize Anycast BGP with Equal-Cost Multi-Path (ECMP) routing. If a fiber cut occurs in a subsea transatlantic cable (such as the Marea cable), software-defined optical WAN controllers (SWAN) dynamically re-route optical paths within 50 milliseconds using fast BGP convergence without terminating active TCP/TLS sessions.
+4. **Production Failure Modes & SRE Forensics**:
+   - **Anycast BGP Flapping**: Route leaks or misconfigured ISP BGP filters can cause border routers to oscillate between two Edge PoPs (e.g., Frankfurt and London). Symptoms: TCP reset spikes (`RST`) and broken TLS session resumptions. Mitigation: Front Door enforces session affinity cookies and TCP connection migration.
+   - **Origin Probe Timeout Latency Spikes**: If backend services experience high database load, Front Door health probes time out ($>5\text{s}$), marking the entire region unhealthy and cascading traffic to a distant secondary region, compounding regional congestion. Mitigation: Implement lightweight synthetic health probe endpoints (`/healthz`) isolated from database query paths.
+
 - **Cold-Potato Routing**: When a user in London accesses a service in Azure East US, Microsoft connects to the user at the nearest London Edge PoP (Point of Presence) and immediately ingests the packets onto Microsoft's private transatlantic fiber backbone ("cold potato"), shielding the user from congested public internet hops.
 - **Anycast BGP Ingress**: Services like Azure Front Door and Azure DNS advertise identical BGP IP addresses from hundreds of Edge PoPs simultaneously; global ISP routers automatically steer traffic to the mathematically closest geographic entrance.
 
@@ -728,9 +959,241 @@ Traditional cloud VMs process network packets through a software-emulated switch
 
 Azure **Accelerated Networking** bypasses the host hypervisor entirely using **Single Root I/O Virtualization (SR-IOV)** directly offloaded to FPGA-based SmartNICs (Project Catapult / Mellanox):
 
+```mermaid
+flowchart TD
+    classDef soft fill:#1e1e2e,stroke:#ef4444,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef hard fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef chip fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe,rx:8,ry:8
+
+    subgraph StandardNet["Traditional Software Networking (Hyper-V Switch)"]
+        VM1["🖥️ Guest VM (Linux/Windows)<br/><code>Virtual Network Stack (eth0)</code>"]:::soft
+        VMBus["🚌 VMBus Software Channel<br/><code>Synthetic Packet Copy</code>"]:::soft
+        VMSwitch["🔀 Hyper-V Virtual Switch<br/><code>Host OS Kernel Context Switches</code><br/><code>vCPU Interrupt Overhead (~20-40%)</code>"]:::soft
+        HostNIC1["🔌 Physical Host NIC<br/><code>Throughput Capped: 5-10 Gbps</code><br/><code>Latency: 100-500 μs (Jitter)</code>"]:::soft
+
+        VM1 --> VMBus --> VMSwitch --> HostNIC1
+    end
+
+    subgraph AccelNet["Azure Accelerated Networking (Hardware SR-IOV)"]
+        VM2["🖥️ Guest VM (Linux/Windows)<br/><code>Mellanox / MANA VF Driver</code>"]:::hard
+        PCIe["⚡ PCIe Direct Bus Pass-Through<br/><code>Zero-Copy Direct Memory Access (DMA)</code>"]:::hard
+        SmartNIC["🦾 Azure SmartNIC FPGA / ASIC (Project Catapult)<br/><code>Hardware VFP Flow Match Table</code><br/><code>Zero Hypervisor CPU Intercept</code><br/><code>Latency: <15 μs | Throughput: Up to 100 Gbps</code>"]:::chip
+        HostNIC2["🔌 High-Speed Physical Wire (40/100G)"]:::hard
+
+        VM2 --> PCIe --> SmartNIC --> HostNIC2
+    end
 ```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
 Standard Azure VM Networking vs Accelerated Networking (SR-IOV):
 ┌─────────────────────────────────┐   ┌───────────────────────────────────────────┐
+│ STANDARD NETWORKING (Software)  │   │ ACCELERATED NETWORKING (Hardware SR-IOV)  │
+├─────────────────────────────────┤   ├───────────────────────────────────────────┤
+│ [Guest VM (Linux/Windows)]      │   │ [Guest VM (Linux/Windows)]                │
+│             │                   │   │             │                             │
+│             ▼ (Hypervisor Int)  │   │             ▼ (Direct PCI Pass-Through)   │
+│ [Hyper-V Virtual Switch]        │   │ [SR-IOV Virtual Function (VF) Driver]     │
+│             │                   │   └─────────────┬─────────────────────────────┘
+│             ▼                   │                 │ Zero Host Hypervisor Intercept
+│ [Host Physical NIC]             │   ┌─────────────▼─────────────────────────────┐
+└─────────────────────────────────┘   │ SmartNIC Hardware / FPGA Offload ASIC     │
+                                      │ (Sub-microsecond latency, 30-100 Gbps)    │
+                                      └───────────────────────────────────────────┘
+```
+
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: SR-IOV & SmartNIC Offload
+1. **Node Anatomy & Topology**: In traditional cloud virtualization, the host hypervisor manages a synthetic software switch (Hyper-V VMSwitch). Every network packet must be copied across the VMBus memory ring, triggering host CPU context switches and interrupts. Accelerated Networking leverages Single Root I/O Virtualization (SR-IOV), slicing a physical PCI Express device into multiple Virtual Functions (VFs) mapped directly to VM address space.
+2. **Execution Flow & Zero-Copy DMA**:
+   - Network packets arriving at the host SmartNIC bypass the Hyper-V kernel entirely.
+   - The SmartNIC ASIC / FPGA directly writes packet buffers into the guest VM's kernel memory (`sk_buff` rings) via PCIe Direct Memory Access (DMA).
+   - The guest OS driver (e.g., Mellanox `mlx5_core` or Microsoft Azure Network Adapter `mana`) processes packets with near-bare-metal efficiency, reducing latency from $200\ \mu\text{s}$ down to $<15\ \mu\text{s}$.
+3. **Low-Level Kernel & Silicon Mechanics**:
+   - Packet filtering and SDN flow tables (Virtual Filtering Platform - VFP) are compiled directly into FPGA gate arrays on the SmartNIC.
+   - Host CPU cores remain $100\%$ available for user compute workloads, eliminating interrupt storms during high-packet-per-second (PPS) workloads (such as Cassandra, Redis, and high-frequency Kafka streaming).
+4. **Production SRE Failure Modes & Telemetry**:
+   - **Synthetic Fallback During VM Live Migration**: During Azure host maintenance, the hypervisor unbinds the SR-IOV Virtual Function and falls back seamlessly to the synthetic VMBus interface (`hv_netvsc`). Application connections experience a transient $<100\text{ ms}$ latency bump but zero dropped TCP connections.
+   - **Driver Bonding Misconfiguration in Linux**: If Linux NetworkManager fails to bond the synthetic interface (`eth0`) with the VF interface (`enP...`), VMs lose connectivity when SR-IOV detaches. Remediation: Ensure the kernel driver uses modern two-tier bonding (`netvsc` auto-manages VF slave devices).
+
+- **Direct Memory Access (DMA)**: Packets travel directly from the physical network wire into the VM's guest memory via PCIe without intermediate host CPU context switching.
+- **Latency & Throughput Gains**: Reduces packet latency by up to $80\%$ ($<15\ \mu\text{s}$ intra-datacenter) and pushes throughput up to $100\text{ Gbps}$ on compute instances.
+
+---
+
+## 3. Microsoft Entra ID Token Issuance & Conditional Access Engine
+
+When a client application or developer authenticates against Azure, Microsoft Entra ID executes a multi-stage zero-trust decision tree before issuing cryptographically signed JSON Web Tokens (JWTs):
+
+```mermaid
+flowchart TD
+    classDef client fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef decision fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef reject fill:#450a0a,stroke:#ef4444,stroke-width:2px,color:#fca5a5,rx:8,ry:8
+    classDef success fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#a7f3d0,rx:8,ry:8
+    classDef token fill:#1e1e2e,stroke:#8b5cf6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+
+    Req["👤 User / Workload Identity / Service Principal<br/><code>Authentication Request (OAuth 2.0 / OIDC / MSAL)</code>"]:::client
+
+    AuthCheck{"1. Primary Authentication<br/><code>FIDO2 / Windows Hello / Passwordless / SAML</code>"}:::decision
+    AuthFail["❌ 401 Unauthorized<br/><code>Invalid Credentials / Account Locked</code>"]:::reject
+
+    RiskCheck{"2. Real-Time Risk Engine<br/><code>Machine Learning Anomaly Detection</code><br/><code>Impossible Travel / Leaked Credentials</code>"}:::decision
+    HighRisk["🚨 High Risk Detected<br/><code>Force Password Reset / Quarantine</code>"]:::reject
+
+    CACheck{"3. Conditional Access Engine<br/><code>Device Health (Intune MDM Compliant)</code><br/><code>Named Geo-Fence / Phishing-Resistant MFA</code>"}:::decision
+    CAFail["⛔ Access Denied (403)<br/><code>Device Non-Compliant / Untrusted IP</code>"]:::reject
+
+    TokenGen["4. Cryptographic Token Issuance<br/><code>Sign RS256 JWT Access Token (1h lifetime)</code><br/><code>Sliding Window Refresh Token & PRT</code>"]:::token
+
+    TargetSvc["✅ Authorized Azure Resource Access<br/><code>Azure Portal / ARM REST API / Cosmos DB / AKS</code>"]:::success
+
+    Req --> AuthCheck
+    AuthCheck -- Failed --> AuthFail
+    AuthCheck -- Success --> RiskCheck
+    RiskCheck -- High Risk --> HighRisk
+    RiskCheck -- Low / Medium --> CACheck
+    CACheck -- Non-Compliant --> CAFail
+    CACheck -- Policy Satisfied --> TokenGen
+    TokenGen --> TargetSvc
+```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
+Microsoft Entra ID Zero-Trust Authentication Engine:
+              [ User / Service Principal Login Request ]
+                                 │
+                                 ▼
+              ┌──────────────────────────────────────┐
+              │ 1. Primary Authentication Check      │──── FAILED ──> [ REJECT / 401 Unauthorized ]
+              │    (FIDO2 / Passwordless / Password) │
+              └──────────────────┬───────────────────┘
+                                 │ SUCCESS
+                                 ▼
+              ┌──────────────────────────────────────┐
+              │ 2. Real-Time Risk Evaluation         │
+              │    (Entra ID Identity Protection)    │──── HIGH RISK ──> [ FORCE PASSWORD RESET ]
+              └──────────────────┬───────────────────┘
+                                 │ LOW / MEDIUM
+                                 ▼
+              ┌──────────────────────────────────────┐
+              │ 3. Conditional Access Policies       │
+              │    - Device Compliance (Intune MDM)  │──── NON-COMPLIANT ──> [ REJECT ACCESS ]
+              │    - Geographic IP Location Fence    │
+              │    - Require Step-Up Phishing MFA    │
+              └──────────────────┬───────────────────┘
+                                 │ SATISFIED
+                                 ▼
+              ┌──────────────────────────────────────┐
+              │ 4. Issue Cryptographic Tokens        │
+              │    - Access Token (JWT, 1-hour life) │
+              │    - Refresh Token (Sliding window)  │
+              └──────────────────┬───────────────────┘
+                                 │
+                                 ▼
+                   [ AUTHORIZED AZURE API ACCESS ]
+```
+
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: Zero-Trust Identity Pipeline
+1. **Node Anatomy & Identity Planes**: Microsoft Entra ID enforces an automated Zero-Trust pipeline across three planes: Authentication (verifying caller identity), Risk Evaluation (machine learning anomaly detection), and Authorization (Conditional Access and Azure RBAC).
+2. **Execution Flow & Cryptographic Token Issuance**:
+   - The caller initiates an OAuth 2.0 PKCE (Proof Key for Code Exchange) authorization flow via Microsoft Authentication Library (MSAL).
+   - Upon primary credential validation, the Identity Protection ML engine evaluates signals (IP reputation, impossible travel between London and Tokyo in 30 minutes, anonymous proxy usage).
+   - Conditional Access policy rules evaluate device compliance (Intune MDM state), user risk level, and enforce step-up authentication.
+   - Entra ID signs a JSON Web Token (JWT) using an asymmetric private RSA 2048/4096 key (`x5t` thumbprint in OpenID discovery metadata).
+3. **Low-Level Protocol & Continuous Access Evaluation (CAE)**:
+   - Tokens contain standard claims: `oid` (object ID), `tid` (tenant ID), `roles` (app roles), `scp` (delegated scopes), and `wids` (directory roles).
+   - **Continuous Access Evaluation (CAE - RFC 8417)** establishes a push-based event channel. If an administrator revokes a user's session or changes their password, Entra ID fires a real-time webhook to downstream resource providers (SharePoint, Exchange, ARM), terminating active bearer token sessions within $<15\text{ seconds}$ without waiting for the 60-minute token expiration.
+4. **Production Security Failure Modes & Defense**:
+   - **Adversary-in-the-Middle (AitM) Phishing**: Reverse-proxy toolkits (Evilginx) intercept session cookies and TOTP codes during login. Defense: Enforce **Phishing-Resistant MFA (FIDO2 / Passkeys / Windows Hello)** via Conditional Access Authentication Strength policies, binding the cryptographic assertion to the browser's TLS origin (`login.microsoftonline.com`).
+   - **Token Theft & Replay**: Stolen bearer JWTs replayed from foreign IP addresses. Defense: Enable **Token Protection (Conditional Access for Exchange/SharePoint)** cryptographically binding the token to the client device's TPM (Trusted Platform Module).
+
+---
+
+## 4. Azure Storage Internals: Partition, Stream & Extent Erasure Engine
+
+Every Azure Storage Account is powered by the **Object Exchange (X-Store)** architecture, composed of three independent internal distributed layers:
+
+```mermaid
+flowchart TD
+    classDef front fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef part fill:#1e1e2e,stroke:#f59e0b,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef stream fill:#1e1e2e,stroke:#10b981,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef disk fill:#0f172a,stroke:#8b5cf6,stroke-width:1.5px,color:#f8fafc,rx:6,ry:6
+
+    subgraph FrontEndTier["1. Front-End Layer (Stateless REST / SMB / NFS Fleet)"]
+        FE1["🌐 HTTP REST Dispatcher Fleet"]:::front
+        FE2["🔐 SAS Signature & TLS Termination"]:::front
+        FE3["⏱️ Account-Level QPS Rate Limiter"]:::front
+    end
+
+    subgraph PartitionTier["2. Partition Layer (Global Distributed Metadata Engine)"]
+        LSM["🌳 LSM-Tree (Log-Structured Merge-Tree) Commit Log"]:::part
+        PartMaster["👑 Partition Master (Paxos Leadership Consensus)"]:::part
+        PartServer["🗂️ Distributed Partition Servers<br/><code>Range Partitioning: Account / Container / BlobName</code><br/><code>Auto Split / Merge on IOPS Threshold (>2,000 IOPS)</code>"]:::part
+    end
+
+    subgraph StreamTier["3. Stream Layer (Append-Only Distributed Extent Storage)"]
+        ExtentMgr["⚙️ Extent Manager (Cluster Paxos)"]:::stream
+        Extent1["📦 Immutable 1 GB Sealed Extent"]:::stream
+        
+        subgraph ReplicationModes["Replication & Fault-Tolerance Modes"]
+            LRS["💾 Locally-Redundant (LRS)<br/><code>3x Synchronous Copies within Datacenter</code>"]:::disk
+            ZRS["🛡️ Zone-Redundant (ZRS)<br/><code>Synchronous Reed-Solomon Erasure Coding</code><br/><code>Distributed across 3 Availability Zones (12 9s Durability)</code>"]:::disk
+        end
+    end
+
+    FrontEndTier --> PartitionTier
+    PartitionTier --> StreamTier
+    StreamTier --> ReplicationModes
+```
+
+<details>
+<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+
+```text
+Azure Storage Three-Tier Distributed Architecture:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. FRONT-END LAYER: Stateless HTTP REST / SMB / NFS Terminating Fleet       │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. PARTITION LAYER: Global Distributed Metadata & Transaction Engine        │
+│    Manages namespace, object metadata, ACLs, and commit logs (LSM-Tree)    │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 3. STREAM LAYER: Append-Only Distributed Storage & Extent Replication       │
+│    Reads & writes immutable 1 GB blocks ("Extents") across storage clusters │
+│    ├── LRS: Synchronous 3x replication within single data center            │
+│    └── ZRS: Synchronous Reed-Solomon Erasure Coding across 3 distinct AZs   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+</details>
+
+#### 📊 Visual Architecture & Subsystem Mechanics: The X-Store Distributed Engine
+1. **Node Anatomy & Three-Tier Hierarchy**: Azure Storage is engineered around the Object Exchange (X-Store) architecture. The Front-End Layer terminates client protocols (Blob REST, SMB 3.0, NFSv4.1, ADLS Gen2 DFS); the Partition Layer manages global object namespaces, commit logs, and secondary indexes; the Stream Layer manages raw append-only block placement on physical disks.
+2. **Execution Flow & Append-Only Extents**:
+   - Write operations append byte streams to active "Extents" (typically 1 GB files).
+   - Azure Storage never modifies data in-place; all writes, updates, and deletes append new deltas to the stream.
+   - Once an extent reaches 1 GB, it is cryptographically sealed as immutable and queued for background garbage collection and erasure coding.
+   - The Partition Layer uses an in-memory Log-Structured Merge-Tree (LSM-Tree) with write-ahead logging (WAL) to provide atomic, linearizable transactions.
+3. **Low-Level Erasure Coding Mathematics (Reed-Solomon)**:
+   - For Zone-Redundant Storage (ZRS), raw extents are split into $K$ data chunks and computed into $M$ parity chunks (e.g., Reed-Solomon $6+3$ or $9+3$ coding) distributed across distinct Availability Zones.
+   - ZRS tolerates the complete catastrophic loss of an entire datacenter facility or multiple simultaneous storage nodes with only a $33-50\%$ storage capacity overhead, compared to $200\%$ overhead for traditional 3x mirroring.
+4. **Production Failure Modes & SRE Hotspotting**:
+   - **Partition Hotspotting (HTTP 503 ServerBusy)**: When an application writes thousands of files whose names share a sequential prefix (e.g., `logs/2026-09-11-00-01.json`), all requests map to the same partition server range, exhausting that node's CPU and disk queue depth. Remediation: Prepend a random hash prefix or reverse the timestamp (e.g., `<hash>-logs/...`) to distribute partitions uniformly across hundreds of partition nodes.
+   - **Silent Bit Rot & Scrubbing**: Physical flash memory degradation (silent data corruption) is mitigated by background scrubbing engines continuously calculating CRC64 checksums across sealed extents and regenerating corrupt blocks using Reed-Solomon parity.��──────────────┐
 │ STANDARD NETWORKING (Software)  │   │ ACCELERATED NETWORKING (Hardware SR-IOV)  │
 ├─────────────────────────────────┤   ├───────────────────────────────────────────┤
 │ [Guest VM (Linux/Windows)]      │   │ [Guest VM (Linux/Windows)]                │

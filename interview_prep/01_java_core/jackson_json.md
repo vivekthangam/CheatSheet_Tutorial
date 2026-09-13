@@ -6,7 +6,121 @@
 
 ## 🏛️ Guide Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph L8 ["Layer 8: Performance Controls & Feature Flags"]
+        direction LR
+        F1["DeserializationFeature<br/>FAIL_ON_UNKNOWN_PROPERTIES"]
+        F2["SerializationFeature<br/>WRITE_DATES_AS_TIMESTAMPS"]
+        F3["JsonGenerator.Feature<br/>WRITE_BIGDECIMAL_AS_PLAIN"]
+    end
+
+    subgraph L7 ["Layer 7: Security Boundaries & Validation Matrix"]
+        direction LR
+        S1["BasicPolymorphicTypeValidator<br/>Strict Class & Package Allowlists"]
+        S2["Default Typing Guard<br/>CVE Mitigation (H2, Commons-Collections RCE)"]
+        S3["StreamReadConstraints<br/>Max Depth (1000) & Max String/Number Length"]
+    end
+
+    subgraph L6 ["Layer 6: Modern Language Integration & Immutability"]
+        direction LR
+        R1["Java 17/21 Records<br/>Canonical Constructor Binding"]
+        R2["ParameterNamesModule<br/>-parameters javac Compiler Flag"]
+        R3["Kotlin & Scala Modules<br/>Null-Safety & Reflection Bridges"]
+    end
+
+    subgraph L5 ["Layer 5: Enterprise Annotation Subsystem"]
+        direction LR
+        A1["Access & Binding<br/>@JsonProperty | @JsonAlias | @JsonIgnore"]
+        A2["Format & Shape<br/>@JsonFormat | @JsonInclude | @JsonRawValue"]
+        A3["Polymorphism & Identity<br/>@JsonTypeInfo | @JsonSubTypes | @JsonIdentityInfo"]
+    end
+
+    subgraph L4 ["Layer 4: Data Binding Subsystem (ObjectMapper)"]
+        direction LR
+        DB1["DeserializerCache & SerializerCache<br/>TypeFactory & JavaType Resolution"]
+        DB2["BeanDeserializer / BeanSerializer<br/>SettableBeanProperty Dynamic Invocations"]
+        DB3["Introspection Engine<br/>JacksonAnnotationIntrospector"]
+    end
+
+    subgraph L3 ["Layer 3: Tree Model Document Subsystem"]
+        direction LR
+        TM1["JsonNode Hierarchy<br/>ContainerNode: ObjectNode & ArrayNode"]
+        TM2["ValueNode Substrate<br/>TextNode, IntNode, BooleanNode, NullNode"]
+        TM3["Pointer & Traversal<br/>JsonPointer (/user/addresses/0/city)"]
+    end
+
+    subgraph L2 ["Layer 2: Low-Level Streaming API"]
+        direction LR
+        ST1["JsonParser (UTF8StreamJsonParser)<br/>Token Stream: START_OBJECT, FIELD_NAME..."]
+        ST2["JsonGenerator (UTF8JsonGenerator)<br/>Direct Low-Allocation Byte Serialization"]
+    end
+
+    subgraph L1 ["Layer 1: Memory & Buffer Recycling Substrate"]
+        direction LR
+        M1["BufferRecycler Pool<br/>Recycled byte[]/char[] Buffers"]
+        M2["ThreadLocal vs QueuePool<br/>Virtual Thread OOM Protection (Jackson 2.16+)"]
+        M3["Bytecode Acceleration<br/>Blackbird / Afterburner (MethodHandles)"]
+    end
+
+    L8 --> L7
+    L7 --> L6
+    L6 --> L5
+    L5 --> L4
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+
+    classDef l8 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+    classDef l7 fill:#1e1e2e,stroke:#fab387,stroke-width:2px,color:#cdd6f4;
+    classDef l6 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l5 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l4 fill:#1e1e2e,stroke:#89dceb,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#b4befe,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class F1,F2,F3 l8;
+    class S1,S2,S3 l7;
+    class R1,R2,R3 l6;
+    class A1,A2,A3 l5;
+    class DB1,DB2,DB3 l4;
+    class TM1,TM2,TM3 l3;
+    class ST1,ST2 l2;
+    class M1,M2,M3 l1;
 ```
+
+#### Architectural Breakdown: The 8-Layer Jackson Serialization & Security Substrate
+
+1. **Visual Architecture & Component Topology**:
+   - **Layer 1 (Memory & Buffer Recycling Substrate)**: Foundation of Jackson throughput. Manages temporary I/O buffers (`char[]` and `byte[]`) via `BufferRecycler` to prevent GC heap churn. In modern high-concurrency systems, uses lock-free queue pools or thread-local caches, backed by bytecode accelerators like `BlackbirdModule` (using Java 9+ `MethodHandles`).
+   - **Layer 2 (Low-Level Streaming API)**: Direct token stream processing via `JsonParser` and `JsonGenerator`. Reads UTF-8 bytes directly without intermediate String allocations. Operates in $O(1)$ memory complexity regardless of input size.
+   - **Layer 3 (Tree Model Document Subsystem)**: In-memory hierarchical DOM representation (`JsonNode`, `ObjectNode`, `ArrayNode`). Allows ad-hoc traversal, dynamic schema manipulation, and `JsonPointer` queries without binding to a static Java class.
+   - **Layer 4 (Data Binding Subsystem - `ObjectMapper`)**: Core reflection and introspection engine. Utilizes `DeserializerCache` and `SerializerCache` to avoid repeated class inspection. Generates property setters and getters via `SettableBeanProperty` accessors.
+   - **Layer 5 (Enterprise Annotation Subsystem)**: Granular declarative serialization rules controlling field visibility (`@JsonProperty`, `@JsonIgnore`), payload shaping (`@JsonFormat`, `@JsonInclude`), and polymorphic dispatch (`@JsonTypeInfo`, `@JsonSubTypes`).
+   - **Layer 6 (Modern Language Integration & Immutability)**: Native support for Java 17/21 Records via canonical constructor parameter binding, requiring the `-parameters` compiler flag and `ParameterNamesModule`.
+   - **Layer 7 (Security Boundaries & Validation Matrix)**: Defensive perimeter protecting against Remote Code Execution (RCE) deserialization gadget chains. Implements `BasicPolymorphicTypeValidator` allowlisting and Jackson 2.15+ `StreamReadConstraints` (guarding against nested depth algorithmic complexity attacks).
+   - **Layer 8 (Performance Controls & Feature Flags)**: Global runtime switches (`DeserializationFeature`, `SerializationFeature`, `JsonGenerator.Feature`) that enforce enterprise data integrity, timezone conventions, and numeric precision rules.
+
+2. **Execution Flow & Serialization/Deserialization State Machine**:
+   - **Phase 1: Tokenization**: An incoming `InputStream` enters `UTF8StreamJsonParser`. A `BufferRecycler` allocates reusable input buffers. The parser scans UTF-8 byte sequences, advancing through states: `START_OBJECT` $\to$ `FIELD_NAME` $\to$ `VALUE_STRING` / `VALUE_NUMBER` $\to$ `END_OBJECT`.
+   - **Phase 2: Type Resolution & Introspection**: `ObjectMapper` queries `TypeFactory` to resolve the target `JavaType` (accounting for generic type erasure via `TypeReference<T>`). It checks `DeserializerCache`. If a cache miss occurs, `JacksonAnnotationIntrospector` scans annotations, resolves constructors/creators, and constructs a specialized `BeanDeserializer`.
+   - **Phase 3: Object Instantiation & Property Hydration**: For standard POJOs, the default zero-arg constructor is invoked via reflection, followed by iterative loop calls to `SettableBeanProperty.deserializeAndSet(parser, ctxt, bean)`. For Java Records or `@JsonCreator` targets, tokens are buffered into a property-based creator array until all parameters are deserialized, then the canonical constructor is invoked atomically.
+   - **Phase 4: Security Verification**: If `@JsonTypeInfo` is present, the parser extracts the type identifier token (e.g. `"@class"` or `"type"`). Before classloading, `BasicPolymorphicTypeValidator` validates the target class against authorized packages. If rejected, a `SecurityException` aborts parsing before arbitrary code can execute.
+
+3. **Low-Level JVM & Memory Mechanics**:
+   - **BufferRecycler & Virtual Thread Memory Hazards**: In traditional thread-pooled servlet containers (Tomcat with 200 platform threads), `ThreadLocal<SoftReference<BufferRecycler>>` recycles $200 \times 16\text{KB} \approx 3.2\text{MB}$ of memory. Under Java 21 Project Loom with 1,000,000 concurrent Virtual Threads, 1,000,000 uncollected `BufferRecycler` instances become pinned in native/heap memory, precipitating an immediate catastrophic OutOfMemoryError. Jackson 2.16+ mitigates this via shared lock-free recycler pools (`JsonFactory.builder().recyclerPool(...)`).
+   - **IEEE 754 64-bit Long Primary Key Truncation**: JavaScript represents all numbers as IEEE 754 double-precision floats, which have only 53 bits of mantissa ($2^{53} - 1 = 9,007,199,254,740,991$). Long IDs (such as Twitter/Snowflake 64-bit IDs like `1792837492837482912L`) lose their least significant digits in browser JSON parsers, causing silent data corruption. Enterprise Jackson pipelines mandate `@JsonSerialize(using = ToStringSerializer.class)` or `WRITE_BIGDECIMAL_AS_PLAIN` to preserve string fidelity.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **RCE Deserialization Gadget Exploits**: Enabling `enableDefaultTyping()` allows attackers to supply arbitrary classes (e.g. Spring `FileSystemXmlApplicationContext`, H2 `JdbcRowSetImpl`) to trigger arbitrary remote shell execution. Diagnostic: audit codebase for `enableDefaultTyping()` or unbounded `@JsonTypeInfo(use = Id.CLASS)` and replace immediately with `BasicPolymorphicTypeValidator.builder().allowIfBaseType(...)`.
+   - **10GB readTree / DOM Amplification OOM**: Ingesting a large 500MB JSON payload via `objectMapper.readTree(inputStream)` allocates millions of `JsonNode` wrapper objects, expanding memory by $5\times$ to $10\times$ and exhausting the JVM heap. Diagnostic: replace Tree Model parsing with Streaming `JsonParser` token loops ($O(1)$ memory consumption) for high-throughput batch ingest pipelines.
+   - **Infinite Cyclic Serialization Recursion**: Bidirectional JPA entity relationships (`@OneToMany` / `@ManyToOne`) without Jackson coordination cause infinite serialization loops, resulting in fatal `StackOverflowError`. Diagnostic: tag the owning side with `@JsonManagedReference` and the child side with `@JsonBackReference`, or introduce `@JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")`.
+
+<details>
+<summary>View Legacy ASCII Guide Architecture Overview</summary>
+
+```text
 ========================================================================================================================
                                      JACKSON JSON & SERIALIZATION ARCHITECTURE
 ========================================================================================================================
@@ -20,6 +134,8 @@
  [Layer 8: Rapid-Fire Cheat Sheet & Feature Matrix] --> DeserializationFeatures, SerializationFeatures, Performance Rules
 ========================================================================================================================
 ```
+
+</details>
 
 ---
 

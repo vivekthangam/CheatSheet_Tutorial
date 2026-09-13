@@ -9,44 +9,40 @@
 
 ## Architecture Blueprint: The Spring IoC & Boot Stack
 
-```
-+-------------------------------------------------------------------------------------------+
-|                          Spring Boot Application Startup                                    |
-|                                                                                             |
-|  +-----------------------------+  +------------------------------------------------------+  |
-|  |  SpringApplication.run()    |  |  Auto-Configuration Engine                           |  |
-|  |  ├─ Environment Setup       |  |  ├─ META-INF/spring/AutoConfiguration.imports        |  |
-|  |  ├─ Banner + Logging Init   |  |  ├─ @Conditional* Evaluators                        |  |
-|  |  ├─ ApplicationContext      |  |  ├─ Bean Definition Registry                        |  |
-|  |  │   Creation               |  |  └─ BeanFactory Post-Processing                     |  |
-|  |  └─ Embedded Server Start   |  +------------------------------------------------------+  |
-|  +-----------------------------+                                                            |
-|                                                                                             |
-|  +------------------------------------------------------+  +----------------------------+  |
-|  |  ApplicationContext (IoC Container)                   |  |  AOP Proxy Layer           |  |
-|  |  ├─ BeanDefinition Registry                           |  |  ├─ CGLIB (class proxy)    |  |
-|  |  ├─ Singleton Cache (ConcurrentHashMap)               |  |  ├─ JDK Dynamic (iface)   |  |
-|  |  ├─ BeanPostProcessor Chain                           |  |  ├─ @Transactional         |  |
-|  |  ├─ BeanFactoryPostProcessor Chain                    |  |  ├─ @Cacheable             |  |
-|  |  ├─ Event Multicaster (ApplicationEvent)              |  |  └─ @Async                 |  |
-|  |  └─ Lifecycle (SmartLifecycle, @PreDestroy)           |  +----------------------------+  |
-|  +------------------------------------------------------+                                  |
-|                                                                                             |
-|  Bean Lifecycle (12-Step Sequence)                                                          |
-|  1. Instantiation (Constructor)                                                             |
-|  2. Property Population (@Autowired / Constructor Injection)                                |
-|  3. BeanNameAware.setBeanName()                                                             |
-|  4. BeanFactoryAware.setBeanFactory()                                                       |
-|  5. ApplicationContextAware.setApplicationContext()                                         |
-|  6. BeanPostProcessor.postProcessBeforeInitialization() ← @PostConstruct fires HERE        |
-|  7. InitializingBean.afterPropertiesSet()                                                   |
-|  8. Custom @Bean(initMethod = "init")                                                       |
-|  9. BeanPostProcessor.postProcessAfterInitialization() ← AOP proxies created HERE          |
-|  10. Bean READY — in singleton cache                                                        |
-|  11. @PreDestroy (on graceful shutdown)                                                     |
-|  12. DisposableBean.destroy() / custom destroyMethod                                        |
-+-------------------------------------------------------------------------------------------+
-```
+![Spring Core & IoC Architectural Blueprint](../../assets/images/spring/spring_core_ioc_architecture.jpg)
+
+### Core Architectural Subsystems & Component Breakdown
+
+| Subsystem | Core Framework Class / Engine | Operational Mechanics & Responsibilities | Thread Model & Concurrency | Lifecycle & State Guarantees |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Application Bootstrapper** | `SpringApplication.run()` | Coordinates environment preparation, `PropertySources` hierarchy resolution, banner/logging init, and Web Server dispatch. | Single-threaded boot coordinator | Fail-fast initialization; shuts down JVM if fatal errors occur |
+| **2. Auto-Configuration Engine** | `AutoConfigurationImportSelector` | Evaluates conditions against `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. | Evaluates class, bean, and property condition predicates | Conditional bean registration prior to bean instance creation |
+| **3. IoC Container Core** | `DefaultListableBeanFactory` | Manages `beanDefinitionMap` (`ConcurrentHashMap<String, BeanDefinition>`) and singleton instance registry (`singletonObjects`). | Fully thread-safe concurrent read/write locks | Guarantees singletons instantiated once via 3-tier singleton cache |
+| **4. Post-Processor Chains** | `BFPP` & `BeanPostProcessor` | `ConfigurationClassPostProcessor` parses `@Configuration`; `AutowiredAnnotationBeanPostProcessor` injects `@Autowired`. | Sequential pipeline processing across registered beans | Separates bean metadata mutation from bean instance initialization |
+| **5. AOP Proxy Engine** | `AnnotationAwareAspectJAutoProxyCreator` | Analyzes advisor pointcuts; generates runtime bytecode proxies (CGLIB class proxy or JDK dynamic interface proxy). | Wraps target bean instance transparently | Intercepts calls for `@Transactional`, `@Async`, and `@Cacheable` |
+| **6. Event Multicaster** | `SimpleApplicationEventMulticaster` | Routes application events (`ApplicationEvent`) to registered `@EventListener` methods. | Synchronous by default; configurable async worker pool | Guarantees transaction-phase alignment via `@TransactionalEventListener` |
+| **7. Observability & Probes** | `HealthEndpoint`, `LivenessState`, `ReadinessState` | Exposes Kubernetes liveness and readiness HTTP probes; evaluates downstream infrastructure health. | Non-blocking actuator HTTP handlers | Reflects internal container state for orchestrator traffic shedding |
+
+### The 12-Step Spring Bean Lifecycle Engine
+
+| Step | Phase Name | Trigger Method / Interface | Framework Component | Action & State Transition |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Instantiation** | Constructor Call (`newInstance`) | `CglibSubclassingInstantiationStrategy` | Allocates object on JVM heap; invokes constructor. |
+| **2** | **Property Population** | Dependency Injection | `AutowiredAnnotationBeanPostProcessor` | Injects `@Autowired` fields, setters, and resolved value placeholders. |
+| **3** | **BeanNameAware** | `setBeanName(String)` | `BeanNameAware` | Informs bean of its registered container ID. |
+| **4** | **BeanFactoryAware** | `setBeanFactory(BeanFactory)` | `BeanFactoryAware` | Supplies reference to owning `DefaultListableBeanFactory`. |
+| **5** | **ApplicationContextAware** | `setApplicationContext(ApplicationContext)`| `ApplicationContextAwareProcessor` | Injects full `ApplicationContext` reference. |
+| **6** | **Pre-Initialization** | `postProcessBeforeInitialization()` | `CommonAnnotationBeanPostProcessor` | **Executes `@PostConstruct` annotated methods**. |
+| **7** | **InitializingBean** | `afterPropertiesSet()` | `InitializingBean` | Spring framework native initialization callback. |
+| **8** | **Custom Init** | `initMethod` callback | Configured `@Bean(initMethod = "...")` | Executes custom declared XML/annotation init method. |
+| **9** | **Post-Initialization** | `postProcessAfterInitialization()` | `AbstractAutoProxyCreator` | **Creates AOP proxies (CGLIB / JDK Dynamic Proxy)**. |
+| **10** | **Ready State** | Available in Singleton Cache | `DefaultSingletonBeanRegistry` | Bean is fully initialized and stored in `singletonObjects`. |
+| **11** | **Pre-Destruction** | Pre-destroy callback | `CommonAnnotationBeanPostProcessor` | **Executes `@PreDestroy` annotated cleanup methods**. |
+| **12** | **Destruction** | `destroy()` / `destroyMethod` | `DisposableBean` | Releases thread pools, closes network sockets, shuts down connections. |
+
+> [!NOTE]
+> **Complete Bean Lifecycle Pipeline:**
+> `Constructor Instantiation` ──► `Property Injection` ──► `Aware Interfaces` ──► `BPP BeforeInitialization (@PostConstruct)` ──► `afterPropertiesSet()` ──► `Custom initMethod` ──► `BPP AfterInitialization (AOP Proxy Wrapping)` ──► `Bean READY` ──► `@PreDestroy` ──► `DisposableBean.destroy()`
 
 ---
 
@@ -88,41 +84,19 @@ public class OrderService {
 **Inversion of Control — Spring's Solution:**
 When `SpringApplication.run()` is called, Spring performs this 7-step sequence:
 
-```
-Step 1: Environment Bootstrap
-  └─ Loads application.yml / application.properties
-  └─ Resolves Spring profiles (@Profile annotations)
-  └─ Populates PropertySources (system props, env vars, yaml, etc.)
+| Step | Phase Name | Primary Engine / Concrete Class | Execution Mechanics & Operations | JVM Artifact / Registry Stored In |
+| :--- | :--- | :--- | :--- | :--- |
+| **Step 1** | **Environment Bootstrap** | `StandardEnvironment` | Loads `application.yml`/`.properties`, resolves active profiles, populates `PropertySources` (system props, env vars, config server). | `Environment.propertySources` |
+| **Step 2** | **ApplicationContext Creation** | `ServletWebServerApplicationContextFactory` | Instantiates `AnnotationConfigServletWebServerApplicationContext` (Servlet), `AnnotationConfigReactiveWebServerApplicationContext` (WebFlux), or `AnnotationConfigApplicationContext`. | `ApplicationContext` JVM instance |
+| **Step 3** | **BeanDefinition Scanning** | `ClassPathBeanDefinitionScanner` | Scans packages for `@Component`, `@Service`, `@Repository`, `@Controller`; builds metadata (class type, scope, lazy-init flags). | `DefaultListableBeanFactory.beanDefinitionMap` |
+| **Step 4** | **BeanFactoryPostProcessor Execution** | `ConfigurationClassPostProcessor`, `PropertySourcesPlaceholderConfigurer` | Parses `@Configuration` and `@Bean` methods, resolves `@Value("${...}")` string placeholders *before* beans are created. | Mutates `BeanDefinition` metadata graph |
+| **Step 5** | **Singleton Instantiation** | `DefaultListableBeanFactory.preInstantiateSingletons()` | Performs topological sort on dependencies; instantiates beans in topological order, resolving constructor dependencies. | `DefaultSingletonBeanRegistry.singletonObjects` |
+| **Step 6** | **BeanPostProcessor Execution** | `AutowiredAnnotationBeanPostProcessor`, `AspectJAwareAdvisorAutoProxyCreator` | Injects non-constructor `@Autowired` fields, runs `@PostConstruct` methods, and wraps qualifying beans in CGLIB/JDK AOP dynamic proxies. | Active runtime proxies placed into singleton cache |
+| **Step 7** | **Embedded Server Start** | `TomcatWebServerFactory`, `NettyWebServerFactory` | Initializes embedded Tomcat/Netty, binds to HTTP port, registers `DispatcherServlet`, and broadcasts `ApplicationReadyEvent`. | HTTP Socket open to accept traffic |
 
-Step 2: ApplicationContext Creation
-  └─ Web apps: AnnotationConfigServletWebServerApplicationContext
-  └─ WebFlux apps: AnnotationConfigReactiveWebServerApplicationContext
-  └─ Non-web: AnnotationConfigApplicationContext
-
-Step 3: BeanDefinition Scanning (ConfigurationClassPostProcessor)
-  └─ @ComponentScan: Recursively scans packages for @Component stereotypes
-  └─ Each class → BeanDefinition (metadata: class, scope, init/destroy methods)
-  └─ BeanDefinitions stored in DefaultListableBeanFactory.beanDefinitionMap
-
-Step 4: BeanFactoryPostProcessor Execution
-  └─ PropertySourcesPlaceholderConfigurer: Resolves @Value("${...}") placeholders
-  └─ ConfigurationClassPostProcessor: Processes @Configuration, @Bean methods
-  └─ Runs BEFORE any bean instances are created
-
-Step 5: Singleton Instantiation (Topological Sort)
-  └─ Dependencies instantiated before dependents (depth-first resolution)
-  └─ Instances stored in DefaultListableBeanFactory.singletonObjects
-
-Step 6: BeanPostProcessor Execution
-  └─ AutowiredAnnotationBeanPostProcessor: Processes @Autowired fields (not constructor)
-  └─ CommonAnnotationBeanPostProcessor: Processes @PostConstruct, @PreDestroy, @Resource
-  └─ AnnotationAwareAspectJAutoProxyCreator: Wraps beans in CGLIB/JDK proxies for AOP
-
-Step 7: Embedded Server Start
-  └─ TomcatWebServer / NettyWebServer / JettyWebServer
-  └─ Registers DispatcherServlet / DispatcherHandler
-  └─ Publishes ApplicationReadyEvent
-```
+> [!NOTE]
+> **Application Startup Pipeline:**
+> `Environment Bootstrap` ──► `ApplicationContext Creation` ──► `BeanDefinition Scanning` ──► `BeanFactoryPostProcessor` ──► `Singleton Instantiation` ──► `BeanPostProcessor (AOP Proxy)` ──► `Embedded Web Server Start`
 
 ```java
 // Production Spring Boot Entry Point
@@ -470,36 +444,17 @@ You add `spring-boot-starter-data-jpa` to `pom.xml`, and without writing a singl
 ##### 3. Standout Technical Answer
 
 **The Complete Auto-Configuration Pipeline:**
-```
-@SpringBootApplication
-  └─ @EnableAutoConfiguration
-      └─ @Import(AutoConfigurationImportSelector.class)
-                │
-                ▼ AutoConfigurationImportSelector.getAutoConfigurationEntry()
-          Reads: META-INF/spring/
-                 org.springframework.boot.autoconfigure.AutoConfiguration.imports
-          Loads: ~150 class names (Spring Boot 3.x) including:
-                 - DataSourceAutoConfiguration
-                 - HibernateJpaAutoConfiguration
-                 - TransactionAutoConfiguration
-                 - SpringDataWebAutoConfiguration
-                 - ...
-                │
-                ▼ Filter by @Conditional* annotations
-          For DataSourceAutoConfiguration:
-            @ConditionalOnClass(DataSource.class) → DataSource.class IS on classpath ✅
-            @ConditionalOnMissingBean(DataSource.class) → No user-defined DataSource ✅
-            → BeanDefinition for HikariDataSource REGISTERED
-                │
-                ▼ @EnableConfigurationProperties(DataSourceProperties.class)
-          Binds spring.datasource.* → DataSourceProperties POJO
-          spring.datasource.url → DataSourceProperties.url
-          spring.datasource.hikari.maximum-pool-size → HikariCP config
-                │
-                ▼ Singleton instantiation
-          HikariDataSource created with properties from YAML
-          Stored in singletonObjects["dataSource"]
-```
+| Pipeline Stage | Framework Engine & Class | Operational Mechanism | Verification & Evaluation Rule | Registry State & Output |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Annotation Trigger** | `@EnableAutoConfiguration` | Bundled inside `@SpringBootApplication`; imports `AutoConfigurationImportSelector.class`. | Triggers during configuration class scanning | Initiates auto-config resolution |
+| **2. Import Manifest Loading** | `AutoConfigurationImportSelector` | Scans classpath for `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. | Loads ~150 core auto-configuration classes into memory | List of candidate classes |
+| **3. Conditional Filtering** | `OnClassCondition`, `OnBeanCondition` | Evaluates `@ConditionalOnClass`, `@ConditionalOnMissingBean`, `@ConditionalOnProperty` annotations. | E.g. `DataSource.class` is on classpath AND no user-defined `DataSource` bean exists | Candidate retained for registration |
+| **4. Configuration Binding** | `ConfigurationPropertiesBindingPostProcessor` | Binds external configuration properties (`spring.datasource.*`) to `DataSourceProperties` POJO. | Validates property syntax, data types, and required fields | Configured properties instance |
+| **5. Singleton Creation** | `DataSourceConfiguration.Hikari` | Instantiates `HikariDataSource` configured with resolved properties (pool size, URL, credentials). | Standard bean creation lifecycle execution | Stored in `singletonObjects["dataSource"]` |
+
+> [!NOTE]
+> **Auto-Configuration Execution Flow:**
+> `@SpringBootApplication` ──► `@EnableAutoConfiguration` ──► `AutoConfigurationImportSelector` ──► `Read AutoConfiguration.imports` ──► `Evaluate @Conditional* Annotations` ──► `Bind @ConfigurationProperties` ──► `Register & Instantiate Beans`
 
 **The Auto-Configuration Source Code (Simplified):**
 ```java
@@ -913,38 +868,15 @@ public class PaymentService {
 ```
 
 **Proxy Architecture Visualization:**
-```
-EXTERNAL CALL (from REST controller):
+| Call Type | Ingress Path | Interception Mechanics | Transaction / AOP Context | Production Result & Risk |
+| :--- | :--- | :--- | :--- | :--- |
+| **External Call (via REST Controller)** | Controller ──► `PaymentService$$SpringCGLIB$$0` ──► `PaymentService` | CGLIB proxy intercepts method call; borrows DB connection from HikariCP, disables auto-commit, binds connection to `TransactionSynchronizationManager` (ThreadLocal). | **Active Transaction Boundary** | Method executes inside managed transaction; commits or rolls back cleanly on exception. |
+| **Self-Invocation (Internal `this` call)** | `processPayment()` ──► `this.chargeAndAlert()` | Calls method directly on the internal raw JVM instance (`this`); **CGLIB proxy is completely bypassed**! | **NO Transaction / Interception** | `chargeAndAlert()` executes without transaction context; DB updates fail silently or lack rollback protection. |
 
-  External Caller
-      │
-      ▼
-  [CGLIB Proxy: PaymentService$$SpringCGLIB$$0]
-      │  Intercepts: "Oh, this method is @Transactional!"
-      │  1. Acquire connection from HikariCP
-      │  2. Set autocommit = false
-      │  3. Store connection in TransactionSynchronizationManager (ThreadLocal)
-      ▼
-  [Raw PaymentService object]
-      │  processPayment() executes
-      │  calls this.chargeAndAlert()
-      │  ↓
-      │  [Raw PaymentService object] — PROXY IS BYPASSED!
-      │  chargeAndAlert() executes WITHOUT transaction context
-      ▼
-  [CGLIB Proxy: PaymentService$$SpringCGLIB$$0]
-      │  4. commit() or rollback()
-      ▼
-  External Caller receives result
-
-
-SELF-INVOCATION:
-
-  External Caller → [Proxy] → Raw.processPayment()
-                                    │
-                                    └─► Raw.chargeAndAlert()  ← Bypasses proxy entirely!
-                                           (no transaction!)
-```
+> [!WARNING]
+> **Proxy Call vs Self-Invocation Flow:**
+> - **External Call:** `Caller` ──► `[CGLIB Proxy]` ──(Interception: Open Txn)──► `[Raw Service Instance]` ──► `[CGLIB Proxy]` ──(Commit Txn)──► `Caller`
+> - **Self-Invocation:** `Caller` ──► `[CGLIB Proxy]` ──► `Raw.processPayment()` ──► `this.chargeAndAlert()` *(Bypasses Proxy! Zero Transaction!)*
 
 **Fix 1: Extract to a Separate Bean (✅ Recommended)**
 ```java
@@ -1017,14 +949,13 @@ public class PaymentService {
 ```
 
 **The Self-Invocation Problem Applies to ALL Spring AOP Annotations:**
-```
-@Transactional  → internal calls: no transaction management
-@Cacheable      → internal calls: cache never checked/updated
-@Async          → internal calls: runs synchronously on caller thread
-@Retryable      → internal calls: no retry on exception
-@Secured        → internal calls: no security check
-@PreAuthorize   → internal calls: authorization bypassed (SECURITY HOLE!)
-```
+| Annotation | Normal External Call Behavior | Internal Self-Invocation Consequence | Production Failure Severity |
+| :--- | :--- | :--- | :--- |
+| **`@Transactional`** | Wraps in DB transaction; handles commit/rollback | Executes in autocommit mode; zero rollback protection | **P1 Data Corruption** (Partial DB writes persisted) |
+| **`@Cacheable`** | Inspects cache; returns cached result on hit | Always executes method; cache is never read or populated | **P2 Performance Degrade** (Database slammed by duplicate queries) |
+| **`@Async`** | Dispatches task to background `ThreadPoolTaskExecutor` | Executes synchronously on HTTP worker thread | **P1 Latency Explosion** (Tomcat thread pool exhausted) |
+| **`@Retryable`** | Retries method execution on configured exceptions | Exception propagates immediately without retry | **P2 Reliability Loss** (Transient network blips fail requests) |
+| **`@PreAuthorize`** | Evaluates SpEL security expression; blocks unauthorized calls | **Security check bypassed entirely!** | **P0 Security Vulnerability** (Unauthorized privilege escalation) |
 
 | Fix | Mechanism | Code Change | Risk |
 |---|---|---|---|
@@ -1433,18 +1364,10 @@ public class NotificationService {
 }
 ```
 
-**Thread Pool Sizing Formula:**
-```
-For I/O-bound async tasks (HTTP calls, email, SMS):
-  corePoolSize = number of concurrent notification streams per pod
-  maxPoolSize  = corePoolSize × peak_multiplier (e.g., 3×)
-  queueCapacity = maxPoolSize × avg_processing_time_ms / SLA_ms
-
-For CPU-bound async tasks (PDF generation, image processing):
-  corePoolSize = Runtime.getRuntime().availableProcessors()
-  maxPoolSize  = corePoolSize (adding threads hurts CPU-bound work)
-  queueCapacity = large (tasks wait for threads instead of creating more)
-```
+| Workload Classification | Primary Constraint | Recommended Pool Sizing Formula | Queue Capacity Configuration | Engineering Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| **I/O-Bound Tasks** (HTTP, Email, Database) | Network/Socket I/O Wait Time | $\text{corePoolSize} = \text{Target Concurrency}$; $\text{maxPoolSize} = \text{corePoolSize} \times 3$ | $\text{queueCapacity} = \frac{\text{maxPoolSize} \times \text{Avg Wait Time}}{\text{Target SLA}}$ | Thread blocks during I/O; extra threads keep CPU cores utilized while sockets await responses. |
+| **CPU-Bound Tasks** (PDF, Crypto, Parsing) | CPU Core Saturation | $\text{corePoolSize} = N_{\text{CPU}} = \text{Runtime.getRuntime().availableProcessors()}$; $\text{maxPoolSize} = \text{corePoolSize}$ | $\text{queueCapacity} = \text{Large (e.g., 500-1000)}$ | Adding more threads than physical CPU cores causes severe OS context-switching thrashing without throughput gain. |
 
 | Pool Saturation Policy | Behavior | Use When |
 |---|---|---|
@@ -1570,17 +1493,17 @@ public KeyGenerator sortedListKeyGenerator() {
 }
 ```
 
-**Spring Cache Abstraction — Internal Flow:**
-```
-Method call arrives → CacheInterceptor.invoke()
-  ├─ CacheResolver resolves Cache from CacheManager
-  ├─ KeyGenerator generates cache key from method params
-  ├─ Cache.get(key) — check cache
-  │     HIT: return cached value immediately (method NOT called!)
-  │     MISS: proceed to actual method call
-  │           store result: Cache.put(key, result)
-  │           return result
-```
+| Stage | Component Involved | Cache Operation & Logic | State Mutation & Outcome |
+| :--- | :--- | :--- | :--- |
+| **1. Interception** | `CacheInterceptor.invoke()` | Intercepts `@Cacheable` method invocation | Prepares cache evaluation context |
+| **2. Resolution** | `CacheResolver` | Resolves target `Cache` from configured `CacheManager` (e.g. Redis, Caffeine) | Locates backing cache partition |
+| **3. Key Generation** | `KeyGenerator` | Evaluates SpEL expression or computes default composite hash from method arguments | Generates deterministic cache key |
+| **4a. Cache HIT** | `Cache.get(key)` | Checks cache store; matching value found | **Returns cached value immediately; target method is NOT called** |
+| **4b. Cache MISS** | Method Invocation + `Cache.put()` | Target method executes; result stored in cache via `Cache.put(key, result)` | Returns fresh computed result; populates cache for subsequent callers |
+
+> [!NOTE]
+> **Cache Execution Pipeline:**
+> `Method Invocation` ──► `CacheInterceptor` ──► `KeyGenerator` ──► `Cache.get(key)` ──► `[HIT: Return Value | MISS: Execute Method -> Cache.put(key, result) -> Return Value]`
 
 | Annotation | Cache Check | Method Called | Cache Updated |
 |---|---|---|---|
@@ -2713,28 +2636,15 @@ public class InventoryClient {
 }
 ```
 
-**Circuit Breaker State Machine:**
-```
-                    failure_rate > 50%
-         ┌────────────────────────────────────────────────────┐
-         │                                                    │
-         ▼                                                    │
-    [CLOSED]  ←───── success calls ─────── [HALF_OPEN]     [OPEN]
-    Normal                                 5 test calls       │
-    Operation                              sent through        │
-    All calls                              ↓ if 50% fail:     │
-    go through                             [OPEN] again       │
-         │                                 ↓ if < 50% fail:   │
-         │                                 [CLOSED]            │
-         │                                                    │
-         └──────────── wait 30s ──────────────────────────────►[HALF_OPEN]
+| State | Ingress Request Handling | Transition Trigger / Metric Condition | Next State Transition | Failure Mitigation & Circuit Protection |
+| :--- | :--- | :--- | :--- | :--- |
+| **`CLOSED`** | **All requests pass through** to the downstream service; metrics recorded in sliding window. | Failure rate exceeds configured threshold (e.g. $>50\%$ failures in window). | ──► **`OPEN`** | Normal healthy operation. |
+| **`OPEN`** | **Fast-fails all requests immediately** without touching downstream service (`CallNotPermittedException`). | Wait duration timer expires (e.g. 30 seconds wait window). | ──► **`HALF_OPEN`** | Protects struggling downstream service from cascading failure and resource exhaustion; routes to fallback method. |
+| **`HALF_OPEN`** | **Allows a limited probe of test requests** (e.g. 5 trial calls) to evaluate downstream health. | If failure rate $\ge 50\%$, trips back to **`OPEN`**; if failure rate $< 50\%$, resets to **`CLOSED`**. | ──► **`OPEN`** or **`CLOSED`** | Safely detects whether downstream service has recovered before restoring full traffic. |
 
-Call routing:
-  CLOSED: All calls pass through → track results in sliding window
-  OPEN: ALL calls immediately return CallNotPermittedException → fallback!
-         (No real calls to inventory service — protects from cascade failure)
-  HALF_OPEN: 5 test calls pass through → determine if service recovered
-```
+> [!IMPORTANT]
+> **Circuit Breaker State Transition Pipeline:**
+> `[CLOSED: Normal Flow]` ──(Failure Rate > 50%)──► `[OPEN: Immediate Fallback]` ──(Wait 30s Window)──► `[HALF_OPEN: 5 Trial Calls]` ──(Recovered: CLOSED | Failed: OPEN)
 
 **Metrics & Monitoring:**
 ```java
@@ -3071,35 +2981,18 @@ Your team wants to deploy Spring Boot microservices as GraalVM Native Images to 
 
 ##### 3. Standout Technical Answer
 
-```
-GraalVM Native Image Build Pipeline (Spring Boot 3):
+> [!NOTE]
+> **GraalVM Native Image Build Pipeline (Spring Boot 3)**:
+> `Source Code + Spring Context` ➔ **Phase 1: Spring AOT Engine** `[spring-boot-maven-plugin:process-aot]` ➔ **Phase 2: Metadata & Hint Synthesis** `[reflect-config.json, proxy-config.json, resource-config.json]` ➔ **Phase 3: GraalVM Substrate VM Compiler** `[native-image (Closed-World Analysis & Points-To Engine)]` ➔ **Phase 4: ELF Native Binary Generation** ➔ **Phase 5: Sub-100ms Instant Runtime Execution**
 
-Source Code + Spring Context
-         │
-         ▼ Spring AOT Processor (runs at build time, not runtime)
-    spring-aot-maven-plugin (native profile)
-    ├─ Generates Java source for all @Configuration classes
-    │   (replaces CGLIB proxies with direct code — no CGLIB at runtime!)
-    ├─ Generates BeanDefinition registrations as Java code
-    │   (replaces classpath scanning — no reflection at runtime!)
-    ├─ Generates proxy hints for JDK Dynamic Proxies and CGLIB
-    ├─ Generates reflect-config.json (what classes to include)
-    ├─ Generates resource-config.json (resources to bundle)
-    └─ Generates proxy-config.json
-         │
-         ▼ GraalVM native-image compiler
-    Ahead-of-Time Compilation:
-    ├─ Closed-world assumption: ALL code paths known at build time
-    ├─ Dead code elimination (unused classes removed from binary)
-    ├─ Points-to analysis: traces all reachable code
-    ├─ Generates machine code (ELF binary)
-    └─ Output: single native binary (~50-100MB)
-         │
-         ▼ Runtime
-    0 JVM startup, 0 JIT compilation
-    Instant startup: 50-200ms (vs 5-15s JVM startup)
-    Low memory: 50-100MB RSS (vs 300-600MB JVM RSS)
-```
+| Pipeline Phase | Primary Engine / Tool | Core Operations & Transformations | Runtime Implication |
+| :--- | :--- | :--- | :--- |
+| **1. Source Inspection & AOT Optimization** | Spring Boot AOT Plugin (`spring-boot-maven-plugin:process-aot`) | • Evaluates `@Configuration` classes ahead of time<br>• Synthesizes direct Java source code replacing CGLIB proxies<br>• Converts classpath scanning into explicit `BeanDefinition` method calls | Eliminates CGLIB bytecode generation, dynamic classloader scanning, and runtime reflection lookup. |
+| **2. Reflection & Native Hint Generation** | Spring AOT Reachability Engine | • Emits `reflect-config.json` registering reachable classes/methods<br>• Emits `proxy-config.json` for JDK dynamic interfaces<br>• Bundles `resource-config.json` for embedded classpath resources<br>• Emits serialization and JNI bindings | Guarantees all dynamic reflection paths pass GraalVM's closed-world analysis without runtime failures. |
+| **3. Closed-World Static Analysis** | GraalVM Substrate VM (`native-image`) | • **Closed-World Assumption**: Analyzes reachable call graphs from `main()`<br>• **Points-To Analysis**: Traces pointer flow and object allocations<br>• **Dead-Code Elimination**: Strips unreferenced classes, methods, and JARs | Produces an ultra-lean binary containing only executed machine instructions. |
+| **4. Native Machine Code Compilation** | Native Image LLVM / C++ Compiler Backend | • Compiles bytecode directly into architecture-specific machine code (ELF / Mach-O / PE)<br>• Embeds Substrate VM runtime (GC, thread scheduler, signal handlers)<br>• Writes single self-contained executable (~$50\text{MB} - 100\text{MB}$) | No external JVM required; runs as a bare-metal Linux/container process. |
+| **5. Production Runtime Execution** | Substrate VM Runtime | • Instant container cold-start ($50\text{ms} - 200\text{ms}$ vs $5\text{s} - 15\text{s}$ JVM)<br>• Tiny initial memory footprint ($50\text{MB} - 100\text{MB}$ RSS vs $300\text{MB} - 600\text{MB}$ JVM)<br>• Zero JIT warmup tiering or dynamic de-optimization | Ideal for Kubernetes scale-to-zero, serverless functions, and high-density microservice pods. |
+
 
 ```java
 // ✅ Providing Native Hints for code that uses reflection
@@ -3480,21 +3373,22 @@ public class SecurityConfig {
 ```
 
 **Spring Security Filter Chain — Ordered Processing:**
-```
-HTTP Request
-     │
-     ▼ Filter 1: RequestIdFilter (Order=1) — sets MDC requestId
-     ▼ Filter 2: RateLimitingFilter (Order=2) — reject if over limit
-     ▼ Filter 3: CorsFilter — sets CORS headers
-     ▼ Filter 4: SecurityContextPersistenceFilter — loads SecurityContext
-     ▼ Filter 5: UsernamePasswordAuthenticationFilter — form login (disabled for JWT)
-     ▼ Filter 6: BearerTokenAuthenticationFilter — validates JWT
-     ▼ Filter 7: AuthorizationFilter — enforces access rules
-     │
-     ▼ Controller (@RestController)
-     │
-     ▼ Response flows back UP through all filters in reverse order
-```
+
+> [!NOTE]
+> **Spring Security Filter Chain Execution & Traversal Pipeline**:
+> `HTTP Request` ➔ `Filter 1: RequestIdFilter (Order=1)` ➔ `Filter 2: RateLimitingFilter (Order=2)` ➔ `Filter 3: CorsFilter (Order=3)` ➔ `Filter 4: SecurityContextPersistenceFilter (Order=4)` ➔ `Filter 5: UsernamePasswordAuthenticationFilter (Order=5)` ➔ `Filter 6: BearerTokenAuthenticationFilter (Order=6)` ➔ `Filter 7: AuthorizationFilter (Order=7)` ➔ `DispatcherServlet & @RestController` ➔ `Response Traverses Filters Upward (Reverse Order)` ➔ `HTTP Response to Client`
+
+| Filter Execution Order | Filter Component | Core Responsibility & Invariants | Thread & Context Management | Failure Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Order = 1** | `RequestIdFilter` | Ingests or generates unique `X-Request-ID`; injects into SLF4J MDC | `MDC.put("requestId", ...)` placed in try-finally | Always passes to next filter; `finally` cleans MDC. |
+| **2. Order = 2** | `RateLimitingFilter` | Enforces token-bucket rate limits per client IP / API token via Redis | Atomic Redis `INCR` / `EXPIRE` Lua script | Rejects with HTTP 429 Too Many Requests; halts chain. |
+| **3. Order = 3** | `CorsFilter` | Evaluates CORS preflight `OPTIONS` and standard origin headers | Sets response headers (`Access-Control-Allow-*`) | Rejects unauthorized origins with HTTP 403. |
+| **4. Order = 4** | `SecurityContextPersistenceFilter` | Restores or initializes `SecurityContext` in `SecurityContextHolder` | `SecurityContextRepository.loadDeferredContext()` | Sets anonymous security context if unauthenticated. |
+| **5. Order = 5** | `UsernamePasswordAuthFilter` | Extracts form credentials (`j_username`, `j_password`) if enabled | Dispatches to `AuthenticationManager` | Bypassed if stateless REST API using JWT. |
+| **6. Order = 6** | `BearerTokenAuthFilter` | Parses and validates `Authorization: Bearer <JWT>` header | Populates `JwtAuthenticationToken` into `SecurityContext` | Throws `AuthenticationException`; emits HTTP 401. |
+| **7. Order = 7** | `AuthorizationFilter` | Evaluates RBAC/ABAC authorization rules and authority attributes | Reads `SecurityContextHolder.getContext().getAuthentication()` | Emits HTTP 403 Forbidden via `AccessDeniedHandler`. |
+| **Terminal Target** | `@RestController` | Executes business domain logic and returns response entity | Thread yields execution back to filter unwinding | Standard HTTP response (200, 201, etc.). |
+
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Why must `MDC.remove(MDC_KEY)` be in a `finally` block — and what happens if you forget it?"
@@ -3520,21 +3414,16 @@ HTTP Request
 ##### 3. Standout Technical Answer
 Spring Framework 3+ replaced the legacy JavaBeans `PropertyEditor` mechanism with a modern, strongly-typed, and stateless conversion subsystem centered around **`ConversionService`**. The SPI provides 4 progressive abstraction tiers:
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                          SPRING CONVERSION SPI HIERARCHY                               │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  1. Converter<S, T>                   (Direct 1-to-1 conversion between two types)     │
-│         │                                                                              │
-│  2. ConverterFactory<S, R>            (1-to-Hierarchy: Converts S to any subtype of R) │
-│         │                                                                              │
-│  3. GenericConverter                  (N-to-N: Full access to source/target metadata)  │
-│         │                                                                              │
-│  4. ConditionalGenericConverter       (GenericConverter + boolean conditional guard)   │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Tier Level | SPI Interface | Mapping Cardinality | Contextual Metadata Access | Thread Safety & Guarantees | Primary Production Use Cases |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tier 1 (Base)** | `Converter<S, T>` | Simple 1-to-1 conversion | No (Operates strictly on source `S` value) | Must be thread-safe and stateless | String to Enum, String to ISO Country Code, String to UUID |
+| **Tier 2 (Hierarchy)** | `ConverterFactory<S, R>` | 1-to-Hierarchy conversion ($S \to R_i$) | No (Dynamically resolves target subtype $R_i \text{ extends } R$) | Thread-safe factory instance | String to general `Enum` hierarchy, String to Number hierarchy |
+| **Tier 3 (Generic)** | `GenericConverter` | Complex N-to-N conversion | **Yes** (Full `TypeDescriptor` access for annotations and generics) | Thread-safe complex converter | Custom formatted String to localized Currency, Array to Collection conversion |
+| **Tier 4 (Guarded)** | `ConditionalGenericConverter` | N-to-N + Conditional Predicate | **Yes** (Evaluates `matches(sourceType, targetType)`) | Thread-safe conditional converter | Applied only when specific field annotations (e.g. `@DateTimeFormat`) are present |
+
+> [!NOTE]
+> **Conversion SPI Hierarchy:**
+> `Converter<S, T> (1-to-1)` ──► `ConverterFactory<S, R> (1-to-Hierarchy)` ──► `GenericConverter (N-to-N with TypeDescriptor)` ──► `ConditionalGenericConverter (GenericConverter + Conditional Guard)`
 
 **1. `Converter<S, T>` (The Standard 1-to-1 Workhorse):**
 Converts a single source type `S` into target type `T`. Pure, simple, and stateless:
@@ -3670,37 +3559,15 @@ A single `DefaultConversionService` or `ApplicationConversionService` instance i
 
 Spring MVC uses two fundamentally separate, decoupled processing pipelines depending on the transport mechanism of the incoming data:
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                         SPRING MVC DUAL TRANSPORT PIPELINE                             │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  [ Incoming HTTP Request ]                                                             │
-│         │                                                                              │
-│         ├──► Pipeline A: URI Parameters, Query Params, Headers, Form-Data               │
-│         │       │                                                                      │
-│         │       ▼                                                                      │
-│         │    [ PathVariableMethodArgumentResolver / RequestParamMethodArgumentResolver ]│
-│         │       │                                                                      │
-│         │       ▼                                                                      │
-│         │    [ WebDataBinder ] ──► Delegates to ──► [ Spring ConversionService ]       │
-│         │                                            (Spring Converter<S, T>)          │
-│         │                                                                              │
-│         └──► Pipeline B: HTTP Request Body (JSON, XML, Protobuf)                       │
-│                 │                                                                      │
-│                 ▼                                                                      │
-│              [ RequestResponseBodyMethodProcessor ]                                    │
-│                 │                                                                      │
-│                 ▼                                                                      │
-│              [ HttpMessageConverter ]                                                  │
-│              (MappingJackson2HttpMessageConverter)                                     │
-│                 │                                                                      │
-│                 ▼                                                                      │
-│              [ Jackson ObjectMapper ] ──► Delegates to ──► [ Jackson Converter / Serde ]│
-│                                                            (Jackson StdConverter<IN, OUT)
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Pipeline | Ingress Data Sources | Dispatcher Method Argument Resolver | Data Binding / Serialization Subsystem | Conversion Mechanism & Customization Point | Exception & HTTP Error Response |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pipeline A: URI & Form Data** | Query params (`@RequestParam`), Path variables (`@PathVariable`), Headers (`@RequestHeader`), Form fields | `RequestParamMethodArgumentResolver`, `PathVariableMethodArgumentResolver` | Spring `WebDataBinder` | Spring **`ConversionService`** (`Converter<S, T>`, `Formatter<T>`) | Throws `MethodArgumentTypeMismatchException` ──► HTTP 400 Bad Request |
+| **Pipeline B: HTTP Request Body** | Raw HTTP Request Body (`@RequestBody`), JSON, XML, Protocol Buffers | `RequestResponseBodyMethodProcessor` | Spring `HttpMessageConverter` infrastructure | **Jackson `ObjectMapper`** (`StdConverter<IN, OUT>`, custom deserializers) | Throws `HttpMessageNotReadableException` ──► HTTP 400 Bad Request |
+
+> [!NOTE]
+> **Dual Transport Pipelines:**
+> - **Pipeline A (URI & Form Parameters):** `[ HTTP Request ]` ──► `PathVariable / RequestParam Resolver` ──► `WebDataBinder` ──► `Spring ConversionService (Converter<S, T>)`
+> - **Pipeline B (HTTP Request Body JSON):** `[ HTTP Request Body ]` ──► `RequestResponseBodyMethodProcessor` ──► `MappingJackson2HttpMessageConverter` ──► `Jackson ObjectMapper (StdConverter)`
 
 1. **Pipeline A (URI & Form Parameters)**:
    - Handled by resolvers like `RequestParamMethodArgumentResolver` and `PathVariableMethodArgumentResolver`.
@@ -3908,51 +3775,16 @@ public class NativeWebConfig {}
 
 ##### 3. Standout Technical Answer
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        END-TO-END 3-TIER CONVERSION ARCHITECTURE                       │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│  [ CLIENT REQUEST ]                                                                    │
-│  GET /api/v1/payments?settlement_date=2026-09-11                                       │
-│  Content-Type: application/json                                                        │
-│  Body: {"amount_cents": 19999}                                                         │
-│         │                                                                              │
-│         ▼                                                                              │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│  TIER 1: WEB ROUTING BOUNDARY (Spring MVC WebDataBinder)                               │
-│  - Executes: Spring Converter<String, LocalDate>                                       │
-│  - Transforms: Query string "2026-09-11" ──► LocalDate(2026, 9, 11)                   │
-│  - Failure: Throws MethodArgumentTypeMismatchException ──► HTTP 400 Bad Request        │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│         │                                                                              │
-│         ▼                                                                              │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│  TIER 2: TRANSPORT BOUNDARY (Jackson MappingJackson2HttpMessageConverter)             │
-│  - Executes: Jackson StdConverter<Long, Money>                                         │
-│  - Transforms: JSON integer 19999 ──► Money(BigDecimal.valueOf(199.99), USD)          │
-│  - Failure: Throws HttpMessageNotReadableException ──► HTTP 400 Bad Request            │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│         │                                                                              │
-│         ▼                                                                              │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│  DOMAIN LAYER: Transaction Boundary (@Transactional Service)                          │
-│  - Executes business logic, constructs PaymentEntity(settlementInstant, moneyAmount)   │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│         │                                                                              │
-│         ▼                                                                              │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│  TIER 3: PERSISTENCE BOUNDARY (Hibernate ORM / Jakarta Persistence)                    │
-│  - Executes: JPA AttributeConverter<Money, String>                                    │
-│  - Transforms: Domain Money(199.99, USD) ──► PostgreSQL VARCHAR column "199.99 USD"   │
-│  - Failure: Throws PersistenceException ──► Rollback DB Tx ──► HTTP 500 Internal Error │
-│  ════════════════════════════════════════════════════════════════════════════════════  │
-│         │                                                                              │
-│         ▼                                                                              │
-│  [ POSTGRESQL DATABASE ROW COMMITTED ]                                                 │
-│                                                                                        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| Architectural Tier | Execution Boundary & Component | Transformation Mechanism | Input & Output Data Types | Failure Mode & HTTP Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 1: Web Routing Boundary** | Spring MVC `WebDataBinder` | Spring `Converter<String, LocalDate>` | Query String `"2026-09-11"` ──► `LocalDate(2026, 9, 11)` | `MethodArgumentTypeMismatchException` ──► HTTP 400 Bad Request |
+| **Tier 2: Transport Boundary** | Jackson `MappingJackson2HttpMessageConverter` | Jackson `StdConverter<Long, Money>` | JSON integer `19999` ──► `Money(BigDecimal.valueOf(199.99), USD)` | `HttpMessageNotReadableException` ──► HTTP 400 Bad Request |
+| **Domain Layer** | Service Transaction Boundary (`@Transactional`) | Domain Constructor / Factory | Validates business invariants; constructs `PaymentEntity` | `DomainValidationException` ──► HTTP 422 Unprocessable Entity |
+| **Tier 3: Persistence Boundary** | Hibernate ORM / Jakarta Persistence | JPA `AttributeConverter<Money, String>` | Domain `Money(199.99, USD)` ──► PostgreSQL VARCHAR `"199.99 USD"` | `PersistenceException` ──► Transaction Rollback ──► HTTP 500 Internal Error |
+
+> [!IMPORTANT]
+> **End-to-End 3-Tier Data Transformation Pipeline:**
+> `[ Client HTTP Request ]` ──► `[ Tier 1: Web DataBinder (Spring Converter) ]` ──► `[ Tier 2: HTTP Body (Jackson Serde) ]` ──► `[ Domain Layer: Business Entity ]` ──► `[ Tier 3: JPA AttributeConverter ]` ──► `[ PostgreSQL Row Committed ]`
 
 **The Code Blueprint across All 3 Tiers:**
 

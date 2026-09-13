@@ -99,27 +99,24 @@ Imagine you own a tiny neighborhood burger joint that suddenly becomes world-fam
 
 ### Visual Architecture Flow of a Modern Scalable Platform
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│                             MODERN SCALABLE WEB ARCHITECTURE                             │
-│                                                                                          │
-│  [ Client Browser / Mobile ] ──► [ Global Anycast DNS ] ──► [ CDN: Cloudflare / CloudFront]
-│                                                                (Static Assets: 5ms)      │
-│                                                                        │                 │
-│                                                          (API Traffic) │                 │
-│                                                                        ▼                 │
-│                                                            [ Load Balancer: ALB / Nginx ]
-│                                                                        │                 │
-│                                   ┌────────────────────────────────────┴──────────┐      │
-│                                   ▼                                               ▼      │
-│                        [ App Pod 1 (Stateless) ]                       [ App Pod 2 ]     │
-│                                   │                                               │      │
-│                    ┌──────────────┴───────────────┐                               │      │
-│                    ▼                              ▼                               ▼      │
-│          [ Redis Cache Cluster ]       [ Primary DB (Writes) ] ──Replication──► [ Read ] │
-│             (RAM Lookups: 1ms)            (PostgreSQL / MySQL)                   (Replica)
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![Distributed Systems Cloud Architecture Blueprint](../assets/images/design_patterns/distributed_systems_architecture.jpg)
+
+#### Architectural Blueprint Component Breakdown
+
+The distributed systems architecture blueprint illustrates an end-to-end, high-throughput cloud topology designed to process millions of concurrent requests with sub-50ms p99 latency, zero single points of failure (SPOFs), and strict data durability. Every box, arrow, protocol, and storage tier in the blueprint represents an isolated architectural responsibility:
+
+| Component / Layer | Primary Architectural Role | Implementation Subsystem & Wire Protocols | High-Concurrency & Failure Characteristics |
+| :--- | :--- | :--- | :--- |
+| **1. Global Users** | Distributed client ingress originating requests worldwide. | Mobile clients, Web SPAs, IoT devices; HTTPS, HTTP/2, HTTP/3 (QUIC over UDP), WebSockets. | High variance in geographic network latency, packet loss, and jitter. Traffic requires regional edge termination to minimize round-trip times (RTT). |
+| **2. Anycast DNS / CDN** | Global traffic routing, DDoS absorption, and edge static caching. | BGP Anycast routing, Cloudflare / AWS CloudFront / Fastly; TLS 1.3 session resumption, Brotli compression, RFC 7234 HTTP caching. | Intercepts $70\%\text{--}90\%$ of static asset requests at edge Points of Presence (PoPs). Absorbs multi-terabit volumetric L3/L4 DDoS attacks before traffic enters private networks. |
+| **3. Layer 4 Load Balancer** | High-throughput, network-level transport packet distribution. | Linux IPVS (IP Virtual Server), Google Maglev, AWS Network Load Balancer (NLB); 5-tuple TCP/UDP hash (`src_ip`, `src_port`, `dst_ip`, `dst_port`, `proto`). | Operates in kernel space using Direct Server Return (DSR) or eBPF bypass; handles millions of packets per second (Mpps) without inspecting application payloads or decrypting TLS. |
+| **4. Layer 7 Envoy API Gateway** | Application-aware reverse proxy, protocol translation, and security enforcement. | Envoy Proxy, Kong, Nginx; HTTP/1.1, HTTP/2, gRPC over HTTP/2, TLS termination, OAuth2/OIDC, JWT verification, Redis-backed rate limiting. | Performs path-based (`/api/v1/payments`) and header-based routing, circuit breaking, distributed tracing propagation (`traceparent` header via W3C TraceContext), and dynamic endpoint discovery via xDS APIs. |
+| **5. Stateless Microservices** | Domain-driven business logic execution in containerized runtimes. | Kubernetes Pods / AWS ECS tasks; Spring Boot 3, FastAPI, Go, Rust; inter-service gRPC / REST over mTLS (SPIFFE/SPIRE). | Autoscale horizontally via Horizontal Pod Autoscaler (HPA) based on CPU/memory/P99 latency metrics. Contains no local state; delegates state persistence entirely to caches and databases. Includes `Auth Service` (JWT issuance, validation), `Payment Service` (transaction processing), and `Notification Service` (asynchronous email/SMS dispatch). |
+| **6. Distributed Cache (Redis)** | Ultra-low latency in-memory data store for hot keys and sessions. | Redis Cluster with 16,384 virtual hash slots, master-replica asynchronous replication, Redis Sentinel, sub-millisecond RAM access. | Employs the **Cache-Aside** (Lazy Loading) pattern for read-heavy workloads ($100\text{k}+\text{ ops/sec}$ per shard); implements probabilistic early expiration (XFetch) or distributed mutex locks (`SETNX`) to prevent cache stampedes (thundering herds). |
+| **7. Distributed Message Broker** | High-durability asynchronous event streaming and service decoupling. | Apache Kafka, Apache Pulsar; partitioned append-only commit logs, zero-copy `sendfile(2)` disk reads, consumer groups, offset commits. | Decouples synchronous request-response cycles. Downstream workers (e.g., `Notification Service`) consume partitioned topics (`Topic 1`, `Topic 2`, `Topic 3`) at their own throughput pace with guaranteed at-least-once or exactly-once semantics. |
+| **8. Database Tier** | Persistent, polyglot storage layer optimized for specific access patterns. | Sharded Relational DBs (PostgreSQL/MySQL with Vitess/Citus), Read Replicas (binary log streaming), NoSQL Document Stores (MongoDB, DynamoDB). | Provides transactional ACID guarantees for critical financial ledgers via primary-replica topologies, scale-out read capacity across replicas, and horizontal partition-key scaling for semi-structured document payloads. |
+
+---
 
 ### Clean Implementation: Cache-Aside Pattern (Spring Boot 3 + Redis)
 
@@ -308,23 +305,58 @@ Every system decision trades one property for another:
 
 # 📐 Phase 2: SOLID Principles & Clean Architecture
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│  S - Single Responsibility: A class should have only one reason to change.
-│  O - Open/Closed: Software entities should be open for extension, closed for modification.
-│  L - Liskov Substitution: Subtypes must be substitutable for base types without breaking behavior.
-│  I - Interface Segregation: Clients should not depend on methods they do not use.
-│  D - Dependency Inversion: High-level modules must depend on abstractions, not concretes.
-└────────────────────────────────────────────────────────────────────────┘
-```
+![SOLID Architecture & Clean Design Principles Roadmap](../assets/images/solid/solid_architecture_roadmap.jpg)
+
+#### Architectural Blueprint Component Breakdown: The 8-Layer Enterprise Architecture Roadmap
+
+The SOLID Architecture Roadmap delineates an 8-layer hierarchy bridging low-level hardware runtime execution to high-level enterprise architectural governance. Each layer enforces rigorous boundaries to prevent technical debt, cascading outages, and code rot:
+
+| Layer | Architectural Dimension | Core Subsystems & Technical Primitives | Engineering Impact & Runtime Invariants |
+| :--- | :--- | :--- | :--- |
+| **Layer 1: Runtime & Language Foundations** | Machine-level execution substrates and dispatch mechanisms. | Dynamic dispatch via Virtual Method Tables (`vtable`) and Interface Tables (`itable`); Java 17/21 Sealed Classes (`permits` clause); Inversion of Control (IoC) containers (Spring Bean lifecycle, Guice). | Dictates how the JVM or compiler resolves polymorphic calls ($O(1)$ vtable pointer indirection). Sealed hierarchies guarantee exhaustive compile-time pattern matching with zero default-branch bugs. |
+| **Layer 2: SOLID Invariant Engines** | Object-oriented design pillars governing coupling and extensibility. | • **SRP**: Single Responsibility Principle (1 class = 1 business actor reason to change).<br>• **OCP**: Open/Closed Principle (polymorphic extension without mutating tested binaries).<br>• **LSP**: Liskov Substitution Principle (subtypes preserve behavioral invariants; no strengthened preconditions).<br>• **ISP**: Interface Segregation Principle (fine-grained client-specific role interfaces).<br>• **DIP**: Dependency Inversion Principle (high-level policy depends on abstract interfaces, never concrete drivers). | Prevents monolith rot. Enforces loose coupling and high cohesion across business domains. Guarantees that substituting an infrastructure driver (e.g., swapping PostgreSQL for DynamoDB) never breaks core business logic. |
+| **Layer 3: Pragmatic Principles** | Cognitive load minimization and engineering frugality. | DRY (Don't Repeat Yourself) vs WET ("Write Everything Twice") / AHA ("Avoid Hasty Abstractions"); KISS (Keep It Simple, Stupid); YAGNI (You Aren't Gonna Need It). | Balances premature abstraction against technical duplication. Enforces that code duplication is far cheaper than the wrong abstraction until business domain boundaries stabilize. |
+| **Layer 4: Behavioral Principles** | Inter-object communication protocols and encapsulation. | Law of Demeter ("Principle of Least Knowledge" - only talk to immediate friends: $O.m()$ calls); Tell, Don't Ask (encapsulate data and behavior together); Command-Query Separation (CQS / CQRS). | Eliminates train-wreck method chaining (`a.getB().getC().doAction()`). Prevents state leakage by mandating that methods either mutate state (Command) or return state (Query), never both. |
+| **Layer 5: Structural Principles** | Component aggregation and system boundary resilience. | Composition Over Inheritance (HAS-A over IS-A); Separation of Concerns (SoC across Presentation, Application, Domain, Infrastructure); Postel's Law / Robustness Principle (*"Be conservative in what you send, liberal in what you accept"*). | Avoids brittle fragile-base-class inheritance trees. Decouples transport serialization from domain entities. Shields internal microservices from corrupt or evolving upstream API payloads. |
+| **Layer 6: Anti-Patterns & Smells** | Pathological code structures triggering architectural collapse. | **God Class** (monster classes exceeding 3,000 LOC with dozens of responsibilities); **Cascading Switch** (sprawling conditional ladders checking type enums); **Fat Repositories** (mixing relational persistence with business calculations). | Identifies refactoring targets. God classes create merge lockouts and compilation bottlenecks; cascading switches violate OCP by requiring modifications across multiple files whenever a new variant is introduced. |
+| **Layer 7: War-Room Diagnostics & Forensics** | Mission-critical post-mortems caused by principle violations. | **Knight Capital (\$440M loss in 45 min)**: Dead code flag reuse due to broken OCP/DIP.<br>**Boeing 737 Max MCAS**: Single angle-of-attack sensor coupling violating redundancy & Demeter.<br>**Billing Cascade Outage**: Lack of circuit breaking and SRP coupling ledger updates with email dispatch. | Serves as high-consequence evidence of architectural failure. Proves that SOLID violations do not simply produce ugly code—they trigger catastrophic balance sheet and safety collapses. |
+| **Layer 8: Decision Matrix & Heuristics** | Mathematical code quality metrics and refactoring rules. | Afferent Coupling ($C_a$) vs Efferent Coupling ($C_e$); Instability Metric $I = C_e / (C_a + C_e)$; Lack of Cohesion in Methods (LCOM4 graph analysis); Refactoring Heuristics (Extract Class, Replace Conditional with Polymorphism). | Provides quantitative gating for CI/CD pipelines. LCOM4 scores $>1$ indicate disconnected responsibilities that must be split into dedicated micro-components. |
 
 ---
 
 # 🏗️ Phase 3: Gang of Four (GoF) Design Patterns Master Handbook
 
+![GoF 23 Software Design Patterns Mindmap Architecture](../assets/images/design_patterns/gof_patterns_mindmap.jpg)
+
+#### Architectural Blueprint Component Breakdown: The 23 GoF Design Patterns Topology
+
+The Gang of Four (GoF) architectural mindmap classifies all 23 classic design patterns into 3 foundational structural domains based on their primary operational intent within memory, object lifecycle, and inter-process communication:
+
+| Pattern Family | Operational Domain & Architectural Intent | Included Design Patterns | Distributed Architecture Equivalents |
+| :--- | :--- | :--- | :--- |
+| **1. Creational Patterns** | Controls object instantiation, memory allocation, lifecycle governance, and constructor parameter complexity. | **Singleton**, **Factory Method**, **Abstract Factory**, **Builder**, **Prototype**. | Object Pooling, Service Locators, Cloud Resource Provisioners, Terraform Providers, JVM ClassLoader singletons. |
+| **2. Structural Patterns** | Composes classes and objects into flexible, decoupled hierarchies; translates incompatible interfaces; wraps dynamic behavior. | **Adapter**, **Bridge**, **Composite**, **Decorator**, **Facade**, **Flyweight**, **Proxy**. | API Gateways, Service Mesh Sidecars (Envoy), gRPC/REST Translators, Distributed File System Trees, Virtual Proxies. |
+| **3. Behavioral Patterns** | Manages algorithms, control flows, message dispatching, state machines, and event-driven decoupling between components. | **Chain of Responsibility**, **Command**, **Interpreter**, **Iterator**, **Mediator**, **Memento**, **Observer**, **State**, **Strategy**, **Template Method**, **Visitor**. | Message Brokers (Kafka Pub/Sub), Distributed Sagas (Compensating Commands), HTTP Middleware Pipelines, TCP State Machines, Raft Log Compaction. |
+
 ---
 
 ## 1. Creational Patterns (Object Instantiation)
+
+![Creational Design Patterns Architecture](../assets/images/design_patterns/creational_patterns_architecture.jpg)
+
+#### Architectural Blueprint Component Breakdown: Creational Patterns Architecture
+
+The creational patterns blueprint illustrates the 5 distinct mechanisms software engineers use to decouple consumer code from direct object construction (`new ConcreteClass()`), guaranteeing thread-safety, immutability, and polymorphism:
+
+| Architectural Pillar | Core Depicted Components | Construction & Memory Mechanics | Production Use Case & Concurrency Safeguard |
+| :--- | :--- | :--- | :--- |
+| **1. Singleton** | `SingletonClass`, `static Instance`, `getInstance()`, Single Access Control, Single Shared Instance, Instance Lock. | Restricts class instantiation to exactly one object in JVM heap memory. Uses double-checked locking with a `volatile` memory barrier to prevent instruction reordering, or relies on Java `enum` classloader guarantees. | Database connection pools (HikariCP), logging engines, central hardware telemetry monitors. Guarantees global coordination without socket exhaustion. |
+| **2. Factory Method** | `CreatorClass`, `factoryMethod()`, `ProductAFactory`, `ProductBFactory`, Dynamic Binding, `ConcreteProductA`, `ConcreteProductB`. | Defines a virtual constructor contract. Relies on polymorphic dynamic dispatch (`invokevirtual` bytecode) to instantiate concrete subclasses at runtime without tightly coupling the caller to concrete types. | Multi-cloud storage drivers (S3, GCS, Azure Blob). The application invokes `StorageFactory.getStorage()` and receives the appropriate cloud client transparently. |
+| **3. Abstract Factory** | `AbstractFactory`, `CreateProductA()`, `CreateProductB()`, `Factory1 (Family X)`, `Factory2 (Family Y)`, Product Family Matched Sets (`ProductAX`, `ProductBX`, `ProductAY`, `ProductBY`). | Creates entire families of related or dependent objects without specifying their concrete classes. Guarantees structural consistency across product suites (e.g., ensuring a Dark Theme button is never paired with a Light Theme scrollbar). | Cross-platform UI widget toolkits (macOS vs Windows vs Linux), cross-database driver suites (PostgreSQL SQL parser + dialect emitter vs Oracle parser + dialect emitter). |
+| **4. Builder** | `Director`, `ProductBuilder`, fluent interface (`setPart1()`, `setPart2()`, `build()`), `ComplexProduct` (`Part A`, `Part B`, `Part C`). | Separates step-by-step construction from final object representation. Constructs immutable objects with dozens of optional attributes using method chaining, validating invariants before returning the frozen instance. | HTTP request specification builders (OkHttp, Apache HttpClient), SQL AST compilers (jOOQ), complex domain entities (Order with line items, tax, shipping addresses). |
+| **5. Prototype** | `PrototypeRegistry`, `PrototypeObject`, Deep Clone (recursive copy), `ClonedPrototype`, Clone Operation & State Preservation. | Bypasses expensive constructor calls and database re-fetching by cloning an existing pre-hydrated prototype object via shallow or deep byte-level memory copies. | Game character spawning, document template generation, complex machine learning pipeline feature configurations. |
+
+---
 
 ---
 
@@ -1189,6 +1221,22 @@ Cloned Node 2:    ServerConfig [Name=prod-web-node-02, Cores=8, RAM=32GB, Groups
 ---
 
 ## 2. Structural Patterns (Composition & Relationships)
+
+![Structural Design Patterns Architecture](../assets/images/design_patterns/structural_patterns_architecture.jpg)
+
+#### Architectural Blueprint Component Breakdown: Structural Patterns Architecture
+
+The structural patterns technical blueprint details how classes and objects are assembled into larger, loosely coupled subsystems while preserving interface flexibility, encapsulation, and memory efficiency across 7 architectural topologies:
+
+| Architectural Pattern | Depicted Visual Topology & Core Components | Structural Composition & Memory Mechanics | Production System Analogy & Distributed Counterpart |
+| :--- | :--- | :--- | :--- |
+| **1. Adapter** | `Client`, `Incompatible Interface`, `Adapter`, `transformation` logic, `Target Interface`, `Adaptee`. | Object adapter uses composition (`Adapter HAS-A Adaptee`). Catches invocations on the target interface, converts input data formats (e.g., JSON to SOAP XML), delegates execution to the adaptee, and maps return values back. | Legacy system migration, database driver shims (JDBC-ODBC bridge), payment gateway SDK wrappers converting disparate vendor APIs into a standardized internal payment interface. |
+| **2. Bridge** | `Abstraction`, `Window`, `Concrete Subclass`, `bridge` reference, `Implementation`, `WindowImp`, `Concrete Class`. | Separates an abstraction hierarchy from its implementation hierarchy via a composition bridge pointer. Avoids Cartesian explosion of subclasses ($M \times N$ classes collapses to $M + N$ classes). | Cross-platform rendering engines (separating Shape abstraction from Direct3D vs OpenGL implementations); Cloud resource allocators (separating Compute Abstraction from AWS EC2 vs GCP Compute Engine drivers). |
+| **3. Composite** | `Component`, `Leaf`, `Composite`, recursive composition arrows (`Composite` contains `Component` list). | Uses recursive composition where container nodes (`Composite`) and terminal nodes (`Leaf`) implement the exact same `Component` interface. Clients execute operations over nested trees without branching logic. | File system directory hierarchies (`File` vs `Directory`), UI component DOM trees (HTML `div` containing nested elements), financial portfolio asset rollups (individual stocks vs index funds). |
+| **4. Decorator** | `Component`, `Core Object`, dynamic wrapper stack: `Decorator 1`, `Decorator 2`, `Decorator 3`, added behavior arrows. | Encloses a core object inside successive wrapper objects sharing the same interface. Each decorator adds behavior before/after delegating to the wrapped component, enabling dynamic runtime feature stacking without class inheritance explosion. | Java I/O Stream pipeline (`new BufferedReader(new InputStreamReader(new FileInputStream(file)))`), Spring Web security filter chains, HTTP client request interceptors adding gzip compression, authentication headers, and distributed tracing. |
+| **5. Facade** | `Clients`, `Facade` entrypoint, entangled mesh of `Subsystem Classes`. | Introduces a single, simplified high-level entrypoint that coordinates interactions across dozens of complex, fine-grained subsystem classes. Decouples external clients from internal subsystem refactoring and dependencies. | E-commerce one-click checkout orchestrator (single `placeOrder()` call internally coordinating Fraud Detection, Inventory Reservation, Payment Gateway, Tax Calculation, and Warehouse Dispatch). |
+| **6. Flyweight** | `Flyweight Factory`, `Intrinsic State` (shared cache), `Clients`, `Extrinsic State` (external context), `Concrete Flyweight` matrix. | Strips variable context (**Extrinsic State**) out of objects, storing only shared, immutable data (**Intrinsic State**) inside a centralized factory pool. Clients pass extrinsic state as method parameters, shrinking heap memory consumption by $95\%+$. | Word processor document renderers (sharing font glyph bitmasks across millions of characters), real-time game particle systems (sharing 3D mesh geometry while position/velocity vectors vary), database connection metadata string pooling (`String.intern()`). |
+| **7. Proxy** | `Client`, `Proxy` interceptor, `Adds checks`, `Cache`, `Real Subject`. | Acts as an intermediary surrogate standing in front of the real subject. Intercepts method invocations to enforce security access control (Protection Proxy), load resources lazily on first access (Virtual Proxy), cache expensive query returns (Caching Proxy), or short-circuit failures (Circuit Breaker Proxy). | Spring `@Transactional` / `@Cacheable` CGLIB dynamic proxies, RPC client stubs (gRPC client interceptors), Hibernate lazy-loading bytecode proxies preventing eager entity hydration until getter invocation. |
 
 ---
 
@@ -2438,6 +2486,26 @@ public class AdvancedRemoteControl extends RemoteControl {
 ---
 
 ## 3. Behavioral Patterns (Interaction & Communication)
+
+![Behavioral Design Patterns Architecture](../assets/images/design_patterns/behavioral_patterns_architecture.jpg)
+
+#### Architectural Blueprint Component Breakdown: Behavioral Patterns Architecture
+
+The behavioral patterns technical blueprint details how algorithms, control flows, state machines, and inter-object communication topologies are coordinated across 11 architectural patterns:
+
+| Architectural Pattern | Depicted Visual Topology & Core Components | Algorithmic Delegation & State Mechanics | Production System Analogy & Distributed Counterpart |
+| :--- | :--- | :--- | :--- |
+| **1. Chain of Responsibility** | `Request`, sequential nodes (`Handler 1`, `Handler 2`, `Handler N`), diamond decision gateways. | Passes requests along a dynamic linked chain of handler nodes. Each handler inspects the request and either processes and terminates it, or delegates to the successor link via `next.handle(request)`. | HTTP web filter pipelines (Spring Security `SecurityFilterChain`, Express/FastAPI middleware), API gateway validation (Auth -> RateLimit -> WAF -> Sanitize). |
+| **2. Command** | `Invoker`, `Command`, `Receiver`, `UNDO/REDO STACK` (`UpdateUser`, `UpdatePost`, `DeletePost`, `DeleteList`). | Encapsulates a request as a standalone object containing the receiver reference, method signature, and parameters. Enables queuing, thread pool scheduling, and backward execution via `undo()` / `compensate()`. | Distributed Saga orchestrators (reversing partial transactions on failure), text editor operation history, CQRS command handlers, job scheduler queues (Celery, Quartz). |
+| **3. Interpreter** | `AbstractExpression` (`expression()`), `Terminal` expressions, `Nonterminal` expressions, recursive evaluation tree. | Represents grammar rules as class hierarchies. Constructs an Abstract Syntax Tree (AST) where terminal nodes evaluate literal values and nonterminal nodes recursively evaluate child expressions. | Dynamic risk and pricing rule engines (e.g., evaluating `cart_total > 100 AND user_tier == 'VIP'`), SQL AST compilers, regex parsing engines, template parsers (Jinja, Thymeleaf). |
+| **4. Iterator** | `Collection`, `Iterator`, sequential traversal pipeline `[1] -> [2] -> [3]`. | Decouples traversal state (cursor position, bounds checking) from the underlying data structure's storage layout. Allows concurrent, independent traversals over the same aggregate collection. | Java `Iterator<T>` / `Spliterator<T>`, database cursor pagination streaming millions of records with $O(1)$ memory consumption, Linux kernel circular buffer iteration. |
+| **5. Mediator** | Central `Mediator` hub, decoupled peripheral nodes (`Colleague A`, `Colleague B`, `Colleague C`). | Replaces chaotic many-to-many $O(N^2)$ direct inter-component couplings with a clean $O(N)$ hub-and-spoke star topology. Colleagues only know the mediator; the mediator coordinates all complex interactions. | Air Traffic Control (ATC) coordination towers, WebSockets multi-room chat servers, UI form dialog controllers, Kubernetes master node controllers orchestrating pod schedules. |
+| **6. Memento** | `Originator`, `Memento` snapshot object, `Caretaker`, `Caretaker State` history stack. | Captures and externalizes an object's internal state into an opaque snapshot without violating encapsulation (private fields remain hidden). The caretaker stores snapshots and restores originator state on demand. | Database transaction savepoints (`ROLLBACK TO SAVEPOINT`), IDE undo/redo buffers, Git commit snapshots (tree objects and blobs), game engine state checkpoints. |
+| **7. Observer (Pub/Sub)** | `Subject + Publisher`, `Event Stream`, decoupled listeners (`Subscribers A`, `Subscriber B`, `Observers C`). | Implements a one-to-many publish-subscribe dependency. When subject state mutates, all registered observers are notified asynchronously without the publisher knowing subscriber concrete identities. | Event-driven microservices (Kafka/RabbitMQ pub/sub), reactive programming (RxJava, Project Reactor, Node.js EventEmitter), stock market real-time price broadcast tickers. |
+| **8. State** | Finite State Machine graph: transitions between `[Idle]` $\to$ `[Loading]` $\to$ `[Active]` $\to$ `[Error]`. | Encapsulates state-dependent behavior into discrete polymorphic state objects. When an object's internal state transitions, its behavior changes dynamically, eliminating fragile switch/if-else ladders. | TCP connection lifecycle state engines (`LISTEN`, `SYN_SENT`, `ESTABLISHED`, `FIN_WAIT`), e-commerce order lifecycle (`CREATED` -> `PAID` -> `SHIPPED` -> `DELIVERED`), media player states. |
+| **9. Strategy** | `Context`, `Algorithm` interface, interchangeable strategies: `Strategy A (Bubble Sort)`, `Strategy B (Quick Sort)`, `Strategy C (Merge Sort)`. | Encapsulates a family of algorithms behind a common interface and makes them swappable at runtime. The context delegates execution to the currently injected strategy object or lambda. | Payment calculation algorithms (CreditCard vs PayPal vs Crypto), route navigation engines (Fastest vs Toll-Free vs Scenic), dynamic cloud autoscaler provisioning policies. |
+| **10. Template Method** | `Abstract Class` with invariant `templateMethod()`, abstract hooks `+ step()`, overridden by `ConcreteMethod` classes. | Defines the rigid structural skeleton of an algorithm in a base class while deferring individual variable steps to subclasses. Guarantees workflow execution order (Inversion of Control - "Hollywood Principle"). | ETL processing pipelines (Extract -> Validate -> Transform -> Load), JUnit test case lifecycles (`@BeforeEach` -> `@Test` -> `@AfterEach`), Spring `JdbcTemplate` query execution. |
+| **11. Visitor** | Heterogeneous tree nodes, `Visitor` class hierarchy, `visits`, `operations()`, double-dispatch call flow. | Uses double dispatch (`element.accept(visitor)` $\to$ `visitor.visit(this)`) to execute new operations over complex object hierarchies without modifying the classes of the elements being visited. | Compiler static analysis tools (linting, type checking, code formatting), document exporters (converting AST into HTML, PDF, Markdown), billing audit processors over heterogeneous assets. |
 
 ---
 
@@ -4108,38 +4176,24 @@ Total Audited Revenue: $1700.0
 
 # 🌐 Phase 4: High-Level System Design (HLD) Architecture Core
 
-```
-                                    +-----------------------+
-                                    |     DNS / Anycast     |
-                                    +-----------------------+
-                                                │
-                                                ▼
-                                    +-----------------------+
-                                    |    Global Edge CDN    |
-                                    +-----------------------+
-                                                │
-                                                ▼
-                                    +-----------------------+
-                                    |  Layer 7 Load Balancer|
-                                    +-----------------------+
-                                                │
-                                                ▼
-                                    +-----------------------+
-                                    |      API Gateway      |
-                                    +-----------------------+
-                                         │             │
-                    ┌────────────────────┘             └────────────────────┐
-                    ▼                                                       ▼
-        +──────────────────────+                               +──────────────────────+
-        | User Service Cluster |                               | Order Service Cluster|
-        +──────────────────────+                               +──────────────────────+
-             │            │                                         │            │
-             ▼            ▼                                         ▼            ▼
-      +------------+ +----------+                            +------------+ +----------+
-      | Redis Read | | SQL DB   |                            | Redis Read | | Kafka    |
-      | Cluster    | | Primary  |                            | Cluster    | | Cluster  |
-      +------------+ +----------+                            +------------+ +----------+
-```
+![Distributed Systems Cloud Architecture Blueprint](../assets/images/design_patterns/distributed_systems_architecture.jpg)
+
+### Architectural Blueprint Component Breakdown: High-Availability Cloud Topology
+
+The high-level distributed systems blueprint models the industry-standard architecture powering multi-region hyperscale platforms (e.g., Netflix, Uber, Stripe). Below is the exhaustive systems engineering breakdown across all 8 architectural tiers:
+
+| Blueprint Tier | Depicted Components & Subsystems | Production Wire Protocols & Technologies | Concurrency, Data Path & Fault Isolation |
+| :--- | :--- | :--- | :--- |
+| **Tier 1: Global Ingress & CDN** | `GLOBAL USERS`, `ANYCAST DNS / CDN` (Global Traffic Management, Content Delivery). | BGP Anycast routing, Cloudflare / Fastly / AWS CloudFront edge PoPs; TLS 1.3 0-RTT session resumption, HTTP/3 (QUIC/UDP). | Terminates client TLS connections within 10ms of end users. Serves static media ($80\%+$ offload) directly from NVMe edge caches. Absorbs Layer 3/4 volumetric DDoS attacks. |
+| **Tier 2: Transport Load Balancing** | `LAYER 4 LOAD BALANCER` (Network Level Traffic Distribution). | Linux IPVS (IP Virtual Server), Google Maglev, AWS NLB; Direct Server Return (DSR), GRE encapsulation, 5-tuple consistent hashing. | Dispatches raw TCP/UDP packets across gateway nodes in kernel space. DSR ensures response traffic bypasses the load balancer directly to the Internet, eliminating ingress bandwidth bottlenecks. |
+| **Tier 3: Application API Gateway** | `LAYER 7 ENVOY API GATEWAY` (SSL Termination, Rate Limiting, Service Discovery, Security). | Envoy Proxy, Kong, Nginx; HTTP/2, gRPC, OAuth2/OIDC, JWT RS256 validation, Redis Token Bucket rate limiting, SPIFFE/SPIRE mTLS. | Performs path/header routing (`/auth/*` vs `/payment/*` vs `/notify/*`), TLS termination, dynamic endpoint discovery via xDS APIs, circuit breaking, and distributed tracing header injection. |
+| **Tier 4: Stateless Microservices** | `STATELESS MICROSERVICES CLUSTERS` (`AUTH SERVICE`, `PAYMENT SERVICE`, `NOTIFICATION SERVICE`). | Kubernetes Pods / AWS ECS; Spring Boot 3, FastAPI, Go; inter-service gRPC over mTLS; Horizontal Pod Autoscaler (HPA). | Purely stateless execution nodes. Horizontal scaling scales out replicas in response to CPU/memory/P99 latency spikes. Failures in one service do not impact others due to bulkhead isolation. |
+| **Tier 5: Distributed In-Memory Cache** | `DISTRIBUTED CACHE (REDIS CLUSTER)` (In-Memory Data, High Performance). | Redis Cluster with 16,384 virtual hash slots, Redis Sentinel, master-replica asynchronous replication, sub-millisecond RAM read/write. | Powers Cache-Aside lazy loading for hot session keys, user profiles, and product catalogs. Utilizes probabilistic early expiration (XFetch) to prevent thundering herd cache stampedes. |
+| **Tier 6: Distributed Event Broker** | `DISTRIBUTED MESSAGE BROKER (APACHE KAFKA EVENT STREAM)` (`Topic 1`, `Topic 2`, `Topic 3`). | Apache Kafka, Apache Pulsar; partitioned commit logs, zero-copy `sendfile(2)` disk reads, consumer groups, offset tracking. | Decouples synchronous transaction paths from asynchronous side effects (e.g., Payment success event published to `Topic 2` triggers `Notification Service` consumption without stalling user HTTP threads). |
+| **Tier 7: Relational Database Shards** | `SHARDED SQL DB` (Structured Data, Vertical Shards), `READ REPLICAS` (Scalable Reads, High Availability). | PostgreSQL / MySQL with Vitess or Citus; Raft/Paxos-replicated primaries; streaming binary log replication to read replicas; PgBouncer connection pooling. | Guarantees ACID transaction semantics for financial ledgers and core business entities. Write queries target sharded primaries; read queries are load-balanced across read replicas with read-your-own-writes session consistency. |
+| **Tier 8: NoSQL Document Storage** | `NOSQL DOCUMENT STORE` (MongoDB / DynamoDB, Flexible Schema, Horizontal Scaling). | AWS DynamoDB, MongoDB, Cassandra; partition key hashing, LSM-Tree / B-Tree on NVMe storage, multi-AZ quorum writes ($W+R > N$). | Horizontally partitions semi-structured or high-write volume documents (e.g., user device telemetry, audit trails, notification logs) with predictable single-digit millisecond latency at petabyte scale. |
+
+---
 
 ### 1. Load Balancing (L4 vs L7)
 * **Layer 4 (Transport Layer - e.g., AWS NLB, HAProxy TCP)**:
@@ -4179,6 +4233,25 @@ Total Audited Revenue: $1700.0
   - *Example (PA/EL - Cassandra, DynamoDB)*: Guarantees availability under partitions and optimizes for low latency during normal operations (eventual consistency).
 
 ### 6. Resiliency Patterns: Circuit Breakers, Rate Limiters & Saga
+
+![Resilience Circuit Breaker & Distributed Rate Limiting](../assets/images/design_patterns/resilience_circuit_breaker_rate_limiter.jpg)
+
+#### Architectural Blueprint Component Breakdown: Resilience & Rate Limiting Subsystems
+
+The resilience blueprint illustrates the dual-engine protection layer deployed in high-concurrency distributed architectures to protect downstream databases and services from catastrophic collapse:
+
+| Panel & Component | Visual Representation & Flow | Algorithmic Under-the-Hood Mechanics | State Transitions & Failure Safeguards |
+| :--- | :--- | :--- | :--- |
+| **Left Panel: Circuit Breaker State Machine** | **State 1: CLOSED (Green Hexagon)** | Normal operation. Client requests pass directly through the circuit breaker proxy to the protected service. Errors are recorded in a sliding ring buffer (e.g., last 100 requests). | If error rate remains below failure threshold (e.g., $<50\%$), the circuit remains `CLOSED`. If consecutive failures exceed threshold (e.g., 4/5 failures), the state trips immediately to `OPEN`. |
+| **Left Panel: Circuit Breaker State Machine** | **State 2: OPEN (Red Hexagon)** | Failing / Tripping state. All incoming client requests are **FAST-FAILED** immediately without calling the downstream service. Returns an instant fallback response or HTTP 503 Service Unavailable. | A Recovery Timer clock (e.g., 5-second wait time) starts. During this trial period, zero traffic touches the recovering downstream service, preventing cascading thread pool exhaustion. |
+| **Left Panel: Circuit Breaker State Machine** | **State 3: HALF-OPEN (Yellow Hexagon)** | Testing trial recovery. Once the recovery timer elapses, the circuit transitions to `HALF-OPEN` and permits a strictly limited probe traffic sample (e.g., 5 probe requests) through to the service. | **Success Path**: If all probe requests succeed, the breaker resets to `CLOSED`, error counters reset to 0.<br>**Failure Path**: If even one probe fails, the breaker immediately trips back to `OPEN`, restarting the recovery timer. |
+| **Right Panel: Token Bucket Rate Limiter** | **Token Bucket Mechanics (Blue Bucket)** | A bucket with fixed capacity (e.g., 100 tokens max, currently holding 85 tokens) is continuously refilled with tokens at a steady rate $r$ tokens/second based on elapsed time delta: $\Delta t \times r$. | Prevents traffic spikes from overwhelming backends while permitting short, controlled burst traffic up to the bucket capacity limit. |
+| **Right Panel: Token Bucket Rate Limiter** | **Client Request Consumption** | Incoming requests (`Request 10`, `Request 11`) request 1 token each. If tokens $\ge 1$, 1 token is consumed ($85 \to 84$ tokens), and the request is approved to access the Database/Service. | If the bucket is empty (tokens $= 0$), incoming requests are rejected immediately (**Enon: Error**) with an HTTP 429 Too Many Requests response and a `Retry-After` header. |
+| **Right Panel: Distributed State Management** | **Redis + Atomic Lua Scripting** | Multi-node API gateways share bucket state (`tokens`, `last_updated`, `capacity`) in a centralized Redis cluster rather than keeping disconnected local in-memory counters. | Redis executes an atomic Lua script that performs token calculation and deduction in a single uninterrupted atomic operation, eliminating concurrency race conditions across gateway worker nodes. |
+| **Supplementary: Bulkhead Pattern** | Process / Thread Pool Partitioning | Isolates CPU threads or connection pools per microservice domain (e.g., dedicated 50-thread pool for Payment, 20-thread pool for Search). | Prevents slow queries in one misbehaving service from exhausting the entire application server's shared worker thread pool. |
+| **Supplementary: Dead Letter Queue (DLQ)** | Poison Pill & Failure Offloading | Messages that fail processing after $N$ exponential backoff retries are stripped from the main topic and written to a Dead Letter Queue topic. | Prevents poison pill messages from indefinitely blocking partition consumers; alerts SREs for manual inspection and offline replay. |
+| **Supplementary: Exponential Backoff with Jitter** | Decorrelated Retry Distribution | When downstream services fail, clients retry after exponentially increasing intervals with randomized full jitter: $t = \text{random}(0, \min(M, B \times 2^{\text{attempt}}))$. | Breaks lockstep retry storms (where 10,000 clients simultaneously retry at exact 1-second intervals), smoothing network retry traffic. |
+
 * **Circuit Breaker (Resilience4j / Envoy)**: Prevents cascading failures across microservices.
   - `CLOSED`: Normal operation; calls flow through.
   - `OPEN`: Failure threshold exceeded (e.g., $50\%$ error rate). Calls fail immediately with fallback without calling the downstream service.
@@ -4206,26 +4279,23 @@ Total Audited Revenue: $1700.0
 * **Why not MD5/SHA256?** Hashing the URL causes hash collisions.
 * **Architectural Solution**: Use a distributed **Snowflake ID Generator** (or pre-allocated token range coordinator) to produce a 64-bit auto-incrementing integer, then encode it to Base62.
 
-```
-Long URL ──> [ Range Coordinator ] ──> Unique ID: 125307 ──> Base62 Encode ──> "w7B"
-```
+
+| Step | Processing Stage | Input / Artifact | State Transformation & Mechanics |
+| :--- | :--- | :--- | :--- |
+| **1. Ingestion** | Long URL Received | `https://example.com/very/long/path` | Validated by API Gateway; sanitized and canonicalized. |
+| **2. Range Coordinator** | Distributed ID Allocation | Central ZooKeeper / Etcd token range | Leases monotonic 64-bit integer range blocks (e.g., $100000\text{--}200000$) to worker nodes. |
+| **3. Monotonic ID** | Unique Counter Generation | Local node counter | Produces unique collision-free 64-bit ID: `125307`. |
+| **4. Base62 Encoding** | Base Conversion | `125307` $\to$ Base62 alphabet `[a-zA-Z0-9]` | Encodes integer into compact short URL key: `"w7B"`. |
 
 ### 3. High-Level Data Flow
-```
-[ Client ] 
-   │
-   ▼
-[ CDN / Cloudflare ] ── (301/302 Cache for viral links)
-   │
-   ▼
-[ API Gateway / Load Balancer ]
-   │
-   ├── Write Path: [ ID Service ] ──> Base62 ──> [ Write to DynamoDB & Redis ]
-   │
-   └── Read Path:  [ Check Redis ] ── (Hit) ──> Return 302 Redirect
-                         │
-                      (Miss) ──> [ Query DynamoDB ] ──> [ Set Redis ] ──> Return 302
-```
+
+| Pipeline Path | Origin $\to$ Destination | Processing Node / Datastore | Protocol & Execution Mechanics |
+| :--- | :--- | :--- | :--- |
+| **Edge Cache Check** | Client $\to$ Cloudflare CDN | Edge CDN PoP | Evaluates HTTP `Cache-Control`. If viral link is cached, returns HTTP 301/302 redirect directly from edge. |
+| **Gateway Dispatch** | CDN Cache Miss $\to$ API Gateway | Layer 7 Load Balancer | Terminates TLS, inspects HTTP route, routes traffic to URL Shortener Service pool. |
+| **Write Path** | URL Submission $\to$ Persistence | ID Service $\to$ DynamoDB & Redis | Worker consumes ID from local range, encodes Base62 key, and transactionally writes `(short_key, long_url)` to DynamoDB and populates Redis cache with TTL. |
+| **Read Path (Hit)** | Short Key Lookup $\to$ Redis Cache | In-Memory Redis Cluster | Sub-millisecond lookup on `short_key`. On cache hit, immediately returns HTTP 302 Temporary Redirect. |
+| **Read Path (Miss)** | Short Key Lookup $\to$ DynamoDB | Primary NoSQL Key-Value Store | On cache miss, queries DynamoDB partition key, populates Redis cache asynchronously, and returns HTTP 302. |
 
 ---
 
@@ -4240,15 +4310,13 @@ Long URL ──> [ Range Coordinator ] ──> Unique ID: 125307 ──> Base62 
 * **Stateful WebSocket Gateways**: Maintain persistent TCP/WebSocket connections for active users.
 * **Session Registry (Redis Cluster)**: Maps `user_id -> gateway_server_ip`.
 
-```
-[ Sender Device ] ──(WebSocket)──> [ WS Gateway A ] ──> [ Kafka Msg Topic ]
-                                                              │
-                                                              ▼
-[ Receiver Device ] <──(WebSocket)── [ WS Gateway B ] <── [ Msg Consumer ]
-                                            ▲
-                                            │ Look up Gateway IP
-                                    [ Redis Session Registry ]
-```
+| Flow Step | Active Subsystem | Wire Protocol / Channel | Under-the-Hood Coordination Mechanics |
+| :--- | :--- | :--- | :--- |
+| **1. Inbound Ingestion** | Sender Device $\to$ WebSocket Gateway A | Persistent WebSocket (TCP / TLS) | Authenticates connection, validates recipient, and buffers inbound message payload. |
+| **2. Event Decoupling** | Gateway A $\to$ Kafka Message Topic | Apache Kafka Partitioned Topic | Appends message to partitioned Kafka log keyed by `conversation_id` for strict ordering and durability. |
+| **3. Stream Consumer** | Kafka Topic $\to$ Message Consumer Pool | Kafka Consumer Group | Pulls messages from partition, coordinates delivery receipts (`SENT` state), and queries session registry. |
+| **4. Session Discovery** | Message Consumer $\to$ Redis Session Registry | In-Memory Key-Value Lookup | Queries `user_id -> gateway_server_ip` mapping in Redis to find where the receiver's WebSocket connection is hosted. |
+| **5. Egress Push** | Gateway B $\to$ Receiver Device | Persistent WebSocket Push | Gateway B receives payload via inter-service RPC and pushes message frame to receiver's active WebSocket. |
 
 ### 3. Group Chat Optimization (Fan-Out Strategy)
 * **Small Groups ($< 100$ users)**: Fan-out on write—copy the message to each member's inbox queue.
@@ -4259,22 +4327,15 @@ Long URL ──> [ Range Coordinator ] ──> Unique ID: 125307 ──> Base62 
 ## Deep Dive 3: Global Video Streaming Platform (Netflix / YouTube)
 
 ### 1. Architectural Blueprint
-```
-[ Video Creator ] ──> [ Upload Gateway ] ──> [ S3 Raw Bucket ]
-                                                    │
-                                                    ▼
-                                     [ Transcoding Pipeline (Workers) ]
-                                     - Split into 10s chunks
-                                     - Encode: H.264, HEVC, AV1
-                                     - Resolutions: 4K, 1080p, 720p, 480p
-                                     - Generate HLS/DASH Playlists (.m3u8)
-                                                    │
-                                                    ▼
-                                        [ S3 Processed Bucket ]
-                                                    │
-                                                    ▼
-[ Global Viewers ] <── [ Edge CDN Nodes (Open Connect) ] <── Pre-positioned Chunks
-```
+
+| Transcoding Stage | Subsystem / Infrastructure | Artifact / Data Format | Execution Details & Transformation |
+| :--- | :--- | :--- | :--- |
+| **1. Ingestion** | Video Creator $\to$ Upload Gateway | Multi-part Chunked HTTP PUT | Streamed to Amazon S3 Raw Bucket via pre-signed URLs with S3 Transfer Acceleration. |
+| **2. Chunking** | S3 Raw $\to$ Transcoding Workers | FFmpeg / AWS Elemental MediaConvert | Splits raw video into contiguous 2-to-10 second GOP (Group of Pictures) chunks. |
+| **3. Multi-Codec Encode** | Distributed Transcoding Cluster | H.264 (AVC), H.265 (HEVC), AV1 codecs | Encodes chunks across ladder of resolutions: 4K (2160p), 1080p, 720p, 480p, 360p. |
+| **4. Playlist Generation** | Packaging Engine | HLS (`.m3u8` master & variant playlists), DASH (`.mpd`) | Generates adaptive streaming manifests linking chunk segment URLs. |
+| **5. Processed Store** | Workers $\to$ Processed S3 Bucket | Standard Object Storage | Persists all chunk files and manifests with immutable content-addressed keys. |
+| **6. Edge Pre-Positioning**| S3 $\to$ Edge CDN Nodes (Open Connect) | Global PoPs / ISP Edge Appliances | Popular chunks pre-positioned inside ISP networks for zero-buffering playback. |
 
 ### 2. Adaptive Bitrate Streaming (ABR)
 * Videos are split into 2- to 10-second segments.
@@ -4290,20 +4351,32 @@ Long URL ──> [ Range Coordinator ] ──> Unique ID: 125307 ──> Base62 
 * Finding neighbors is a simple $O(1)$ ring lookup around the central hexagon.
 
 ### 2. Location Tracking Pipeline
-```
-[ 1M Active Drivers ] 
-   │  (Send GPS every 4s via UDP / WebSocket)
-   ▼
-[ Location Ingestion Service ]
-   │
-   ├── Fast In-Memory Ephemeral Store: [ Redis H3 Geospatial Index ]
-   │
-   └── Historical Stream: [ Kafka ] ──> [ Apache Flink / Cassandra ]
-```
+
+| Pipeline Phase | Ingress / Worker Component | Subsystem & Technology | Throughput & Latency Guarantees |
+| :--- | :--- | :--- | :--- |
+| **1. Telemetry Ingress** | 1M Active Driver Devices | UDP / Persistent WebSocket | Emits GPS coordinates (`lat`, `lng`, `driver_id`, `heading`, `timestamp`) every 4 seconds ($250\text{k}\text{ events/sec}$). |
+| **2. Ingestion Service** | Location Ingestion Microservice Pool | Go / Netty High-Concurrency Gateway | Parses binary telemetry packets, validates timestamps, and dual-dispatches to real-time and historical paths. |
+| **3. Real-Time Index** | Fast In-Memory Ephemeral Store | Redis with Uber H3 Geospatial Index | Maps driver coordinates to 64-bit H3 hexagonal cell indices with a 10-second TTL for sub-5ms proximity ring searches. |
+| **4. Historical Stream** | Event Streaming Backbone | Apache Kafka Partitioned Topic | Buffers location update events partitioned by `driver_id` for durable downstream consumption. |
+| **5. Analytics & Audit** | Stream Processing Engine | Apache Flink $\to$ Apache Cassandra | Computes driver ETA, surge pricing heatmaps, and writes permanent trip route audit logs to Cassandra. |
 
 ---
 
 ## Deep Dive 5: Distributed Rate Limiter (Token Bucket with Redis Lua & Spring Security)
+
+![Resilience Circuit Breaker & Distributed Rate Limiting](../assets/images/design_patterns/resilience_circuit_breaker_rate_limiter.jpg)
+
+#### Architectural Blueprint Component Breakdown: Distributed Token Bucket Engine
+
+The right panel of the resilience architecture blueprint details the production distributed Token Bucket engine deployed across multi-instance API gateways:
+
+| Component / Phase | Visual Representation | Mathematical / Algorithmic Mechanics | Concurrency & Redis Execution Protocol |
+| :--- | :--- | :--- | :--- |
+| **Token Bucket Structure** | Blue bucket with fixed capacity limit (e.g., $100$ max tokens, holding $85$ tokens). | Capacity limit $B$. Tokens represent authorization units to execute 1 downstream operation. | Stored in Redis as a Hash: `key: { tokens: float, last_updated: int }`. Eliminates per-token timer threads by lazily calculating tokens upon request arrival. |
+| **Continuous Token Refill** | Tokens dropping into bucket from top. | Refill rate $r$ (tokens/sec). Refill formula: $\text{new\_tokens} = \min(B, \text{current\_tokens} + (t_{\text{now}} - t_{\text{last}}) \times r)$. | Time delta computed dynamically inside Redis using server time (`now`), preventing clock skew issues across distributed gateway application nodes. |
+| **Request Evaluation & Consumption** | `Request 10`, `Request 11` consuming 1 token ($85 \to 84$). | If $\text{available\_tokens} \ge \text{requested\_tokens}$: decrement $\text{tokens} = \text{tokens} - \text{requested}$ and allow request through to Database/Service. | Executed inside a single atomic Redis Lua script (`redis.call('HMSET', ...)`), ensuring linearizable ACID isolation across hundreds of parallel gateway instances. |
+| **Request Throttling (Fast-Fail)** | Red $\times$ marker: Rejected (**Enon: Error**). | If $\text{available\_tokens} < \text{requested\_tokens}$: bucket is exhausted. Request is throttled immediately. | Lua script returns `0`. The API Gateway immediately aborts request processing and returns HTTP 429 Too Many Requests with header `Retry-After: N`. |
+| **Distributed State Synchronization** | Shared Redis Cluster with multi-node gateways. | Centralizes rate limiting state across all horizontal gateway instances. | Eliminates state divergence where a malicious client round-robins requests across 10 instances to multiply their allowed rate by $10\times$. |
 
 ### 1. Atomic Redis Lua Script (Token Bucket Engine)
 ```lua

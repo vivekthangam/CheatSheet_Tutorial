@@ -88,63 +88,129 @@ Malcolm McLean revolutionized global commerce with the **standardized ISO shippi
 
 ---
 
-## 1.2 The 5 Core Building Blocks of Docker
+## 1.2 The Core Building Blocks of Docker & Deep Architectural Component Breakdown
 
-```
-+-------------------------------------------------------------------------------+
-|                             DOCKER SYSTEM TOPOLOGY                            |
-+-------------------------------------------------------------------------------+
+![Docker Architecture & Runtime Stack](../assets/images/devops/docker_architecture_internals.jpg)
 
- [Developer Terminal]
-          │
-          ├─► docker build / docker run / docker pull
-          ▼
-   UNIX Socket: /var/run/docker.sock
-          │
- ┌────────▼────────────────────────────────────────────────────────┐
- │                      DOCKER ENGINE (dockerd)                     │
- │  REST API, Image Builder, Volume & Network Management            │
- └────────┬────────────────────────────────────────────────────────┘
-          │ gRPC (/run/containerd/containerd.sock)
- ┌────────▼────────────────────────────────────────────────────────┐
- │                         CONTAINERD                              │
- │  Image Distribution, Storage Snapshotters, Supervision          │
- └────────┬────────────────────────────────────────────────────────┘
-          │ fork/exec
- ┌────────▼────────────────────────────────────────────────────────┐
- │                      CONTAINERD-SHIM                            │
- │  Decouples process lifecycle, retains stdout/stderr pipes       │
- └────────┬────────────────────────────────────────────────────────┘
-          │ executes
- ┌────────▼────────────────────────────────────────────────────────┐
- │                           RUNC                                  │
- │  Low-level OCI CLI: Invokes clone(2), setns(2), pivot_root(2)   │
- └────────┬────────────────────────────────────────────────────────┘
-          │
-          ▼ (Leaves process running and exits)
- ┌─────────────────────────────────────────────────────────────────┐
- │               ISOLATED LINUX CONTAINER PROCESS                  │
- │  [Namespaces: PID, NET, MNT]  [cgroups v2: memory.max, cpu.max] │
- └─────────────────────────────────────────────────────────────────┘
-```
+The Docker architecture is an industrial, multi-tiered systems stack that orchestrates Linux kernel isolation primitives into high-ergonomic developer workflows. The following sections provide an exhaustive technical breakdown of every component, layer, daemon, and kernel mechanism depicted in the blueprint.
 
-### 1. Dockerfile & OCI Image
-- **Dockerfile**: A declarative text file containing instructions (`FROM`, `COPY`, `RUN`, `ENTRYPOINT`) to construct a filesystem.
-- **OCI Image**: An immutable, content-addressable tarball containing stacked read-only filesystem layers and a JSON configuration manifest defining environment variables, entrypoint commands, and exposed ports.
+---
 
-### 2. Container
-A runnable, stateful instance of an OCI Image. Formed by adding a single read-write **Upperdir** filesystem layer on top of the image’s stacked read-only **Lowerdir** layers, coupled with dedicated Linux namespaces and cgroup boundaries.
+### Component 1: Developer Terminal & CLI Client Layer (`docker build / run / pull`)
+The Docker CLI (`/usr/bin/docker`) is a thin, stateless Go binary responsible for user interaction:
+- **Command Dispatcher**: Translates human-readable terminal commands (`docker build`, `docker run -d -p 80:80`, `docker pull`) into strongly typed HTTP REST requests matching the Docker Engine API specifications (e.g., `POST /v1.44/containers/create`).
+- **Transport Mechanisms**:
+  - **Local IPC via UNIX Domain Socket (`/var/run/docker.sock`)**: By default, the CLI communicates over a local bidirectional stream socket owned by `root:docker` with `0660` permissions. This avoids TCP network overhead, leveraging kernel-space memory buffers for maximum throughput.
+  - **Remote mTLS TCP Socket (`tcp://0.0.0.0:2376`)**: For remote cluster daemon management, the CLI establishes an encrypted TLS 1.3 channel utilizing mutual authentication (mTLS) with client and server X.509 certificates.
+- **Context & Credential Stores**: Resolves Docker contexts (`~/.docker/config.json`) and reads auth tokens from native OS credential helpers (macOS Keychain, Windows Credential Manager, Linux pass/secretservice).
 
-### 3. Container Engine & Runtime Stack (`dockerd` -> `containerd` -> `runc`)
-- **Docker Engine (`dockerd`)**: High-level daemon handling developer ergonomics, CLI interactions, networking setup, and volume lifecycle.
-- **`containerd`**: Cloud-native core container supervisor managing image pulls, storage snapshots, and container execution.
-- **`runc`**: Reference OCI (Open Container Initiative) runtime that makes actual Linux kernel syscalls (`clone(2)`, `unshare(2)`) to construct the isolated process.
+---
 
-### 4. Storage Drivers & OverlayFS
-The union filesystem that merges multiple read-only image layers into a single unified directory tree (`merged`). Changes made inside the running container are written exclusively to the ephemeral container layer via **Copy-on-Write (CoW)**.
+### Component 2: Docker Engine Daemon (`dockerd`)
+`dockerd` is the high-level host resident background daemon providing developer ergonomics, image composition, and operational lifecycle control:
+- **REST API Server**: An HTTP server listening on `/var/run/docker.sock` that deserializes requests, performs authentication, validates parameters, and dispatches tasks to lower-level subsystems.
+- **BuildKit Engine**: The modern, DAG-based image builder that replaced legacy sequential builders:
+  - Compiles Dockerfiles into a low-level binary intermediate representation called **LLB (Low-Level Builder)**.
+  - Detects independent compilation branches and executes them concurrently in parallel worker goroutines.
+  - Employs content-addressable build cache mounts (`--mount=type=cache`) to reuse intermediate compilation artifacts across builds.
+- **Network Management Subsystem (`libnetwork`)**: Manages the life cycle of container networks:
+  - **Bridge (`docker0`)**: Allocates private subnets (`172.17.0.0/16`), creates Linux virtual bridges, and programs kernel `iptables` NAT masquerade rules.
+  - **Overlay (VXLAN)**: Encapsulates L2 container packets into L3 UDP packets (port 4789) for multi-host cross-node networking.
+  - **Macvlan & Host**: Directly bridges containers to physical host NIC interfaces or bypasses network virtualization entirely.
+- **Volume & Storage Management**: Orchestrates volume drivers (local bind-mounts, named POSIX volumes, remote NFS/iSCSI storage drivers) into mountable block targets.
+- **Event Bus**: Emits structured JSON events over an HTTP streaming socket (`GET /events`), allowing monitoring systems to track container creation, death, health check changes, and OOM terminations.
 
-### 5. Docker Networking (`veth` & Bridges)
-A virtual software network infrastructure. The default `bridge` driver creates a virtual Ethernet pair (`veth`): one endpoint stays in the host network namespace attached to the `docker0` bridge, while the peer endpoint is moved into the container's private network namespace renamed as `eth0`.
+---
+
+### Component 3: Core Container Supervisor (`containerd`)
+`containerd` is a graduated CNCF runtime daemon that stripped the bloated monolithic features out of legacy Docker, providing a rock-solid, production-grade container supervisor:
+- **gRPC API Endpoint**: Exposes high-performance, strongly typed RPC endpoints over a local Unix socket (`/run/containerd/containerd.sock`).
+- **Content Store**: A content-addressable storage subsystem where immutable OCI image layer tarballs are stored and verified by their SHA-256 cryptographic digests.
+- **Snapshotter Subsystem**: Manages copy-on-write filesystem snapshots. The default `overlayfs` snapshotter unpacks read-only image layers into separate directories and configures the upper/lower directories for mounting.
+- **Task Management**: Manages running container executions as distinct "Tasks". Decouples image storage from active process supervision, supporting CRI (Container Runtime Interface) directly for Kubernetes integration without requiring `dockerd`.
+
+---
+
+### Component 4: Process Decoupling Layer (`containerd-shim` / `containerd-shim-runc-v2`)
+Between `containerd` and the running container sits a lightweight intermediary process: the `containerd-shim`. There is exactly **one shim per running container**:
+- **Why the Shim Exists (Live Restore)**: In early container engines, restarting the Docker daemon killed all running containers because the daemon was the direct parent process. The shim decouples process lifecycles: `dockerd` and `containerd` can crash or undergo live upgrades without dropping a single container process or terminating network sockets.
+- **FIFO Pipe & I/O Retention**: The shim holds open the container's standard streams (`stdin`, `stdout`, `stderr`) via Linux FIFO pipes or PTY (pseudo-terminal) file descriptors. If `containerd` restarts, the pipes remain intact and reconnect automatically.
+- **Subreaper & Zombie Process Reaper**: Linux processes whose parents terminate get reparented to PID 1. If PID 1 does not run `waitpid(2)`, deceased child processes remain as memory-wasting "zombie" processes. The shim registers itself as a Linux subreaper (`prctl(PR_SET_CHILD_SUBREAPER, 1)`), catching and harvesting orphaned child processes within the container.
+- **Exit Status Relay**: Waits synchronously for container termination and reports the exact exit code (e.g., `Exit Code 0`, `137`, `255`) back to `containerd`.
+
+---
+
+### Component 5: Low-Level OCI Runtime (`runc`)
+`runc` is the reference implementation of the Open Container Initiative (OCI) runtime-spec. Written in Go and C, it is a transient, single-invocation CLI tool whose sole purpose is to spawn a container and immediately exit:
+- **OCI Bundle Ingestion**: Accepts a standardized filesystem root (`rootfs/`) and a declarative manifest (`config.json`) defining the namespaces, capabilities, environment, and cgroup limits.
+- **Kernel Isolation Invocation Pipeline**:
+  1. Invokes the `clone(2)` system call with flags `CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWUSER`.
+  2. Uses `setns(2)` to attach to existing namespaces or `unshare(2)` to disassociate from host namespaces.
+  3. Executes `pivot_root(2)`: Pivots the mount namespace so that `rootfs` becomes the new root directory `/`, simultaneously unmounting and hiding the host's real root filesystem (a critical security advancement over legacy `chroot(2)`).
+  4. Writes the new child process PID into `/sys/fs/cgroup/<group>/cgroup.procs`.
+  5. Drops unneeded Linux kernel capabilities (e.g., `CAP_SYS_ADMIN`, `CAP_SYS_RAWIO`).
+  6. Compiles and attaches the Seccomp BPF filter program to the task via `prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, ...)`.
+  7. Replaces itself with the container's designated executable via `execve(2)`.
+- Once the application binary starts executing inside the isolated kernel boundary, `runc` exits cleanly.
+
+---
+
+### Component 6: Linux Kernel Isolation Substrate (The 7 Namespaces)
+Linux Namespaces partition global OS resources into isolated virtual instances. A process inside a namespace believes it is the sole occupant of the machine:
+
+| Namespace | Linux Kernel Flag | What It Virtualizes & Isolates | Real-World Production Significance |
+| :--- | :--- | :--- | :--- |
+| **`PID`** | `CLONE_NEWPID` | Process IDs & process tree | Inside the container, your web server sees itself as **PID 1**. On the host, it has a regular high PID (e.g., PID 49281). Processes inside cannot see or signal host processes. |
+| **`NET`** | `CLONE_NEWNET` | Network devices, IP addresses, ports, routing tables | Container gets its own private `lo` loopback and `eth0` interface with an isolated port range. Two containers on the same host can both bind to port `80` without collision. |
+| **`MNT`** | `CLONE_NEWNS` | Filesystem mount table | Mounts and unmounts inside the container do not alter host filesystem mounts. Enables isolated root filesystems via `pivot_root(2)`. |
+| **`IPC`** | `CLONE_NEWIPC` | System V IPC & POSIX message queues | Prevents processes in different containers from communicating or corrupting each other via shared memory segments (`shmget(2)`) or semaphores. |
+| **`UTS`** | `CLONE_NEWUTS` | Hostname and NIS domain name | Allows each container to declare its own fully qualified domain name and hostname (e.g., `hostname -F /etc/hostname`) without mutating the host's identity. |
+| **`USER`** | `CLONE_NEWUSER` | User IDs (UID) & Group IDs (GID) mappings | **Rootless Containers**: Maps container UID 0 (root) to an unprivileged high UID (e.g., UID 100001) on the host. If a container escapes, the attacker possesses zero root privileges on the host kernel! |
+| **`CGROUP`** | `CLONE_NEWCGROUP` | Virtualized view of `/proc/self/cgroup` | Masks the host's global cgroup hierarchy, showing the container only its own relative resource slice. |
+
+---
+
+### Component 7: Linux Control Groups v2 (`cgroups v2`)
+While namespaces govern what a process can **see**, cgroups govern what a process can **consume**. In modern Linux kernels, the unified **cgroups v2** architecture uses a single directory tree mounted at `/sys/fs/cgroup/`:
+
+- **Memory Controller (`memory.max` & `memory.high`)**:
+  - `memory.max`: The hard memory limit (e.g., `docker run -m 512m`). If the container process exceeds this threshold, the kernel's Out-Of-Memory (OOM) killer sends `SIGKILL (Signal 9)` to terminate the process immediately (`Exit Code 137`).
+  - `memory.high`: The soft memory throttling ceiling. When reached, the kernel puts processes to sleep and aggressively reclaims page cache without killing the process.
+  - `memory.oom.group`: When set to 1, if any single process in the container is OOM-killed, the kernel atomically terminates all sibling processes in the cgroup to prevent zombie states.
+- **CPU Controller (`cpu.max`)**:
+  - Employs the Linux **Completely Fair Scheduler (CFS)** bandwidth quota.
+  - Formatted as: `$QUOTA $PERIOD`. The default period is `100000` microseconds (100ms).
+  - Assigning `--cpus=2.5` sets `cpu.max` to `250000 100000`. In every 100ms window, the container's threads can consume at most 250ms of CPU time across all cores. If exceeded, the kernel throttles the thread until the next period.
+- **I/O Controller (`io.weight` & `io.max`)**:
+  - Protects disk subsystems from noisy neighbors.
+  - `io.max` enforces hard read/write limits: `8:0 rbps=20971520 wbps=10485760` (caps major/minor device `8:0` to 20MB/s read, 10MB/s write).
+- **PIDs Controller (`pids.max`)**:
+  - Enforces a ceiling on the total number of executable threads/processes (e.g., `pids.max=100`).
+  - Immunizes the host against malicious fork-bombs (`:(){ :|:& };:`).
+
+---
+
+### Component 8: Storage Drivers & OverlayFS Mechanics
+Docker builds filesystems through stacked, content-addressable layers powered by the Linux **OverlayFS** union mount:
+
+- **The Anatomy of OverlayFS Layers**:
+  - **`Lowerdir` (Immutable Base Layers)**: Stacked, read-only layers unpacked from image tarballs (e.g., Debian base + Python runtime + application code). Multiple containers instantiate from the exact same image share these identical `lowerdir` read-only blocks in host RAM without memory duplication.
+  - **`Upperdir` (Ephemeral Read-Write Container Layer)**: A single read-write directory allocated exclusively to this specific container. Any file created, modified, or written at runtime lives here.
+  - **`Workdir` (Filesystem Scratch Space)**: An internal housekeeping directory required by the Linux kernel to stage file modifications and perform atomic rename operations before exposing them to user space.
+  - **`Merged View` (Unified Mount Point)**: The virtual filesystem root mounted at the container's root directory:
+    ```bash
+    mount -t overlay overlay \
+      -o lowerdir=/var/lib/docker/overlay2/l3:/var/lib/docker/overlay2/l2:/var/lib/docker/overlay2/l1,\
+    upperdir=/var/lib/docker/overlay2/c_rw/diff,\
+    workdir=/var/lib/docker/overlay2/c_rw/work \
+      /var/lib/docker/overlay2/c_rw/merged
+    ```
+- **The Copy-on-Write (CoW) Lifecycle**:
+  - **Read Operation**: When the container reads `/etc/nginx/nginx.conf`, the kernel scans layers from top to bottom. If the file has not been modified, it reads directly from the read-only `lowerdir` layer at native hardware speed with zero write overhead.
+  - **First Write / Mutation**: When the container modifies `/etc/nginx/nginx.conf`, the kernel intercepts the write, performs a **Copy-Up** (duplicating the entire file from the lower read-only layer up into the `upperdir` read-write layer), and applies the changes to the copy. The original image layer remains untouched.
+  - **Deletion via Whiteout Device**: If the container deletes `/bin/ls`, the read-only layer cannot be altered. Instead, OverlayFS writes a **whiteout character device node** (`mknod /upperdir/bin/ls c 0 0`) with major/minor number `0,0`. When the merged filesystem is read, the kernel sees this whiteout marker and hides the underlying file completely!
+
+---
 
 ---
 

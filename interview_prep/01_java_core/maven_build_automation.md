@@ -6,7 +6,121 @@
 
 ## Guide Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph L8 ["Layer 8: Production CLI Automation & Build Matrix"]
+        direction LR
+        M1["Reactor Flags: -pl, -am, -amd, -rf<br/>(Targeted sub-project builds)"]
+        M2["Parallel Execution: -T 1C, -T 4<br/>(Multi-threaded module building)"]
+        M3["Debug & Audit: -X, -U, -B<br/>(Stacktrace, snapshot refresh, batch mode)"]
+    end
+
+    subgraph L7 ["Layer 7: Build Anti-Patterns & Forensics"]
+        direction LR
+        A1["-Dmaven.test.skip=true Hazard<br/>(Skips compiling test sources entirely)"]
+        A2["Snapshot Poisoning<br/>(Non-reproducible CI deployments)"]
+        A3["System Scopes & Hardcoded Paths<br/>(Breaks cross-platform portability)"]
+    end
+
+    subgraph L6 ["Layer 6: Multi-Module Reactors & DAG Sequencing"]
+        direction LR
+        R1["Reactor Engine Topology<br/>(Inter-module dependency sorting)"]
+        R2["Parent POM vs Aggregator POM<br/>(Inheritance vs Composition)"]
+        R3["Reactor Build Graph DAG<br/>(Detects circular module loops)"]
+    end
+
+    subgraph L5 ["Layer 5: Plugin Mojo Architecture & Packaging"]
+        direction LR
+        P1["Mojo Execution Pipeline<br/>(maven-compiler, surefire vs failsafe)"]
+        P2["Maven Shade Bytecode Relocation<br/>(Fixes classpath JAR hell & collisions)"]
+        P3["Container Packaging<br/>(Google Jib daemonless container builds)"]
+    end
+
+    subgraph L4 ["Layer 4: Bill of Materials & Scopes Matrix"]
+        direction LR
+        B1["dependencyManagement & BOM<br/>(Centralized version alignment)"]
+        B2["Scope Transitivity Matrix<br/>compile, provided, runtime, test, system, import"]
+        B3["Exclusions & Optional Tags<br/>(Pruning unwanted transitive bloat)"]
+    end
+
+    subgraph L3 ["Layer 3: Aether Resolver & Dependency DAG"]
+        direction LR
+        D1["Nearest Definition Wins Algorithm<br/>(Tree depth precedence vs POM order)"]
+        D2["Diamond Dependency Collision<br/>(Causes runtime NoSuchMethodError)"]
+        D3["Aether Resolver Engine<br/>(Remote mirror resolution & local .m2 cache)"]
+    end
+
+    subgraph L2 ["Layer 2: 3 Independent Lifecycles & 23 Phases"]
+        direction LR
+        LC1["Clean Lifecycle<br/>pre-clean -> clean -> post-clean"]
+        LC2["Default Build Lifecycle (23 Phases)<br/>validate -> compile -> test -> package -> verify -> install -> deploy"]
+        LC3["Site Lifecycle<br/>pre-site -> site -> post-site -> site-deploy"]
+    end
+
+    subgraph L1 ["Layer 1: Super POM & Model Inheritance"]
+        direction LR
+        S1["Super POM Configuration<br/>(Default directory layout: src/main/java, target)"]
+        S2["Project Object Model (POM v4.0.0)<br/>(GroupId, ArtifactId, Version GAV)"]
+        S3["Effective POM Assembly<br/>(mvn help:effective-pom XML merge)"]
+    end
+
+    L8 --> L7
+    L7 --> L6
+    L6 --> L5
+    L5 --> L4
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+
+    classDef l8 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+    classDef l7 fill:#1e1e2e,stroke:#fab387,stroke-width:2px,color:#cdd6f4;
+    classDef l6 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l5 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l4 fill:#1e1e2e,stroke:#94e2d5,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89dceb,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class M1,M2,M3 l8;
+    class A1,A2,A3 l7;
+    class R1,R2,R3 l6;
+    class P1,P2,P3 l5;
+    class B1,B2,B3 l4;
+    class D1,D2,D3 l3;
+    class LC1,LC2,LC3 l2;
+    class S1,S2,S3 l1;
 ```
+
+#### Architectural Breakdown: The 8-Layer Apache Maven Build Automation Engine
+
+1. **Visual Architecture & Engine Layer Anatomy**:
+   - **Layer 1 (Super POM & Model Inheritance)**: Every Maven POM inherits implicitly from the Super POM embedded in `maven-model-builder.jar`. Defines the Standard Directory Layout (`src/main/java`, `src/main/resources`, `target`) and default plugin versions. `mvn help:effective-pom` computes the merged XML.
+   - **Layer 2 (3 Independent Lifecycles & 23 Phases)**: Maven defines three decoupled lifecycles: **Clean** (3 phases), **Default** (23 phases executing build/test/package/deploy), and **Site** (4 phases). Invoking a phase in one lifecycle never triggers phases in another.
+   - **Layer 3 (Aether Resolver & Dependency DAG)**: Eclipse Aether (Maven Resolver) builds the Directed Acyclic Graph (DAG) of dependencies. Resolves transitive artifacts across local cache (`~/.m2/repository`) and remote mirrors using the deterministic "Nearest Definition Wins" algorithm.
+   - **Layer 4 (BOM & Scopes Matrix)**: The `<dependencyManagement>` section centralizes versions without forcing actual inheritance. Bill of Materials (BOM) imports (`<type>pom</type><scope>import</scope>`) enforce unified dependency versions across hundreds of microservices. Governs 6 dependency scopes (`compile`, `provided`, `runtime`, `test`, `system`, `import`).
+   - **Layer 5 (Plugin Mojo Architecture & Packaging)**: Mojos (Maven plain Old Java Objects) attach execution goals to lifecycle phases. Distinguishes unit testing (`maven-surefire-plugin` failing the build immediately) from integration testing (`maven-failsafe-plugin` guaranteeing post-integration teardown). Includes bytecode package relocation via `maven-shade-plugin`.
+   - **Layer 6 (Multi-Module Reactors & DAG Sequencing)**: The Reactor analyzes dependencies between sub-modules in a multi-module repository, constructing a topological sort to guarantee that upstream library modules build before downstream consumer modules.
+   - **Layer 7 (Build Anti-Patterns & Forensics)**: Hardened practices eliminating non-reproducible builds, dynamic snapshot pollution, and skipped compilation traps.
+   - **Layer 8 (Production CLI Automation & Build Matrix)**: Enterprise build flags for CI/CD pipelines: multi-threaded parallel execution (`-T 1C`), selective project building (`-pl`, `-am`), and batch mode (`-B`).
+
+2. **Execution Flow & Phase Lifecycle Sequencing**:
+   - **Phase vs. Goal Binding**: Lifecycle phases do not execute work themselves; they are empty lifecycle hooks. Plugin Mojos bind to phases. For example, `mvn package` sequentially executes:
+     `validate` $\to$ `compile` (`compiler:compile`) $\to$ `test-compile` (`compiler:testCompile`) $\to$ `test` (`surefire:test`) $\to$ `package` (`jar:jar`). If any phase fails, the build halts immediately.
+   - **Reactor Topological Execution**: When running `mvn clean install` on an aggregator POM, the Reactor creates a build dependency graph. Modules without dependencies build first. Modules with mutual dependencies must form a strict DAG; circular dependencies trigger a `CycleDetectedException`.
+
+3. **Low-Level Mediation Algorithms & Bytecode Mechanics**:
+   - **Nearest Definition Wins**: If Project $P$ declares a direct dependency on $A$ which depends on $B \to C \text{ (v1.0)}$ (depth 2), but $P$ also declares a direct dependency on $D$ which depends on $C \text{ (v2.0)}$ (depth 1), Maven selects $C \text{ (v2.0)}$ because its distance to the root project is 1 hop shorter. If depths are equal, the first declared branch in the POM wins.
+   - **Shade Bytecode Relocation**: The `maven-shade-plugin` inspects the compiled `.class` files of dependencies and rewrites the Java bytecode Constant Pool, rewriting binary references from e.g. `com/google/common/base/Preconditions` to `org/myproject/shaded/guava/Preconditions`. This completely isolates conflicting transitive dependencies, eliminating runtime `NoSuchMethodError` crashes.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **The Diamond Dependency `NoSuchMethodError`**: Occurs when Nearest Definition Wins selects an older version of a library because it was positioned 1 hop closer in the dependency tree. The code compiles fine against the newer API, but crashes at runtime. SRE diagnostic command:
+     `mvn dependency:tree -Dverbose -Dincludes=com.google.guava:guava`. Fix by explicitly declaring the desired version in the root `<dependencyManagement>` section.
+   - **The `-Dmaven.test.skip=true` Disaster**: Unlike `-DskipTests` (which compiles test classes but skips running them), `-Dmaven.test.skip=true` tells Maven not to compile `src/test/java` at all. This allows broken compile errors to slip into Git repositories undetected, failing CI/CD builds for other engineers.
+
+<details>
+<summary>View Legacy ASCII Overview</summary>
+
+```text
 ========================================================================================================================
                                      APACHE MAVEN BUILD ENGINE INTERVIEW GUIDE
 ========================================================================================================================
@@ -20,6 +134,8 @@
  [Layer 8: Rapid-Fire Cheat Sheet & Decision Matrix]     --> CLI Commands, Flag Cheatsheet, Scope Transitivity Matrix
 ========================================================================================================================
 ```
+
+</details>
 
 ---
 

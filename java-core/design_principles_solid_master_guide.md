@@ -60,6 +60,69 @@ LCOM is a mathematical metric that counts the number of method pairs in a class 
 
 # TRACK 1: THE SOLID PRINCIPLES MASTER DEEP-DIVE
 
+```mermaid
+flowchart TD
+    subgraph SOLIDPrinciples["The S.O.L.I.D. Principles Master Architecture"]
+        direction TB
+
+        subgraph S_Node["[S] Single Responsibility Principle"]
+            S_Title["Single Responsibility<br/>(One Reason to Change)"]
+            S_Desc["Segregate classes by business actor.<br/>Eliminates multi-team merge conflicts and God objects."]
+            S_Title --- S_Desc
+        end
+
+        subgraph O_Node["[O] Open / Closed Principle"]
+            O_Title["Open / Closed<br/>(Open: Extension | Closed: Modification)"]
+            O_Desc["Extend behavior via polymorphic strategies.<br/>Existing tested code remains untouched."]
+            O_Title --- O_Desc
+        end
+
+        subgraph L_Node["[L] Liskov Substitution Principle"]
+            L_Title["Liskov Substitution<br/>(Behavioral Subtyping)"]
+            L_Desc["Subtypes must honor base class contracts.<br/>Preserves preconditions, postconditions, and invariants."]
+            L_Title --- L_Desc
+        end
+
+        subgraph I_Node["[I] Interface Segregation Principle"]
+            I_Title["Interface Segregation<br/>(Role-Specific Interfaces)"]
+            I_Desc["Clients depend only on methods they consume.<br/>Eliminates fat interfaces and dummy stubs."]
+            I_Title --- I_Desc
+        end
+
+        subgraph D_Node["[D] Dependency Inversion Principle"]
+            D_Title["Dependency Inversion<br/>(Abstractions Over Concretions)"]
+            D_Desc["High-level domain logic owns the port interfaces.<br/>Low-level infrastructure adapters implement them."]
+            D_Title --- D_Desc
+        end
+
+        S_Node ==> O_Node ==> L_Node ==> I_Node ==> D_Node
+    end
+
+    classDef sStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef oStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef lStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef iStyle fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff7ed;
+    classDef dStyle fill:#14532d,stroke:#4ade80,stroke-width:2px,color:#f0fdf4;
+
+    class S_Title,S_Desc sStyle;
+    class O_Title,O_Desc oStyle;
+    class L_Title,L_Desc lStyle;
+    class I_Title,I_Desc iStyle;
+    class D_Title,D_Desc dStyle;
+```
+
+#### Architectural Deep Dive: SOLID Engineering Mechanics
+- **Part 1: Visual Architecture & SOLID Taxonomy**: The SOLID suite constitutes an integrated architectural lattice designed to minimize system entropy. Single Responsibility enforces actor-level class boundaries; Open/Closed establishes polymorphic extension points; Liskov Substitution protects behavioral inheritance contracts; Interface Segregation prevents bloated interface coupling; Dependency Inversion decouples business domains from hardware, storage, and networking substrates.
+- **Part 2: Evolutionary Refactoring & Object Lifecycle Transitions**: Monolithic codebases typically degrade through God Classes (violating SRP) and cascaded `instanceof` conditional checks (violating OCP). Applying SOLID decouples the components: SRP factors out concerns into cohesive services; OCP introduces Strategy registries; LSP replaces invalid inheritance with composition; ISP divides fat interfaces into granular role contracts; DIP inverts dependency vectors through Spring IoC or Hexagonal ports.
+- **Part 3: Low-Level JVM, Polymorphism & Bytecode Mechanics**: Clean object-oriented abstractions directly influence JVM execution dynamics. Monomorphic call sites (invoking a single concrete implementation through an interface) allow the HotSpot C2 compiler to inline bytecode aggressively across method boundaries (`invokevirtual` and `invokeinterface` converted to direct machine instructions). Bimorphic call sites use fast branch prediction tables. Megamorphic call sites ($\ge 3$ concrete implementations) forfeit inlining and fall back to full `itable` or `vtable` pointer lookups in Metaspace.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Cascading Regression Outages*: Modifying a single 4,000-line God class to fix billing accidentally introduces a regression in shipping due to shared internal mutable fields.
+  - *Subclass Contract Breaches*: Subclasses throwing `UnsupportedOperationException` when invoked via polymorphic loops disrupt batch pipelines (e.g., 100,000 unhandled exceptions terminating worker threads).
+  - *Static Analysis Auditing*: Enforce SOLID architectural rules in CI/CD using ArchUnit tests and SonarQube cognitive complexity thresholds (LCOM4 $< 1$).
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 +-----------------------------------------------------------------------------------------+
 |                                  THE S.O.L.I.D. PRINCIPLES                              |
@@ -71,6 +134,8 @@ LCOM is a mathematical metric that counts the number of method pairs in a class 
 | [D] Dependency Inversion   : Depend upon abstractions, not concrete details.            |
 +-----------------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 
@@ -337,6 +402,53 @@ public class EnterpriseOfficeHub implements Printer, Scanner, FaxMachine {
 
 Decouple core business domain logic from infrastructure details (Databases, HTTP clients, File systems, Messaging brokers).
 
+```mermaid
+flowchart TD
+    subgraph DIPComparison["Architectural Comparison: Tight Coupling vs Dependency Inversion"]
+        direction TB
+
+        subgraph Traditional["Traditional Architecture: High-Level Directly Coupled to Low-Level Detail"]
+            TradOrder["OrderService<br/>(High-Level Business Policy)"] -->|"Direct Compile-Time & Runtime Dependency<br/>(new PostgresOrderDao())"| TradDao["PostgresOrderDao<br/>(Low-Level Concrete Database Detail)"]
+        end
+
+        subgraph InvertedHexagonal["Hexagonal / Dependency Inversion: Inverted Dependency Vector"]
+            subgraph CoreDomain["Core Domain Layer (High-Level Policy)"]
+                InvOrder["OrderService<br/>(Business Domain Logic)"] -->|"Depends on Domain Port"| Port["OrderPersistencePort<br/>(Domain-Owned Abstraction / SPI)"]
+            end
+
+            subgraph InfraLayer["Infrastructure Layer (Pluggable Details)"]
+                PostgresAdapter["PostgresOrderAdapter<br/>(Implements Port via JPA/Hibernate)"] -.->|"Implements Contract<br/>(Dependency Inverted Inward)"| Port
+                MongoAdapter["MongoOrderAdapter<br/>(Alternative NoSQL Implementation)"] -.->|"Implements Contract"| Port
+                MockAdapter["InMemoryOrderTestAdapter<br/>(Zero-IO Test Fixture)"] -.->|"Implements Contract"| Port
+            end
+        end
+
+        Traditional -.->|"Refactored with DIP"| InvertedHexagonal
+    end
+
+    classDef tradStyle fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+    classDef domainStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef portStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef infraStyle fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc;
+
+    class TradOrder,TradDao tradStyle;
+    class InvOrder domainStyle;
+    class Port portStyle;
+    class PostgresAdapter,MongoAdapter,MockAdapter infraStyle;
+```
+
+#### Architectural Deep Dive: Dependency Inversion Mechanics
+- **Part 1: Visual Architecture & Inversion Topology Anatomy**: In traditional layered design, high-level business modules declare explicit dependencies on concrete low-level infrastructure classes (e.g., direct instantiation of `PostgresOrderDao`). Under the Dependency Inversion Principle (and Hexagonal Ports & Adapters), the core business layer defines and owns an abstract interface contract (**Port**). Infrastructure mechanisms (PostgreSQL, MongoDB, Kafka, REST clients) exist purely as swappable plugins (**Adapters**) implementing the port.
+- **Part 2: Inversion Execution Flow & Control Inversion Lifecycle**: Runtime control flow proceeds downward from the caller through the domain service to the adapter. However, the source-code compile-time dependency arrow is inverted 180 degrees: the outer infrastructure module depends inward upon the core domain module (`infrastructure` $\to$ `domain-api`), while the domain module contains zero references, imports, or JAR dependencies on database drivers, ORM frameworks, or cloud SDKs.
+- **Part 3: Low-Level JVM ClassLoading, Compilation & Package Boundaries**: At the JVM bytecode level, separating abstractions from details decouples classloading graphs. In a modular Java (JPMS) project, the `com.corp.domain` module exports its port package without requiring `java.sql` or `org.hibernate.orm.core`. When the JVM links `OrderService`, it resolves symbolic references against the interface `itable` pointer. The Spring IoC container injects the concrete adapter (`PostgresOrderAdapter`) at bootstrap time via constructor injection (`invokespecial`), eliminating static bytecode references to relational database classes from the domain bytecode.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Framework Leakage into Domain Core*: Allowing annotations like `@Entity`, `@Table`, or `@Column` to bleed into core domain aggregates creates tight coupling to Hibernate. When database schema updates or migration to document stores occurs, core business logic is forced to undergo breaking changes.
+  - *Testing Impedance & CI Slowdowns*: Tightly coupled DAOs force unit tests to spin up live databases (or Testcontainers) for basic business rule validation, inflating build times from seconds to 45+ minutes. With DIP, tests inject `InMemoryOrderTestAdapter` for sub-millisecond execution.
+  - *SRE Incident Remediation*: If PostgreSQL experiences a catastrophic P0 degradation, services designed with DIP can hot-swap to a fallback cache or alternative data store by dynamically altering Spring bean profile qualifiers (`@Profile("mongo-fallback")`) without re-architecting domain code.
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 Traditional Architecture (Tight Coupling):
 [ OrderService (High-Level) ] ───► [ PostgresOrderDao (Low-Level Concrete) ]
@@ -347,6 +459,8 @@ Dependency Inversion (Inverted Control):
                                                 │ (Implements)
                                    [ PostgresOrderAdapter (Detail) ]
 ```
+
+</details>
 
 ### ✅ Clean Refactoring: Hexagonal / Ports & Adapters
 ```java

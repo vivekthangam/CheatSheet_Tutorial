@@ -9,7 +9,95 @@
 
 ## Architecture Blueprint: The Concurrency Stack
 
+![Java Concurrency 3-Tier Enterprise Architecture Roadmap](../../assets/images/concurrency/concurrency_3tier_roadmap.jpg)
+
+```mermaid
+flowchart TB
+    subgraph L4 ["Layer 4: Modern Asynchronous & Loom (Java 21+)"]
+        direction LR
+        Loom1["Virtual Threads (Project Loom)<br/>(Unmounts on I/O, ~1KB footprint)"]
+        Loom2["Carrier Thread Pool<br/>(Underlying ForkJoinPool execution)"]
+        Loom3["Scoped Values & Structured Concurrency<br/>(Immutable contextual inheritance)"]
+    end
+
+    subgraph L3 ["Layer 3: High-Level Orchestration (java.util.concurrent)"]
+        direction LR
+        O1["ThreadPoolExecutor & ScheduledExecutor<br/>(corePool, maxPool, workQueue, rejection)"]
+        O2["ForkJoinPool (Work-Stealing)<br/>(Deque work-stealing algorithms)"]
+        O3["Synchronizers<br/>CountDownLatch, CyclicBarrier, Phaser, Semaphore"]
+    end
+
+    subgraph L2 ["Layer 2: Explicit Locking & Synchronizers (j.u.c.locks)"]
+        direction LR
+        LK1["AbstractQueuedSynchronizer (AQS)<br/>(CLH lock queue, state int CAS)"]
+        LK2["ReentrantLock & ReentrantReadWriteLock<br/>(Fair vs Non-Fair lock acquisition)"]
+        LK3["StampedLock<br/>(Optimistic read validating)"]
+    end
+
+    subgraph L1 ["Layer 1: Core Language Primitives & Memory Model"]
+        direction LR
+        M1["synchronized & Intrinsic Monitors<br/>(ObjectMonitor: cxq, EntryList, WaitSet)"]
+        M2["volatile & Memory Barriers<br/>(LoadLoad, LoadStore, StoreStore, StoreLoad)"]
+        M3["Hardware Atomic CAS<br/>(Unsafe.compareAndSwap, VarHandle)"]
+    end
+
+    subgraph L0 ["Layer 0: OS Kernel & Hardware Substrate"]
+        direction LR
+        H1["1:1 Native Kernel Threading<br/>(POSIX pthread_create, task_struct)"]
+        H2["CPU Cache Hierarchy & MESI Protocol<br/>(L1/L2/L3 caches, 64-byte cache lines)"]
+        H3["OS Scheduler (Linux CFS)<br/>(Red-Black tree, vruntime accounting)"]
+    end
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
+
+    classDef l4 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l0 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+
+    class Loom1,Loom2,Loom3 l4;
+    class O1,O2,O3 l3;
+    class LK1,LK2,LK3 l2;
+    class M1,M2,M3 l1;
+    class H1,H2,H3 l0;
 ```
+
+#### Architectural Breakdown: The 5-Layer Java Concurrency Engineering Substrate
+
+1. **Visual Architecture & Layer Anatomy**:
+   - **Layer 0 (OS Kernel & Hardware Substrate)**: Foundation of execution. In HotSpot, every Java platform thread maps 1:1 to an OS POSIX kernel thread (`pthread_create`). Managed by the Linux Completely Fair Scheduler (CFS) via a Red-Black tree tracking `vruntime`. At the hardware layer, execution is governed by multi-core CPU architectures with L1/L2/L3 caches and 64-byte cache lines synchronized via the hardware MESI (Modified, Exclusive, Shared, Invalid) cache coherence protocol.
+   - **Layer 1 (Core Language Primitives & Memory Model)**: Defines memory visibility and synchronization. Grounded in the Java Memory Model (JMM) *happens-before* rules. Includes JVM intrinsic monitors (`ObjectMonitor` with `_cxq`, `_EntryList`, and `_WaitSet`), `volatile` variable memory barrier instructions, and lock-free hardware Compare-And-Swap (`CAS`) primitives exposed through `Unsafe` and `VarHandle`.
+   - **Layer 2 (Explicit Locking & Synchronizers)**: Built on Doug Lea's AbstractQueuedSynchronizer (`AQS`). Uses a state integer (`volatile int state`) and a FIFO variant of the Craig, Landin, and Hagersten (CLH) lock queue. Powers `ReentrantLock`, `ReentrantReadWriteLock`, and `StampedLock` (with optimistic lock validation).
+   - **Layer 3 (High-Level Orchestration)**: Thread management abstractions. Features `ThreadPoolExecutor` (core/max threads, keep-alive, work queues, and rejection policies) and `ForkJoinPool` (work-stealing deques for recursive divide-and-conquer compute algorithms). Includes coordination barriers (`CountDownLatch`, `CyclicBarrier`, `Phaser`, `Semaphore`).
+   - **Layer 4 (Modern Asynchronous & Project Loom)**: Java 21+ concurrency paradigms. Virtual Threads decouple application concurrency from OS thread counts by mounting thousands of lightweight, heap-allocated continuations onto a small pool of carrier platform threads, complemented by Scoped Values and Structured Concurrency.
+
+2. **Execution Flow & Synchronization Dynamics**:
+   - **AQS Lock Acquisition**: A thread invokes `lock.lock()`. AQS executes `compareAndSetState(0, 1)`. If CAS succeeds, the thread claims ownership. If contention occurs, an AQS Node is created and pushed onto the CLH wait queue via CAS. The thread is parked using `LockSupport.park()`, sleeping at the OS kernel level via `futex(FUTEX_WAIT)`.
+   - **Loom Virtual Thread I/O Unmounting**: When a virtual thread performs blocking I/O (e.g., `socket.read()`), the JVM intercepts the call. The continuation is unmounted: active call stack frames are copied from the carrier thread's native stack onto the JVM heap, the carrier thread is freed to run another virtual thread, and the socket file descriptor is registered with background Linux `epoll`. Upon packet arrival, `epoll_wait` fires, and a carrier thread re-mounts the continuation and resumes execution seamlessly.
+
+3. **Low-Level Kernel & JVM Mechanics**:
+   - **CPU Memory Barriers & MESI Cache Invalidation**: Writing to a `volatile` variable emits a `StoreStore` barrier before the write and a `StoreLoad` barrier after the write. On x86, this compiles into a `LOCK` prefix (e.g. `lock addl $0,0(%rsp)`), which drains the CPU store buffer and broadcasts an invalidation signal across the CPU cache bus, forcing all other CPU cores to invalidate their cached copy of that 64-byte cache line.
+   - **ObjectMonitor State Inflation**: Synchronized blocks transition through three optimization tiers:
+     1. *Biased Locking* (deprecated in modern JDKs) / *Lightweight Locking*: Swaps a displaced Mark Word onto the thread's stack via CAS.
+     2. *Inflated Heavyweight Locking*: When contention persists, HotSpot allocates a native C++ `ObjectMonitor`. Threads fail CAS, enter the lock-free Contention Queue (`_cxq`), and are put to sleep via `pthread_mutex` / `futex`.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **Thread Starvation & Deadlock**: Caused by circular resource acquisition order across multiple threads. SRE detection:
+     - Run `jcmd <PID> Thread.print` or `jstack -l <PID>` to detect `Found one Java-level deadlock:`.
+     - Inspect lock addresses and thread hold states in the thread dump.
+   - **Carrier Thread Pinning in Project Loom**: Running `synchronized` methods or invoking JNI code inside a virtual thread pins the virtual thread to its underlying OS carrier thread. If I/O occurs while pinned, the OS carrier thread blocks, causing carrier pool starvation.
+     - *Diagnostic flag*: `-Djdk.tracePinnedThreads=full`.
+     - *Remediation*: Replace `synchronized` blocks with `ReentrantLock`.
+   - **False Sharing (Cache Line Contention)**: When two threads on different CPU cores frequently update independent variables that reside within the same 64-byte cache line, the MESI protocol invalidates the entire cache line back and forth across the CPU bus (cache ping-pong), dropping throughput by 90%+. SRE mitigation: Apply `@jdk.internal.vm.annotation.Contended` to pad variables to separate 64-byte/128-byte cache lines.
+
+<details>
+<summary>View Legacy ASCII Blueprint</summary>
+
+```text
 +-------------------------------------------------------------------------+
 | Layer 4: Modern Asynchronous & Loom (Java 21+)                           |
 | - Virtual Threads (Loom), Carrier Threads, Continuation, Scoped Values   |
@@ -29,6 +117,8 @@
 | - OS Kernel Threads (1:1 pthread), CPU Cores, L1/L2/L3 Caches, MESI     |
 +-------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

@@ -9,40 +9,24 @@
 
 ## Architecture Blueprint: The Spring Security Filter Chain
 
-```
-+---------------------------------------------------------------------------------------------+
-|                              HTTP Request Lifecycle                                          |
-|                                                                                              |
-|  Client Request (HTTP/1.1, HTTP/2)                                                           |
-|       │                                                                                      |
-|       ▼                                                                                      |
-|  +-------------------------------+                                                           |
-|  | Servlet Container (Tomcat)    |                                                           |
-|  |  └─ DelegatingFilterProxy     |  ← Bridges Servlet world to Spring WebApplicationContext   |
-|  |       └─ FilterChainProxy     |  ← Spring Security's master filter ("springSecurity...FilterChain")
-|  +-------------------------------+                                                           |
-|       │                                                                                      |
-|       ▼  (Ordered Security Filters)                                                          |
-|  +-------------------------------+                                                           |
-|  | 1. CorsFilter                 |  ← Handles CORS preflight (OPTIONS)                       |
-|  | 2. HeaderWriterFilter         |  ← Adds security headers (HSTS, X-Frame-Options, CSP)     |
-|  | 3. CsrfFilter                 |  ← Validates CSRF tokens (cookie-based stateful apps)     |
-|  | 4. LogoutFilter               |  ← Intercepts /logout and clears security context         |
-|  | 5. SecurityContextHolderFilter|  ← Loads SecurityContext from repository (Session/Token)  |
-|  | 6. BearerTokenAuthFilter      |  ← Extracts & validates JWT from Authorization header     |
-|  | 7. UsernamePasswordAuthFilter |  ← Form login (POST /login)                               |
-|  | 8. RequestCacheAwareFilter    |  ← Replays saved request after successful login           |
-|  | 9. AnonymousAuthFilter        |  ← Assigns AnonymousAuthenticationToken if unauthenticated|
-|  | 10. ExceptionTranslationFilter|  ← Translates AccessDeniedException -> 403 / 401 response |
-|  | 11. AuthorizationFilter       |  ← Evaluates hasRole/hasAuthority/SpEL rules              |
-|  +-------------------------------+                                                           |
-|       │                                                                                      |
-|       ▼                                                                                      |
-|  +-------------------------------+                                                           |
-|  | DispatcherServlet (Spring MVC)|  ← Request reaches @Controller only if all filters pass   |
-|  +-------------------------------+                                                           |
-+---------------------------------------------------------------------------------------------+
-```
+> **Spring Security Request Lifecycle Pipeline**:  
+> `[Client Request (HTTP/1.1 / HTTP/2)]` ──► `[Servlet Container (Tomcat / Jetty)]` ──► `[DelegatingFilterProxy]` ──► `[FilterChainProxy ("springSecurityFilterChain")]` ──► `[SecurityFilterChain (Ordered Filter Cascade)]` ──► `[DispatcherServlet (@RestController)]`
+
+| Execution Order | Filter Component | Subsystem Responsibility & Wire Protocol Invariant | Security Boundary & Failure Action |
+|:---:|---|---|---|
+| **Entrypoint** | `DelegatingFilterProxy` & `FilterChainProxy` | Bridges raw Servlet container lifecycle to Spring `ApplicationContext`; resolves matching `SecurityFilterChain` beans based on `RequestMatcher`. | Passes request to the appropriate virtual filter chain or bypasses security entirely if matched to `ignoring()`. |
+| **Filter 1** | `CorsFilter` | Evaluates HTTP `OPTIONS` preflight requests, parses `Origin`, `Access-Control-Request-Method`, and `Access-Control-Request-Headers`. | Terminates unpermitted cross-origin preflight requests immediately with HTTP 403 Forbidden before reaching authentication. |
+| **Filter 2** | `HeaderWriterFilter` | Injects defensive HTTP security headers: `Strict-Transport-Security` (HSTS), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy` (CSP). | Protects client browsers against clickjacking, MIME-sniffing, and XSS vulnerabilities. |
+| **Filter 3** | `CsrfFilter` | Validates synchronized CSRF tokens for stateful browser sessions using `CsrfTokenRepository` (typically disabled for stateless JWT REST APIs). | Rejects missing or mutated CSRF tokens on mutating HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`) with HTTP 403. |
+| **Filter 4** | `LogoutFilter` | Intercepts configured logout URLs (e.g. `POST /logout`), invalidates HTTP sessions, clears cookies, and invokes `LogoutHandler` instances. | Clears `SecurityContext` in `SecurityContextHolder` and redirects or returns HTTP 204 No Content. |
+| **Filter 5** | `SecurityContextHolderFilter` | Loads the existing `SecurityContext` from `SecurityContextRepository` (HTTP Session, distributed cache, or thread-local storage) into `SecurityContextHolder`. | Ensures downstream filters have access to existing principal identities. |
+| **Filter 6** | `BearerTokenAuthenticationFilter` | Extracts RFC 6750 Bearer JWT from `Authorization: Bearer <token>`, invokes `AuthenticationManager` (`JwtAuthenticationProvider`) to parse cryptographic signature and claims. | If invalid or expired, sets `AuthenticationException` in request and delegates to `AuthenticationEntryPoint`. |
+| **Filter 7** | `UsernamePasswordAuthenticationFilter` | Intercepts form logins (`POST /login`), extracts username/password, and creates `UsernamePasswordAuthenticationToken`. | Authenticates against `DaoAuthenticationProvider` or configured user store; generates session/token on success. |
+| **Filter 8** | `RequestCacheAwareFilter` | Reconstructs and replays saved HTTP requests cached prior to authentication redirects. | Allows transparent resumption of deep links after user completes authentication challenge. |
+| **Filter 9** | `AnonymousAuthenticationFilter` | Detects absence of authentication in `SecurityContextHolder` and populates an `AnonymousAuthenticationToken` with role `ROLE_ANONYMOUS`. | Prevents null pointers in downstream security expressions, enabling consistent authorization checks. |
+| **Filter 10** | `ExceptionTranslationFilter` | Catches `AuthenticationException` and `AccessDeniedException` propagated up from downstream filters. | Translates `AuthenticationException` into HTTP 401 Unauthorized (`AuthenticationEntryPoint`) and `AccessDeniedException` into HTTP 403 Forbidden (`AccessDeniedHandler`). |
+| **Filter 11** | `AuthorizationFilter` | Evaluates request URL matching against authorization rules (`hasRole`, `hasAuthority`, SpEL, `@AuthorizeHttpRequests`). | Invokes `AuthorizationManager`; throws `AccessDeniedException` if authorization fails; otherwise invokes `filterChain.doFilter()`. |
+| **Downstream** | `DispatcherServlet` | Dispatches authenticated, authorized request to Spring MVC `@Controller` / `@RestController` handlers. | Reached only if all security filters successfully evaluate and permit execution. |
 
 ---
 
@@ -308,16 +292,17 @@ In the **Implicit Flow**, access tokens were returned directly in the redirect U
 4. **Authorization Code Issued**: User logs in; Auth Server returns a short-lived one-time `authorization_code` to the client redirect URI.
 5. **Token Exchange**: Client sends `POST /token` containing `authorization_code` AND the plain `code_verifier`.
 6. **Verification**: The Auth Server hashes the received `code_verifier` using SHA-256 and verifies it matches the previously stored `code_challenge`. If an attacker intercepted the authorization code, they cannot exchange it for a token because they do not know the `code_verifier`!
+> [!NOTE]
+> **OAuth 2.1 PKCE (Proof Key for Code Exchange) Cryptographic Handshake Pipeline**:
+> `[SPA / Mobile Public Client]` ➔ **Step 1: Cryptographic Challenge Ingestion** `[/authorize?code_challenge=XYZ&code_challenge_method=S256]` ➔ `[Authorization Server (Caches Challenge)]` ➔ **Step 2: Authorization Grant** `[Redirects with ?code=ABC]` ➔ **Step 3: Verification & Token Exchange** `[/token?code=ABC&code_verifier=123]` ➔ `[Auth Server verifies SHA-256(123) == XYZ]` ➔ **Step 4: Cryptographic Token Emission** `[Returns Access & Refresh Tokens]`
 
-```
-[SPA Client]                         [Authorization Server]
-     │                                         │
-     │ ─── 1. /authorize?code_challenge=XYZ ──► │ (Stores XYZ with auth request)
-     │ ◄── 2. Redirect with ?code=ABC ──────── │
-     │                                         │
-     │ ─── 3. /token?code=ABC&verifier=123 ───► │ (Verifies SHA256(123) == XYZ)
-     │ ◄── 4. Returns Access + Refresh Token ─ │
-```
+| Handshake Step | Origin / Channel | Target Endpoint | Cryptographic Payloads & Headers | Validation Semantics | Threat Mitigated |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Authorization & Challenge** | SPA Client via User-Agent Browser | `/oauth2/v1/authorize` | `client_id`, `redirect_uri`, `code_challenge = BASE64URL(SHA256(verifier))`, `method = S256` | Auth Server authenticates Resource Owner, persists `code_challenge` against authorization session. | Insecure static secrets; public client cannot securely hold `client_secret`. |
+| **2. Auth Code Emission** | Auth Server via HTTP 302 Redirect | SPA Client `redirect_uri` | `?code=ABC`, `state` | Short-lived single-use authorization code ($< 60\text{s}$ TTL) bound to authorization request. | Prevents token interception directly in browser history or referrer headers. |
+| **3. Token & Verifier Exchange** | SPA Client via Direct Back-Channel TLS | `/oauth2/v1/token` | `POST` body: `grant_type=authorization_code`, `code=ABC`, `code_verifier=123`, `client_id` | Auth Server computes `SHA-256(code_verifier)` and verifies byte-for-byte match with stored challenge. | **Authorization Code Interception Attack**: Attacker with intercepted `code` lacks dynamic `verifier`. |
+| **4. Token Grant Emission** | Auth Server to SPA Client | Back-Channel JSON Response | Payload: `access_token` (JWT), `refresh_token` (Rotated), `expires_in`, `token_type=Bearer` | Validates client identity cryptographically; invalidates authorization code immediately. | Mitigates replay attacks and replay of intercepted codes. |
+
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Why is `client_secret` useless in a Single Page Application or Mobile App?"
@@ -2170,18 +2155,14 @@ You are conducting a formal STRIDE threat model on a new Spring Boot microservic
 - Senior architect level security posture.
 
 ##### 3. Standout Technical Answer
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  STRIDE Threat Modeling Matrix for Spring Security                      |
-+---+───────────────────────────+─────────────────────────────────────────────────────────+
-| S | Spoofing Identity         | Mitigated via: JWT / mTLS / PKCE / Argon2 password hash |
-| T | Tampering with Data       | Mitigated via: HMAC / Asymmetric Digital Signatures     |
-| R | Repudiation               | Mitigated via: Spring Security Audit Events & Envers    |
-| I | Information Disclosure    | Mitigated via: TLS 1.3 / Disabled Actuator / CSP        |
-| D | Denial of Service (DoS)   | Mitigated via: Bucket4j Rate Limiting / Header Caps     |
-| E | Elevation of Privilege    | Mitigated via: Method Security (@PreAuthorize / ABAC)   |
-+---+───────────────────────────+─────────────────────────────────────────────────────────+
-```
+| STRIDE Category | Threat Description | Spring Security 6 Production Mitigation Architecture | Enterprise Defense Verification |
+|:---:|---|---|---|
+| **S** | **Spoofing Identity** | RFC 7519 JWT validation, mTLS client certificates, OAuth2 PKCE (`S256`), and Argon2id/BCrypt password hashing. | Strict JWKS validation; revocation checks via Redis bloom filter; enforcement of client-bound tokens. |
+| **T** | **Tampering with Data** | HMAC-SHA256 / Asymmetric Digital Signatures (RS256, ES256); encrypted request bodies; payload integrity checks. | Rejects tokens with `alg: "none"`; cryptographically validates token signatures against trusted identity provider JWKS. |
+| **R** | **Repudiation** | Spring Security Audit Events, `SecurityContext` MDC logging, and Hibernate Envers immutable audit trails. | Emits `AuthorizationFailureEvent` and `AuthenticationSuccessEvent` to distributed append-only SIEM logs with IP and user identity. |
+| **I** | **Information Disclosure** | Enforced TLS 1.3, internal management port isolation (Actuator on 8081), CSP headers, and sanitized error payloads. | Strips stack traces from JSON error responses (`server.error.include-stacktrace=never`); masks PII in logs. |
+| **D** | **Denial of Service (DoS)** | Bucket4j distributed token bucket rate limiting; HTTP header caps (8KB max header size); bounded thread pools. | Drops burst requests with HTTP 429 Too Many Requests; isolates auth endpoints from general API pools. |
+| **E** | **Elevation of Privilege** | Method-level security (`@PreAuthorize`), Attribute-Based Access Control (ABAC), and strict domain ownership checks. | Enforces resource-level tenant isolation expressions (e.g. `#order.tenantId == principal.tenantId`) to defeat BOLA/IDOR. |
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Which STRIDE category does a Broken Object Level Authorization (BOLA / IDOR) vulnerability belong to?"
@@ -2517,24 +2498,18 @@ You are the Chief Information Security Officer (CISO) conducting the final secur
 ##### 3. Standout Technical Answer
 To certify a Spring Security application for enterprise production, it must pass this **10-Point Security Gate**:
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  Enterprise Security Production Gate Checklist                          |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| #  | Security Gate               | Production Standard Requirement                      |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| 1  | Zero Default Passwords      | Default passwords disabled; credentials in Vault     |
-| 2  | CSRF Policy Verified        | Disabled for stateless Bearer; Enabled for Cookies   |
-| 3  | Algorithm Restrictions      | 'none' algorithm banned; strict RS256/ES256 enforced |
-| 4  | Session Fixation Protection | changeSessionId() enforced; Concurrent sessions capped|
-| 5  | Password Hashing Sized      | Argon2id or BCrypt (cost 12) verified                |
-| 6  | Security Headers Enforced   | HSTS (1 yr), CSP (frame-ancestors), nosniff active   |
-| 7  | Actuator Port Isolation     | Management endpoints bound to internal port 8081     |
-| 8  | Rate Limiting & DoS Guard   | Token bucket login rate limiting; max header size 8KB|
-| 9  | Method Security Boundaries  | @EnableMethodSecurity active; SpEL validated         |
-| 10 | Audit Logging Active        | Async listeners recording all auth failures & IP     |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-```
+| Gate # | Security Gate | Production Standard Requirement | Failure Consequence & Latent Vulnerability Risk |
+|:---:|---|---|---|
+| **1** | **Zero Default Passwords** | Default passwords disabled; credentials injected via HashiCorp Vault / AWS Secrets Manager | Prevents automated credential scraping and default-password takeover attacks. |
+| **2** | **CSRF Policy Verified** | Disabled for stateless Bearer token APIs; strictly enabled for browser cookie-based applications | Prevents cross-site request forgery attacks on browser sessions while avoiding unnecessary token validation on pure REST APIs. |
+| **3** | **Algorithm Restrictions** | `alg: "none"` strictly banned; cryptographic algorithms restricted to RS256, ES256, or Ed25519 | Blocks signature evasion exploits where attackers forge unsigned JWT tokens with `alg: "none"`. |
+| **4** | **Session Fixation Protection** | `sessionManagement().sessionFixation().changeSessionId()` enforced; concurrent sessions capped | Prevents session hijacking where an attacker fixes a victim's session ID prior to authentication. |
+| **5** | **Password Hashing Sized** | Argon2id (memory 64MB, iterations 3) or BCrypt (cost factor 12) verified | Resists GPU/ASIC offline dictionary and brute-force attacks against compromised credential databases. |
+| **6** | **Security Headers Enforced** | HSTS (max-age=31536000; includeSubDomains), CSP (`frame-ancestors 'none'`), `X-Content-Type-Options: nosniff` | Defends user agents against man-in-the-middle SSL stripping, clickjacking, and MIME-type confusion attacks. |
+| **7** | **Actuator Port Isolation** | Management endpoints bound strictly to internal private network port (e.g. `management.server.port=8081`) | Prevents public internet access to sensitive diagnostic data (`/env`, `/heapdump`, `/beans`). |
+| **8** | **Rate Limiting & DoS Guard** | Token bucket rate limiting applied to auth endpoints; maximum HTTP header size capped at 8KB | Thwarts distributed brute-force credential stuffing and slowloris header flooding attacks. |
+| **9** | **Method Security Boundaries** | `@EnableMethodSecurity(prePostEnabled = true)` active; all SpEL expressions validated | Enforces defense-in-depth authorization directly at business layer, preventing bypasses from rogue controller routes. |
+| **10** | **Audit Logging Active** | Asynchronous listeners recording all auth failures, source IP, user agent, and timestamp | Ensures forensic auditability for SOC teams during incident response and compliance certifications (SOC2, PCI-DSS). |
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "If an application passes all 10 gates, what runtime threat can still compromise the application?"

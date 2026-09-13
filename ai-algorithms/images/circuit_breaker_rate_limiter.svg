@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 680" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgResil" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1120" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="emeraldGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="redGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#b91c1c" />
+    </linearGradient>
+    <linearGradient id="amberGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1150" height="680" fill="url(#bgResil)" />
+  <rect x="15" y="15" width="1120" height="650" rx="12" fill="none" stroke="#1e293b" stroke-width="2" />
+
+  <!-- Title -->
+  <text x="575" y="55" fill="#f8fafc" font-family="'Segoe UI', sans-serif" font-size="22" font-weight="bold" text-anchor="middle">DISTRIBUTED RESILIENCY ENGINES: CIRCUIT BREAKER &amp; RATE LIMITER</text>
+  <text x="575" y="80" fill="#94a3b8" font-family="'Segoe UI', sans-serif" font-size="13" text-anchor="middle">PRODUCTION FAULT-TOLERANCE PATTERNS IN PYTHON 3.12+ AND DISTRIBUTED REDIS</text>
+
+  <!-- Left: Circuit Breaker State Machine -->
+  <g transform="translate(50, 110)">
+    <rect width="500" height="520" rx="10" fill="#0f172a" stroke="#334155" stroke-width="1.5" />
+    <text x="250" y="38" fill="#38bdf8" font-size="16" font-weight="bold" text-anchor="middle">CIRCUIT BREAKER STATE MACHINE</text>
+
+    <!-- State: CLOSED -->
+    <rect x="160" y="70" width="180" height="70" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="2" />
+    <text x="250" y="100" fill="#a7f3d0" font-size="16" font-weight="bold" text-anchor="middle">CLOSED</text>
+    <text x="250" y="122" fill="#6ee7b7" font-size="11" text-anchor="middle">Normal Flow (Traffic Allowed)</text>
+
+    <!-- Arrow down to OPEN -->
+    <line x1="250" y1="140" x2="250" y2="230" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 2" />
+    <text x="340" y="185" fill="#f87171" font-size="11" text-anchor="middle">Failures &gt; Threshold (e.g. 5)</text>
+
+    <!-- State: OPEN -->
+    <rect x="160" y="230" width="180" height="70" rx="8" fill="#7f1d1d" stroke="#ef4444" stroke-width="2" />
+    <text x="250" y="260" fill="#fecaca" font-size="16" font-weight="bold" text-anchor="middle">OPEN</text>
+    <text x="250" y="282" fill="#fca5a5" font-size="11" text-anchor="middle">Fast-Fail (Calls Shed Instantly)</text>
+
+    <!-- Arrow to HALF-OPEN -->
+    <line x1="250" y1="300" x2="250" y2="380" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4 2" />
+    <text x="330" y="345" fill="#fbbf24" font-size="11" text-anchor="middle">Cooldown Expired (e.g. 30s)</text>
+
+    <!-- State: HALF-OPEN -->
+    <rect x="160" y="380" width="180" height="70" rx="8" fill="#78350f" stroke="#f59e0b" stroke-width="2" />
+    <text x="250" y="410" fill="#fef3c7" font-size="16" font-weight="bold" text-anchor="middle">HALF-OPEN</text>
+    <text x="250" y="432" fill="#fde68a" font-size="11" text-anchor="middle">Trial Probing (Single Request)</text>
+
+    <!-- Return paths -->
+    <path d="M 160 415 L 60 415 L 60 105 L 160 105" fill="none" stroke="#10b981" stroke-width="2" />
+    <text x="95" y="260" fill="#34d399" font-size="11" text-anchor="middle" transform="rotate(-90 95 260)">Trial Succeeds (Reset)</text>
+
+    <path d="M 340 415 L 430 415 L 430 265 L 340 265" fill="none" stroke="#ef4444" stroke-width="2" />
+    <text x="445" y="340" fill="#f87171" font-size="11" text-anchor="middle" transform="rotate(90 445 340)">Trial Fails</text>
+  </g>
+
+  <!-- Right: Distributed Rate Limiter -->
+  <g transform="translate(600, 110)">
+    <rect width="500" height="520" rx="10" fill="#0f172a" stroke="#334155" stroke-width="1.5" />
+    <text x="250" y="38" fill="#34d399" font-size="16" font-weight="bold" text-anchor="middle">DISTRIBUTED TOKEN BUCKET (REDIS LUA)</text>
+
+    <!-- Bucket Graphic -->
+    <g transform="translate(150, 70)">
+      <polygon points="30,0 170,0 150,150 50,150" fill="#1e293b" stroke="#38bdf8" stroke-width="2" />
+      <path d="M 45 100 Q 100 120 155 100 L 150 150 L 50 150 Z" fill="#0284c7" opacity="0.8" />
+      <text x="100" y="60" fill="#94a3b8" font-size="12" text-anchor="middle">Refill Rate: R tok/s</text>
+      <text x="100" y="130" fill="#f8fafc" font-size="13" font-weight="bold" text-anchor="middle">Tokens: 85 / 100</text>
+    </g>
+
+    <!-- Incoming and outgoing -->
+    <rect x="30" y="250" width="180" height="60" rx="6" fill="#1e293b" stroke="#6366f1" />
+    <text x="120" y="275" fill="#a5b4fc" font-size="12" font-weight="bold" text-anchor="middle">Incoming Request</text>
+    <text x="120" y="295" fill="#94a3b8" font-size="11" text-anchor="middle">User: 192.168.1.5</text>
+
+    <line x1="210" y1="280" x2="280" y2="280" stroke="#cbd5e1" stroke-width="2" />
+    
+    <rect x="280" y="250" width="190" height="60" rx="6" fill="#1e293b" stroke="#10b981" />
+    <text x="375" y="275" fill="#6ee7b7" font-size="12" font-weight="bold" text-anchor="middle">Tokens Available?</text>
+    <text x="375" y="295" fill="#34d399" font-size="11" text-anchor="middle">YES -&gt; Forward (200 OK)</text>
+
+    <!-- Rejection path -->
+    <rect x="280" y="330" width="190" height="50" rx="6" fill="#1e293b" stroke="#ef4444" />
+    <text x="375" y="355" fill="#fca5a5" font-size="12" font-weight="bold" text-anchor="middle">NO -&gt; Reject (429)</text>
+    <text x="375" y="370" fill="#94a3b8" font-size="10" text-anchor="middle">Retry-After Header</text>
+
+    <!-- Lua Script Callout -->
+    <rect x="30" y="405" width="440" height="95" rx="6" fill="#020617" stroke="#334155" />
+    <text x="45" y="428" fill="#38bdf8" font-size="11" font-family="monospace">redis.call('HMGET', key, 'tokens', 'last_updated')</text>
+    <text x="45" y="448" fill="#94a3b8" font-size="11" font-family="monospace">current_tokens = math.min(capacity, tokens + delta * rate)</text>
+    <text x="45" y="468" fill="#34d399" font-size="11" font-family="monospace">if current_tokens &gt;= 1 then decrement; return 1 else return 0</text>
+    <text x="45" y="488" fill="#f59e0b" font-size="10">Guarantees 100% atomic execution without distributed race conditions.</text>
+  </g>
+</svg>

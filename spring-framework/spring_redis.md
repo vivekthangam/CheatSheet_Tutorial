@@ -57,20 +57,13 @@ Before configuring caching in Spring Boot 3, engineers must understand in-memory
   - The first time someone asks, you walk to the basement once and write the password on a sticky note pasted right next to your keyboard (**In-Memory RAM**).
   - The next 5,000 customers get their answer in **$<1$ millisecond** without you ever leaving your chair!
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          CACHE-ASIDE PATTERN                           │
-│                                                                        │
-│   Client Request ──► Check Redis Cache                                 │
-│                            │                                           │
-│           ┌────────────────┴────────────────┐                          │
-│           ▼                                 ▼                          │
-│     [ Cache HIT ]                     [ Cache MISS ]                   │
-│     Returns in <1ms!                  1. Query PostgreSQL              │
-│                                       2. Save in Redis (with TTL)      │
-│                                       3. Return data to client         │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Cache-Aside (Lazy Loading) Execution Matrix
+
+| Request Stage | Cache State | System Behavior & Action Taken | Latency & Database Impact |
+| :--- | :--- | :--- | :--- |
+| **Lookup Phase** | Query Redis via Key | App issues non-blocking in-memory `GET` command | $< 1\text{ms}$; 0 SQL queries generated |
+| **Cache Hit** | Key Present | Returns deserialized value directly to client | Fast path; zero disk I/O, zero database connection pool usage |
+| **Cache Miss** | Key Absent / Expired | 1. Queries primary relational database (PostgreSQL/MySQL)<br>2. Writes result to Redis with configured TTL<br>3. Returns fresh entity to client | Slow path ($10-50\text{ms}$); hydrates cache to protect DB against future stampedes |
 
 ---
 
@@ -197,11 +190,13 @@ public class ProductCatalogService {
 2. **Underlying Algorithm, Data Structure & Design Pattern**:
    - **C-String Limitations**: Standard C strings (`char*`) are null-terminated (`\0`), cannot contain binary data, and calculating length requires $O(N)$ string scans.
    - **Simple Dynamic String (SDS)**:
-     ```
-     +--------+--------+-------+--------------------+---+
-     |  len   | alloc  | flags |   buf ("hello")    | \0|
-     +--------+--------+-------+--------------------+---+
-     ```
+| SDS Memory Field | Field Type & Size | Purpose & Behavioral Mechanics | Algorithmic Complexity |
+| :--- | :--- | :--- | :--- |
+| **`len`** | `uint8_t` to `uint64_t` | Byte length of payload currently stored in buffer | $O(1)$ length calculation (vs $O(N)$ for C `strlen`) |
+| **`alloc`** | `uint8_t` to `uint64_t` | Total memory pre-allocated for the buffer | Enables amortized $O(1)$ appends; prevents constant `realloc()` calls |
+| **`flags`** | 3 bits (`uint8_t`) | Header type discriminator (`sdshdr8`, `sdshdr16`, `sdshdr32`, `sdshdr64`) | Optimizes memory footprint for small keys |
+| **`buf[]`** | Binary byte array | Raw string or serialized payload | Binary-safe: can contain null bytes (`\0`), JSON, or raw images |
+| **`\0`** | 1 byte delimiter | Null terminator appended automatically | Compatible with standard C library `printf` functions |
      - `len`: Length of the string in bytes ($O(1)$ length lookup).
      - `alloc`: Total memory allocated, including unused buffer space (pre-allocation strategy to minimize `realloc()` calls).
      - `flags`: Header type (`sdshdr8`, `sdshdr16`, `sdshdr32`, `sdshdr64`) to minimize memory header overhead.
@@ -688,22 +683,15 @@ public class ProductCatalogService {
 
 ## 3.1 Lettuce Connection Pipeline & Asynchronous Dispatch
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        LETTUCE CLIENT ARCHITECTURE                     │
-│                                                                        │
-│   Java Thread 1 ──► [ Command Dispatcher ]                             │
-│   Java Thread 2 ──►          │                                         │
-│   Java Thread 3 ──►          ▼                                         │
-│                    [ Shared Netty EventLoop ]                          │
-│                              │                                         │
-│                              ▼ Multiplexed single TCP Socket           │
-│                    [ Redis Server Instance ]                           │
-│                              │                                         │
-│                              ▼ Asynchronous Response Frame             │
-│                    [ CompletableFuture callback ]                      │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Lettuce Multiplexed Client Architecture
+
+| Architecture Layer | Core Component | Mechanics & Concurrency Behavior | Throughput & Thread Benefit |
+| :--- | :--- | :--- | :--- |
+| **Caller Layer** | Java Threads (1..N) | Concurrent callers invoke `RedisTemplate` / reactive commands without blocking | Lock-free; callers register callbacks and continue execution |
+| **Dispatch Layer** | `CommandDispatcher` | Enqueues outbound command frames onto thread-safe internal queues | Batches pipeline commands automatically under peak load |
+| **Transport Layer** | Shared Netty `EventLoopGroup` | Manages non-blocking I/O over an OS socket selector (`epoll`/`kqueue`) | Multiplexes hundreds of threads across 1 single TCP connection |
+| **Server Layer** | Redis Server Instance | Executes single-threaded event loop operations in memory | Ultra-low context-switching; zero per-thread connection overhead |
+| **Response Layer** | `CompletableFuture` Callback | Decodes binary RESP2/RESP3 response frames and resolves caller promises | Asynchronous non-blocking return with zero thread pinning |
 
 ---
 

@@ -9,30 +9,21 @@
 
 ## Architecture Blueprint: The Kafka Distributed Event System
 
-```
-+-----------------------------------------------------------------------------------------------------+
-|                              Apache Kafka Distributed Architecture                                   |
-|                                                                                                      |
-|  Producer Application                 Kafka Cluster                  Consumer Application           |
-|  +---------------------------+   +--------------------------------+   +---------------------------+  |
-|  |  KafkaTemplate            |   |  Broker 1 (Leader: P0, P2)     |   |  @KafkaListener           |  |
-|  |  └─ ProducerFactory       |   |  ├─ Topic: orders              |   |  └─ ConcurrentMessageLPC  |  |
-|  |     └─ KafkaProducer      |   |  │   ├─ Partition 0 (P0)       |   |     └─ KafkaMessageLL     |  |
-|  |        ├─ Serializer      |   |  │   └─ Partition 2 (P2)       |   |                           |  |
-|  |        ├─ Partitioner     |   |  └─ Page Cache + Segment Files |   |  Consumer Group:           |  |
-|  |        ├─ RecordAccumul.  |   |                                |   |  "order-processors"        |  |
-|  |        │  (buffer.memory) |   |  Broker 2 (Leader: P1)         |   |  ├─ Consumer 1 → P0       |  |
-|  |        └─ Sender Thread   |   |  ├─ Topic: orders              |   |  ├─ Consumer 2 → P1       |  |
-|  |           └─ I/O Selector |   |  │   └─ Partition 1 (P1)       |   |  └─ Consumer 3 → P2       |  |
-|  +---------------------------+   +--------------------------------+   +---------------------------+  |
-|                                                                                                      |
-|  Key Metrics to Monitor:                                                                             |
-|  • consumer_lag (LEO - committed_offset)      ← Falling behind?                                     |
-|  • records_sent_rate (msg/sec)                ← Throughput healthy?                                  |
-|  • request_latency_avg (ms)                   ← Broker responding?                                   |
-|  • rebalance_rate (rebalances/sec)            ← Stability issue?                                     |
-+-----------------------------------------------------------------------------------------------------+
-```
+> **Kafka Distributed Event Pipeline**:  
+> `[Producer: KafkaTemplate]` ──(`RecordAccumulator` / NIO Sockets)──► `[Kafka Brokers: Leaders P0, P1, P2 + Page Cache]` ──(Consumer Group Polling)──► `[Consumer: @KafkaListener]`
+
+| Subsystem Layer | Core Primitives & Components | Wire Protocol & Runtime Mechanics | Reliability & Performance Characteristics |
+|---|---|---|---|
+| **Producer Application** | `KafkaTemplate`, `ProducerFactory`, `RecordAccumulator`, `Sender` thread | Micro-batches records by topic-partition in `RecordAccumulator` buffer; background `Sender` thread flushes via non-blocking Java NIO socket selector. | Governed by `linger.ms` (batching delay) and `batch.size` (16KB default); memory bounded by `buffer.memory` (32MB). |
+| **Kafka Cluster Brokers** | Topic Partitions, Log Segments (`.log`, `.index`, `.timeindex`), OS Page Cache | Leader broker receives append-only record batches; writes directly to OS Page Cache and mirrors to In-Sync Replicas (ISR). | Zero-copy transfer (`sendfile()` syscall); disk sequentially appended; reads served hot from memory without user-space copying. |
+| **Consumer Application** | `@KafkaListener`, `ConcurrentMessageListenerContainer`, `KafkaConsumer` | Polling loop fetches batches (`poll(Duration)`); manages heartbeat thread (`heartbeat.interval.ms`) and partition revoking/assigning. | Scaled horizontally up to partition count; offsets committed synchronously or asynchronously via manual acknowledgments. |
+
+| Metric Name | Calculation / Source | SRE Diagnostic Meaning | Healthy Production Threshold |
+|---|---|---|---|
+| `records-lag-max` (`consumer_lag`) | $\text{LogEndOffset (LEO)} - \text{Committed Offset}$ | Measures backlog of unprocessed records waiting in broker partitions. | Near zero under steady state; alert if growing continuously > 5,000. |
+| `record-send-rate` | Records dispatched per second from `KafkaProducer` | Confirms outbound publishing health and pipeline throughput. | Matches expected business transaction load. |
+| `request-latency-avg` | Broker round-trip response time (ms) | Measures network latency and broker disk/page-cache write performance. | $< 15\text{ms}$ on low-latency LAN clusters. |
+| `rebalance-rate` | Partition rebalances per minute | Detects consumer group instability or thread poll timeouts (`max.poll.interval.ms`). | 0 during steady-state operation; alerts immediately on $>0$. |
 
 ---
 
@@ -413,19 +404,18 @@ When `enable.idempotence = true` (default in Kafka 3.0+):
 2. **Sequence Numbers**: The producer assigns a monotonic sequence number ($0, 1, 2, ...$) to every record per topic-partition.
 3. **Broker Deduplication Table**: The partition leader broker stores the last 5 sequence numbers received from each PID in memory and persistent snapshot files.
 4. **Duplicate Detection**: If the broker receives a record with a sequence number $\le$ the last committed sequence for that PID, the broker **acknowledges the message but discards the payload**, preventing duplicate writes!
+> [!NOTE]
+> **Kafka Idempotent Producer Deduplication Protocol Pipeline**:
+> `[Producer (PID=99)]` ➔ **Transmission 1** ➔ `[Record (PID=99, Seq=0)]` ➔ `[Leader Broker commits offset & updates PID state: LastSeq=0]` ➔ `[Producer receives ACK]` ➔ **Transmission 2** ➔ `[Record (PID=99, Seq=1)]` ➔ `[Leader Broker commits LastSeq=1, emits ACK (Dropped by network outage)]` ➔ **Transmission 3 (Client Retry)** ➔ `[Producer resends Record (PID=99, Seq=1)]` ➔ `[Leader Broker evaluates Seq 1 <= LastSeq 1: Discards payload, re-emits ACK to unblock client]`
 
-```
-[Producer]                                             [Broker Partition Leader]
-    │                                                              │
-    │ ─── Record (PID=99, Seq=0) ────────────────────────────────► │ (Stored! Last Seq = 0)
-    │ ◄── ACK ──────────────────────────────────────────────────── │
-    │                                                              │
-    │ ─── Record (PID=99, Seq=1) ────────────────────────────────► │ (Stored! Last Seq = 1)
-    │ ✖ (Network drops ACK!)                                       │
-    │                                                              │
-    │ ─── RETRY: Record (PID=99, Seq=1) ─────────────────────────► │ (Detects Seq 1 <= Last Seq 1!)
-    │ ◄── ACK (Success sent! Payload discarded, no duplicate!) ─── │
-```
+| Transmission Step | Origin / Role | Wire Message Payload | Broker Internal State Engine | Broker Action Taken | Consistency Guarantee |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. First Send** | Producer | `Record(PID=99, Seq=0)` | Partition metadata table checks PID 99 | Writes record to partition active segment log; updates in-memory cache `LastSeq = 0`. | Zero duplication. |
+| **2. First ACK** | Broker Partition Leader | `ProduceResponse(Offset=101, Err=NONE)` | Cache matches PID 99 | Returns TCP ACK packet to Producer; Producer increments sequence counter to 1. | Exactly-once delivery within PID session. |
+| **3. Second Send** | Producer | `Record(PID=99, Seq=1)` | Partition metadata table checks PID 99 | Writes record to disk; updates in-memory cache `LastSeq = 1`; emits ACK. | Log appended successfully. |
+| **4. Network Partition** | Transport Layer | Corrupted / Dropped TCP packet | Broker assumes client received ACK | ACK lost in transit; client wait times out (`request.timeout.ms`). | At-least-once retry triggered. |
+| **5. Producer Retry** | Producer Retries | `Record(PID=99, Seq=1)` | Evaluates incoming `Seq=1` against `LastSeq=1` | **Deduplication Triggered**: Broker detects identical sequence, silently drops duplicated payload, re-emits ACK. | **Zero log duplication**; offsets remain consecutive and idempotent. |
+
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Does an idempotent producer guarantee deduplication across producer application restarts?"
@@ -1857,16 +1847,12 @@ You are certifying a critical core banking transaction publisher where losing ev
 ##### 3. Standout Technical Answer
 To achieve mathematical **Zero Data Loss**, all 4 gates must be configured in unison:
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  Zero Data Loss Architecture Matrix                                      |
-+---+──────────────────────────────────────────+──────────────────────────────────────────+
-| 1 | Producer: acks = all (-1)                | Wait for all in-sync replicas to confirm |
-| 2 | Broker: min.insync.replicas = 2          | Require at least 2 replicas to persist   |
-| 3 | Broker: default.replication.factor = 3   | Maintain 3 copies across distinct racks  |
-| 4 | Broker: unclean.leader.election = false  | Never elect an out-of-sync node as leader|
-+---+──────────────────────────────────────────+──────────────────────────────────────────+
-```
+| Priority Gate # | Architectural Layer & Property | Production Setting | Operational Guarantee & Failure Mode Defeated |
+|:---:|---|---|---|
+| **1** | **Producer**: `acks` | `all` (or `-1`) | Publisher waits for full confirmation from the leader and all currently in-sync replicas before considering the produce request successful. |
+| **2** | **Broker**: `min.insync.replicas` | `2` | Broker rejects produce requests (`NotEnoughReplicasException`) if fewer than 2 ISR nodes are online, preventing single-replica split-brain writes. |
+| **3** | **Broker**: `default.replication.factor` | `3` | Maintains 3 physical partition copies across independent failure domains / availability zones, allowing survivability during a complete node loss. |
+| **4** | **Broker**: `unclean.leader.election.enable` | `false` | Forbids out-of-sync replicas from ever becoming partition leader, eliminating silent message loss and timeline truncation. |
 
 ```java
 // Production Verification Runner:
@@ -1959,16 +1945,16 @@ Increasing `message.max.bytes` to 50MB is dangerous: it exhausts broker JVM dire
 1. The producer uploads the 50MB payload to AWS S3 or Blob Storage.
 2. The producer publishes a lightweight Kafka message containing only the S3 URL pointer (the **Claim Check**) and event metadata.
 3. The consumer reads the pointer from Kafka and downloads the 50MB payload directly from S3.
+> [!NOTE]
+> **Claim Check Pattern Execution Pipeline**:
+> `[Producer]` ➔ **Step 1: Out-of-Band Object Store Upload** ➔ `[AWS S3 / Cloud Blob Storage (50MB Payload)]` ➔ **Step 2: Pointer Generation** ➔ `[Producer publishes ClaimCheckEvent { s3Url, size, checksum }]` ➔ `[Kafka Topic]` ➔ **Step 3: Event Stream Consumption** ➔ `[Consumer receives ClaimCheckEvent]` ➔ **Step 4: Out-of-Band Hydration** ➔ `[Consumer fetches 50MB Payload directly from S3]`
 
-```
-[Producer] ──(1. Upload 50MB file)──────────────────────────► [AWS S3 / Blob Storage]
-    │                                                                   ▲
-    └───(2. Publish Claim Check: { s3Url: "s3://..." })──► [Kafka]     │
-                                                              │         │
-[Consumer] ◄──(3. Consume Claim Check)────────────────────────┘         │
-    │                                                                   │
-    └───(4. Download 50MB payload directly)─────────────────────────────┘
-```
+| Stage | Operation Type | Network & Wire Transport | Latency Profile | Fault Tolerance & Consistency |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Large Object Store Upload** | Multi-part Upload | HTTPS / TLS 1.3 to AWS S3 / Cloud Blob Storage | $50\text{ms} - 250\text{ms}$ (parallel S3 chunks) | S3 99.999999999% (11 9's) durability; upload retry with exponential backoff. |
+| **2. Claim Check Event Publish** | High-Throughput Event Ingestion | Binary TCP wire protocol to Kafka Broker (Partition Leader) | $< 5\text{ms}$ ($< 1\text{KB}$ record size) | Zero JVM heap bloat, no broker disk saturation, preserves Kafka partition throughput. |
+| **3. Claim Check Event Ingestion** | Batch / Real-time Poll | Long-poll binary TCP fetch from Kafka Broker | $< 2\text{ms}$ | Consumer reads lightweight pointer, commits offset without memory pressure. |
+| **4. Out-of-Band Payload Download** | Direct Stream / Ephemeral Buffer | HTTPS / TLS 1.3 S3 GET stream directly to Consumer disk/memory | Dependent on network bandwidth | Streaming chunk download; failed downloads handled via retry policy or DLT. |
 
 ```java
 public record ClaimCheckEvent(String eventId, String s3Bucket, String s3Key, long fileSize) {}
@@ -2298,24 +2284,18 @@ You are the Principal Distributed Systems Architect conducting the final Go/No-G
 ##### 3. Standout Technical Answer
 To certify an Apache Kafka event-driven system for enterprise production, it must pass this **10-Point Certification Gate**:
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  Enterprise Kafka Production Gate Checklist                             |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| #  | Verification Gate           | Production Standard Requirement                      |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| 1  | Zero Data Loss Producer     | acks=all, min.insync.replicas=2, retries=MAX, idemp=T|
-| 2  | Poison Pill Guard           | ErrorHandlingDeserializer configured with DLT route  |
-| 3  | Zero-Downtime Rebalance     | CooperativeStickyAssignor active across all groups   |
-| 4  | Manual Offset Control       | enable.auto.commit=false; AckMode.MANUAL_IMMEDIATE   |
-| 5  | Processing Window Sizing    | max.poll.records tuned to finish in < 30% of timeout |
-| 6  | Deadlock Protection         | Socket/DB timeouts strictly < max.poll.interval.ms   |
-| 7  | Schema Governance           | Avro Schema Registry active with FULL compatibility  |
-| 8  | Observability & Alerting    | Consumer lag exported to Prometheus; alerts at >10k  |
-| 9  | Security Verification       | SASL/SCRAM + TLS 1.3 enforced; strict topic ACLs     |
-| 10 | Graceful Pod Draining       | server.shutdown: graceful + 30s termination grace    |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-```
+| Gate # | Verification Gate | Production Standard Requirement | Failure Consequence & Latent Incident Risk |
+|:---:|---|---|---|
+| **1** | **Zero Data Loss Producer** | `acks=all`, `min.insync.replicas=2`, `retries=MAX_VALUE`, `enable.idempotence=true` | Eliminates lost writes and duplicate delivery during transient broker disconnects or leader elections. |
+| **2** | **Poison Pill Guard** | `ErrorHandlingDeserializer` configured wrapping key/value deserializers with DLT routing | Prevents malformed or non-deserializable JSON/Avro payloads from permanently jamming the consumer partition. |
+| **3** | **Zero-Downtime Rebalance** | `partition.assignment.strategy=CooperativeStickyAssignor` active across all consumer groups | Eliminates "stop-the-world" consumer pauses by incrementally revoking only affected partitions during scaling. |
+| **4** | **Manual Offset Control** | `enable.auto.commit=false` strictly enforced; `AckMode.MANUAL_IMMEDIATE` used | Guarantees at-least-once processing; prevents offsets from being committed before business processing completes. |
+| **5** | **Processing Window Sizing** | `max.poll.records` tuned such that worst-case batch latency finishes in $<30\%$ of `max.poll.interval.ms` | Avoids false-positive consumer eviction, unwanted group rebalances, and cyclic processing loops. |
+| **6** | **Deadlock Protection** | Downstream HTTP/Database connection and socket timeouts configured strictly $< \text{max.poll.interval.ms}$ | Prevents stalled external database calls from starving the consumer thread and triggering rebalance storms. |
+| **7** | **Schema Governance** | Schema Registry active with `BACKWARD` or `FULL` compatibility rules | Prevents schema breaking changes from crashing downstream microservices during independent deployments. |
+| **8** | **Observability & Alerting** | `records-lag-max` exported to Prometheus/Datadog; alerts triggered at $>10,000$ messages | Detects downstream consumer bottlenecking, thread starvation, or deadlocks before SLAs are breached. |
+| **9** | **Security & Transport** | SASL/SCRAM-SHA-512 or mTLS authentication enforced; TLS 1.3 encryption on wire; strict topic ACLs | Prevents unauthorized message injection, packet sniffing, or unauthorized topic reading across environments. |
+| **10** | **Graceful Pod Draining** | `server.shutdown=graceful` with 30s Kubernetes `terminationGracePeriodSeconds` | Allows in-flight record batches to finish and offsets to commit cleanly before SIGKILL kills pod containers. |
 
 ```java
 // Production Sanity Auditor Bean:

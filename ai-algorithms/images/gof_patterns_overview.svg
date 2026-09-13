@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="700" fill="url(#bgGrad)" />
+  <rect x="15" y="15" width="1170" height="670" rx="12" fill="none" stroke="#1e293b" stroke-width="2" />
+
+  <!-- Title Banner -->
+  <rect x="250" y="30" width="700" height="65" rx="10" fill="#1e293b" stroke="url(#cyanGrad)" stroke-width="2" filter="url(#glow)" />
+  <text x="600" y="65" fill="#f8fafc" font-family="'Segoe UI', system-ui, sans-serif" font-size="24" font-weight="bold" text-anchor="middle">GANG OF FOUR (GoF) 23 DESIGN PATTERNS</text>
+  <text x="600" y="85" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" text-anchor="middle">PYTHON 3.12+ ARCHITECTURAL REFERENCE &amp; SYSTEM DESIGN BLUEPRINT</text>
+
+  <!-- Column 1: Creational Patterns -->
+  <g transform="translate(40, 120)">
+    <rect width="350" height="540" rx="10" fill="#0f172a" stroke="#10b981" stroke-width="2" />
+    <rect x="0" y="0" width="350" height="45" rx="10" fill="url(#greenGrad)" />
+    <text x="175" y="28" fill="#ffffff" font-family="'Segoe UI', system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">📦 CREATIONAL PATTERNS (5)</text>
+
+    <!-- Singleton -->
+    <rect x="15" y="60" width="320" height="80" rx="6" fill="#1e293b" stroke="#334155" />
+    <text x="25" y="85" fill="#34d399" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="bold">1. Singleton</text>
+    <text x="25" y="105" fill="#cbd5e1" font-family="'Segoe UI', system-ui, sans-serif" font-size="12">Ensures exactly one instance with thread-safe</text>
+    <text x="25" y="122" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="11">global access. (Metaclass / Module-level)</text>
+
+    <!-- Factory Method -->
+    <rect x="15" y="150" width="320" height="80" rx="6" fill="#1e293b" stroke="#334155" />
+    <text x="25" y="175" fill="#34d399" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="bold">2. Factory Method</text>
+    <text x="25" y="195" fill="#cbd5e1" font-family="'Segoe UI', system-ui, sans-serif" font-size="12">Defines creation interface; subclasses decide</text>
+    <text x="25" y="212" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="11">which concrete class to instantiate.</text>
+
+    <!-- Abstract Factory -->
+    <rect x="15" y="240" width="320" height="80" rx="6" fill="#1e293b" stroke="#334155" />
+    <text x="25" y="265" fill="#34d399" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="bold">3. Abstract Factory</text>
+    <text x="25" y="285" fill="#cbd5e1" font-family="'Segoe UI', system-ui, sans-serif" font-size="12">Creates families of related or dependent objects</text>
+    <text x="25" y="302" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="11">without specifying concrete classes.</text>
+
+    <!-- Builder -->
+    <rect x="15" y="330" width="320" height="80" rx="6" fill="#1e293b" stroke="#334155" />
+    <text x="25" y="355" fill="#34d399" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="bold">4. Builder</text>
+    <text x="25" y="375" fill="#cbd5e1" font-family="'Segoe UI', system-ui, sans-serif" font-size="12">Constructs complex objects step-by-step fluently,</text>
+    <text x="25" y="392" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="11">separating assembly from representation.</text>
+
+    <!-- Prototype -->
+    <rect x="15" y="420" width="320" height="80" rx="6" fill="#1e293b" stroke="#334155" />
+    <text x="25" y="445" fill="#34d399" font-family="'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="bold">5. Prototype</text>
+    <text x="25" y="465" fill="#cbd5e1" font-family="'Segoe UI', system-ui, sans-serif" font-size="12">Clones existing objects (`copy.deepcopy`)</text>
+    <text x="25" y="482" fill="#94a3b8" font-family="'Segoe UI', system-ui, sans-serif" font-size="11">without depending on their concrete classes.</text>
+  </g>
+
+  <!-- Column 2: Structural Patterns -->
+  <g transform="translate(425, 120)">
+    <rect width="350" height="540" rx="10" fill="#0f172a" stroke="#6366f1" stroke-width="2" />
+    <rect x="0" y="0" width="350" height="45" rx="10" fill="url(#purpleGrad)" />
+    <text x="175" y="28" fill="#ffffff" font-family="'Segoe UI', system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">🏗️ STRUCTURAL PATTERNS (7)</text>
+
+    <!-- List of 7 Patterns -->
+    <g transform="translate(15, 52)">
+      <!-- Adapter -->
+      <rect x="0" y="0" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="22" fill="#a78bfa" font-weight="bold" font-size="13">6. Adapter</text>
+      <text x="12" y="42" fill="#94a3b8" font-size="11">Bridges incompatible interfaces into expected API.</text>
+
+      <!-- Bridge -->
+      <rect x="0" y="68" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="90" fill="#a78bfa" font-weight="bold" font-size="13">7. Bridge</text>
+      <text x="12" y="110" fill="#94a3b8" font-size="11">Decouples abstraction hierarchy from implementation.</text>
+
+      <!-- Composite -->
+      <rect x="0" y="136" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="158" fill="#a78bfa" font-weight="bold" font-size="13">8. Composite</text>
+      <text x="12" y="178" fill="#94a3b8" font-size="11">Composes trees of objects uniformly (leaves &amp; branches).</text>
+
+      <!-- Decorator -->
+      <rect x="0" y="204" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="226" fill="#a78bfa" font-weight="bold" font-size="13">9. Decorator</text>
+      <text x="12" y="246" fill="#94a3b8" font-size="11">Adds dynamic behavior wrapping target without subclassing.</text>
+
+      <!-- Facade -->
+      <rect x="0" y="272" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="294" fill="#a78bfa" font-weight="bold" font-size="13">10. Facade</text>
+      <text x="12" y="314" fill="#94a3b8" font-size="11">Provides simple unified entry point over complex subsystems.</text>
+
+      <!-- Flyweight -->
+      <rect x="0" y="340" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="362" fill="#a78bfa" font-weight="bold" font-size="13">11. Flyweight</text>
+      <text x="12" y="382" fill="#94a3b8" font-size="11">Shares immutable intrinsic state to save RAM (1M items).</text>
+
+      <!-- Proxy -->
+      <rect x="0" y="408" width="320" height="60" rx="5" fill="#1e293b" stroke="#334155" />
+      <text x="12" y="430" fill="#a78bfa" font-weight="bold" font-size="13">12. Proxy</text>
+      <text x="12" y="450" fill="#94a3b8" font-size="11">Surrogate controlling access, caching, or circuit-breaking.</text>
+    </g>
+  </g>
+
+  <!-- Column 3: Behavioral Patterns -->
+  <g transform="translate(810, 120)">
+    <rect width="350" height="540" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+    <rect x="0" y="0" width="350" height="45" rx="10" fill="url(#amberGrad)" />
+    <text x="175" y="28" fill="#ffffff" font-family="'Segoe UI', system-ui, sans-serif" font-size="16" font-weight="bold" text-anchor="middle">⚡ BEHAVIORAL PATTERNS (11)</text>
+
+    <g transform="translate(15, 52)">
+      <rect x="0" y="0" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="24" fill="#fcd34d" font-weight="bold" font-size="12">13. Chain of Responsibility</text>
+      <text x="175" y="24" fill="#94a3b8" font-size="11">Sequential filter pipelines</text>
+
+      <rect x="0" y="42" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="66" fill="#fcd34d" font-weight="bold" font-size="12">14. Command</text>
+      <text x="130" y="66" fill="#94a3b8" font-size="11">Encapsulates actions &amp; sagas</text>
+
+      <rect x="0" y="84" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="108" fill="#fcd34d" font-weight="bold" font-size="12">15. Interpreter</text>
+      <text x="140" y="108" fill="#94a3b8" font-size="11">Grammar parsing &amp; DSL trees</text>
+
+      <rect x="0" y="126" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="150" fill="#fcd34d" font-weight="bold" font-size="12">16. Iterator</text>
+      <text x="120" y="150" fill="#94a3b8" font-size="11">Lazy traversal (__iter__, __next__)</text>
+
+      <rect x="0" y="168" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="192" fill="#fcd34d" font-weight="bold" font-size="12">17. Mediator</text>
+      <text x="130" y="192" fill="#94a3b8" font-size="11">Decouples N-to-N communications</text>
+
+      <rect x="0" y="210" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="234" fill="#fcd34d" font-weight="bold" font-size="12">18. Memento</text>
+      <text x="130" y="234" fill="#94a3b8" font-size="11">Snapshots for undo / recovery</text>
+
+      <rect x="0" y="252" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="276" fill="#fcd34d" font-weight="bold" font-size="12">19. Observer</text>
+      <text x="130" y="276" fill="#94a3b8" font-size="11">Pub/Sub event notifications</text>
+
+      <rect x="0" y="294" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="318" fill="#fcd34d" font-weight="bold" font-size="12">20. State</text>
+      <text x="110" y="318" fill="#94a3b8" font-size="11">Finite state machines</text>
+
+      <rect x="0" y="336" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="360" fill="#fcd34d" font-weight="bold" font-size="12">21. Strategy</text>
+      <text x="125" y="360" fill="#94a3b8" font-size="11">Interchangeable algorithms</text>
+
+      <rect x="0" y="378" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="402" fill="#fcd34d" font-weight="bold" font-size="12">22. Template Method</text>
+      <text x="170" y="402" fill="#94a3b8" font-size="11">Fixed pipeline skeletons</text>
+
+      <rect x="0" y="420" width="320" height="38" rx="4" fill="#1e293b" />
+      <text x="10" y="444" fill="#fcd34d" font-weight="bold" font-size="12">23. Visitor</text>
+      <text x="120" y="444" fill="#94a3b8" font-size="11">Operations decoupled from nodes</text>
+    </g>
+  </g>
+</svg>

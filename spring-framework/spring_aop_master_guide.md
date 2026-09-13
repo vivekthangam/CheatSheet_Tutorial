@@ -38,22 +38,21 @@ Imagine every passenger at an airport is a **Method Call** in your software appl
      - **After Throwing Advice (`@AfterThrowing`):** If a metal detector alarm goes off (an Exception is thrown), the security team intervenes and logs an incident report.
      - **After Returning Advice (`@AfterReturning`):** Once you board successfully, a gate attendant hands you your boarding slip and logs successful completion.
 
-```
-Without AOP (Tangled Concerns):
-┌─────────────────────────────────────────────────────────┐
-│ TransferService.transferMoney()                        │
-│ ├─ Check User Authorization (Security)                 │
-│ ├─ Begin Database Transaction (Data Consistency)       │
-│ ├─ Start Timer Latency Metric (Observability)          │
-│ ├─ >>> EXECUTE WIRE TRANSFER (Core Business Logic) <<< │
-│ ├─ Commit / Rollback Transaction                       │
-│ ├─ Record Latency & Publish Micrometer Metric          │
-│ └─ Write Audit Record to Security Log                  │
-└─────────────────────────────────────────────────────────┘
+### Architectural Contrast: Tangled Concerns vs. Orthogonal Separation
 
-With Spring AOP (Clean Orthogonal Separation):
-[ Caller ] ──► [ Security Proxy ] ──► [ Metric Proxy ] ──► [ Transaction Proxy ] ──► [ Pure Business Method ]
-```
+| Layer / Stage | Tangled Architecture (Without AOP) | Orthogonal Architecture (With Spring AOP) | Responsibility Scope |
+| :--- | :--- | :--- | :--- |
+| **Inbound Call** | Client directly invokes method on business class | Client calls Spring-generated Proxy (`CGLIB` / `JDK`) | Entrypoint encapsulation |
+| **1. Security Check** | Hardcoded inside `transferMoney()` body | Handled by `@Before` / `@Around` Security Aspect | Identity & RBAC verification |
+| **2. Observability** | Hardcoded `System.nanoTime()` calls | Handled by `@Around` Micrometer Aspect | P99 latency tracking & metrics |
+| **3. Transaction** | Manual `EntityTransaction.begin()` boilerplate | Handled by Spring `TransactionInterceptor` | ACID transaction boundary |
+| **4. Core Business** | Submerged under 80% boilerplate logic | **Isolated**: Pure domain method execution | Wire transfer funds mutation |
+| **5. Tx Finalization**| Manual `commit()` / `rollback()` handling | `TransactionInterceptor` commits on return, rolls back on exception | Automatic consistency |
+| **6. Audit & Logs** | Scattered logging statements | Handled by `@AfterReturning` / `@AfterThrowing` | Immutable audit trail |
+
+| Aspect Interception Pipeline Flow |
+| :--- |
+| `[ Client Code ]` ➔ `[ Security Proxy ]` ➔ `[ Metric Proxy ]` ➔ `[ Transaction Proxy ]` ➔ `[ Pure Business Method ]` |
 
 ---
 
@@ -207,21 +206,18 @@ public class MethodExecutionTimerAspect {
 
 # TRACK 2: MASTER JAVA & SPRING AOP PRIMITIVES CATALOG
 
-```
-Spring AOP vs. AspectJ Master Feature Matrix:
-+------------------------------+---------------------------+---------------------------------+
-| Architectural Dimension      | Spring AOP (Proxy-Based)  | AspectJ (Bytecode Weaving)      |
-+------------------------------+---------------------------+---------------------------------+
-| Implementation Mechanism     | JDK Proxy / CGLIB Subclass| Direct Bytecode Manipulation    |
-| Weaving Phase                | Pure Runtime              | Compile-Time, Post-Compile, LTW |
-| Join Point Support           | Method Execution Only     | Method, Field, Constructor, Init|
-| Target Object Requirements   | Must be Spring Bean       | Any Java Object (POJO, new)     |
-| Self-Invocation Interception | ❌ Bypassed               | ✅ Intercepted                  |
-| Final Class/Method Support   | ❌ Not Supported          | ✅ Supported                    |
-| Performance Profile          | Proxy indirection (~10ns) | Near-native JVM direct call     |
-| Tooling & Build Complexity   | Zero (Included in Spring) | Requires ajc compiler or agent  |
-+------------------------------+---------------------------+---------------------------------+
-```
+### Spring AOP vs. AspectJ Master Feature Matrix
+
+| Architectural Dimension | Spring AOP (Proxy-Based) | AspectJ (Bytecode Weaving) |
+| :--- | :--- | :--- |
+| **Implementation Mechanism** | JDK Dynamic Proxy / CGLIB Subclass | Direct Bytecode Manipulation (BCEL / ASM) |
+| **Weaving Phase** | Pure Runtime (IoC bean post-processing) | Compile-Time (CTW), Post-Compile (PCW), Load-Time (LTW) |
+| **Join Point Support** | Method Execution Only | Method, Field Get/Set, Constructor, Class Initialization |
+| **Target Object Requirements** | Must be managed Spring Bean (`@Component`) | Any Java Object (`new` operator, domain models, third-party) |
+| **Self-Invocation Interception** | ❌ Bypassed (`this.method()` bypasses proxy) | ✅ Intercepted (woven directly into bytecode) |
+| **Final Class/Method Support** | ❌ Not Supported (CGLIB cannot subclass `final`) | ✅ Supported (bytecode instrumented directly) |
+| **Performance Profile** | Minimal proxy indirection overhead (~5–10ns) | Near-native JVM direct instruction call (zero overhead) |
+| **Tooling & Build Complexity** | Zero (Built into Spring Framework core) | Requires `ajc` compiler plugin or `-javaagent` JVM flag |
 
 ---
 
@@ -458,27 +454,18 @@ public class AopRuntimeHints implements RuntimeHintsRegistrar {
 
 # TRACK 3: DEEP TECHNICAL INTERNALS & WEAVING ARCHITECTURE
 
-```
-Spring AOP Proxy Interception Pipeline:
-[ Client Code ]
-       │
-       ▼
-[ Proxy Instance (CGLIB / JDK) ]
-       │
-       ▼
-[ Interceptor Chain Query: AdvisedSupport.getInterceptorsAndDynamicInterceptionAdvice() ]
-       │
-       ├─► Interceptor 1: SecurityAspect (MethodSecurityInterceptor)
-       │         │
-       │         ▼
-       ├─► Interceptor 2: Custom Metric Aspect (@Around)
-       │         │
-       │         ▼
-       ├─► Interceptor 3: TransactionAspect (TransactionInterceptor)
-       │         │
-       │         ▼
-       └─► ReflectiveMethodInvocation.proceed() ──► [ Target Bean Method Execution ]
-```
+### Spring AOP Proxy Interception Pipeline
+
+| Pipeline Step | Invocation Component | Internal Class / Method | Technical Responsibility |
+| :--- | :--- | :--- | :--- |
+| **1. Client Invocation** | Inbound Caller | `proxy.businessMethod()` | Caller holds reference to proxy rather than actual target bean |
+| **2. Proxy Dispatch** | Proxy Runtime | `CglibAopProxy$DynamicAdvisedInterceptor` or `JdkDynamicAopProxy` | Intercepts method call and acquires interceptor chain |
+| **3. Chain Evaluation** | Interceptor Query | `AdvisedSupport.getInterceptorsAndDynamicInterceptionAdvice()` | Queries cached list of method interceptors matching pointcut |
+| **4. Interceptor 1** | Security Advice | `MethodSecurityInterceptor` (`@PreAuthorize`) | Evaluates authentication token & authorities; aborts if unauthorized |
+| **5. Interceptor 2** | Metrics Advice | Custom `@Around` Advice (`Timer.Sample`) | Captures entry nanosecond timestamp for SLA calculation |
+| **6. Interceptor 3** | Transaction Advice | `TransactionInterceptor` (`@Transactional`) | Opens or binds JDBC connection to `TransactionSynchronizationManager` |
+| **7. Target Dispatch** | Execution Delegation| `ReflectiveMethodInvocation.proceed()` | Advances chain pointer and executes native bytecode on target bean |
+| **8. Return Unwinding** | Post-Execution Stack| Post-processing in reverse order (3 ➔ 2 ➔ 1) | Commits transaction, logs metrics, and returns payload to client |
 
 ### The `AdvisedSupport` & `MethodInvocation` Chain
 1. When a bean is initialized, `AbstractAutoProxyCreator` scans all `@Aspect` beans in the `ApplicationContext`.

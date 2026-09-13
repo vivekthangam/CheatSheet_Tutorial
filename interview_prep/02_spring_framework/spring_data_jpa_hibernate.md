@@ -9,41 +9,16 @@
 
 ## Architecture Blueprint: The JPA Persistence Stack
 
-```
-+---------------------------------------------------------------------------------------------+
-|                         JPA / Hibernate Persistence Architecture                             |
-|                                                                                              |
-|  Application Layer                                                                           |
-|  ┌─────────────────────────────────────────────────────────────────────────────────────┐    |
-|  │  @Service  →  @Repository  →  JpaRepository / EntityManager                        │    |
-|  └─────────────────────────────────────────────────────────────────────────────────────┘    |
-|           │                                                                                  |
-|           ▼  JPA API (jakarta.persistence.*)                                                 |
-|  ┌──────────────────────────────┐                                                           |
-|  │  Hibernate ORM Engine (v6.x) │                                                           |
-|  │  ├─ Session (PersistenceCtx) │  ← Manages entity state, identity map, 1st-level cache     |
-|  │  │   ├─ 1st-Level Cache      │  ← In-memory identity map (keyed by Entity ID)            |
-|  │  │   ├─ Hydration Snapshots  │  ← Deep copy of loaded column state for dirty checking    |
-|  │  │   └─ ActionQueue          │  ← Ordered SQL execution (Insert, Update, Delete)          |
-|  │  ├─ SQM (Semantic Query Model)← Hibernate 6 AST parser (JPQL/Criteria -> SQL AST)         |
-|  │  ├─ 2nd-Level Cache (Shared) │  ← Cross-Session cache (Infinispan, Ehcache, Redis)        |
-|  │  └─ Bytecode Enhancement     │  ← In-line dirty checking, field-level lazy loading       |
-|  └──────────────────────────────┘                                                           |
-|           │                                                                                  |
-|           ▼  JDBC Layer (java.sql.*)                                                        |
-|  ┌──────────────────────────────┐                                                           |
-|  │  HikariCP Connection Pool    │  ← High-performance zero-overhead TCP connection pool    |
-|  │  ├─ maximumPoolSize (N)      │  ← Sized via: CoreCount * 2 + EffectiveSpindleCount        |
-|  │  ├─ connectionTimeout (30s)  │  ← Prevents thread pool hang on DB outage                  |
-|  │  └─ leakDetectionThreshold   │  ← Logs stack trace of threads holding sockets > 2s000ms   |
-|  └──────────────────────────────┘                                                           |
-|           │                                                                                  |
-|           ▼  Database Engine (PostgreSQL / MySQL / Oracle)                                  |
-|  ┌──────────────────────────────┐                                                           |
-|  │  RDBMS Storage & MVCC Engine │  ← WAL, Page Buffers, B-Tree Indexes, Row Locks            |
-|  └──────────────────────────────┘                                                           |
-+---------------------------------------------------------------------------------------------+
-```
+| Layer / Subsystem | Primary Components & Classes | Operational Responsibilities & Wire Invariants | Performance & Invalidation Characteristics |
+|---|---|---|---|
+| **Application Layer** | `@Service`, `@Repository`, `JpaRepository<T, ID>`, `EntityManager` | User business logic demarcation; orchestrates transactional boundaries and repository query invocations. | Delegates entity interactions to the underlying Persistence Context via Spring proxies. |
+| **JPA API Abstraction** | `jakarta.persistence.*`, `EntityManager`, `EntityTransaction` | Standardized specification boundary for Object-Relational Mapping; decouples code from concrete ORM vendors. | Zero runtime execution overhead; serves purely as interface contracts and annotation definitions. |
+| **Hibernate ORM Engine (v6.x)** | `SessionImpl`, `PersistenceContext`, `ActionQueue`, `SQM`, Bytecode Enhancer | Manages entity state, identity maps, 1st-level cache, dirty checking via hydration snapshots, and SQM query parsing. | In-memory identity tracking (keyed by Entity ID); delays SQL emission until explicit or transaction flush. |
+| **Connection Pooling (HikariCP)** | `HikariDataSource`, `FastList`, `ConcurrentBag` | Ultra-low overhead physical TCP socket reuse; thread borrowing ($<100\text{ns}$); connection leak detection. | Sized via: $\text{Pool Size} = \text{Core Count} \times 2 + \text{Effective Spindle Count}$; prevents DB thread contention. |
+| **Database Engine (RDBMS)** | PostgreSQL, MySQL InnoDB, Oracle Database | Physical storage, WAL (Write-Ahead Log) durability, B-Tree indexes, row-level locks, and MVCC isolation engines. | Bound by disk I/O, page buffer cache hit ratios, and network round-trip latency. |
+
+> [!NOTE]
+> **Hibernate 6 SQM Architecture**: Hibernate 6 completely replaced the legacy HQL/Criteria Antlr2 parsers with a unified **Semantic Query Model (SQM)**. Both HQL strings and Criteria API expressions compile directly into an SQM tree, which translates into an engine-specific SQL AST via modern SQL translators, eliminating query translation discrepancies and optimizing generated SQL.
 
 ---
 
@@ -63,23 +38,19 @@ You're debugging a production issue where changes to an entity are not persisted
 - **Average vs. Elite**: Average says "call `save()` again." Elite explains that `merge()` copies the detached entity's state onto a managed entity and returns the managed copy — the original detached entity is still detached.
 
 ##### 3. Standout Technical Answer
-```
-+------------+   new Entity()   +-----------+   em.persist()   +---------+
-| Transient  | ────────────────▶| Transient |────────────────▶| Managed |
-| (not known |                  | (not yet   |                  |  (in    |
-|  by JPA)   |                  |  in DB)    |  em.merge()      | Persist.|
-+------------+                  +-----------+◀─────────────────| Context)|
-                                                                +---------+
-                                                                    │  │
-                                                          session   │  │ em.remove()
-                                                          close/    │  │
-                                                          evict     ▼  ▼
-                                                                +---------+   flush   +------+
-                                                                | Detached|──────────▶|Removed|
-                                                                | (was    |           |(will  |
-                                                                | managed)|           |be DEL)|
-                                                                +---------+           +------+
-```
+> **JPA Entity Lifecycle Pipeline**:  
+> `[Transient: new Entity()]` ──(`em.persist()`)──► `[Managed: PersistenceContext]` ──(`session.close()` / `evict()` / `detach()`)──► `[Detached]`  
+> `[Detached]` ──(`em.merge()`)──► `[Managed (New Attached Copy)]`  
+> `[Managed]` ──(`em.remove()`)──► `[Removed]` ──(`transaction.commit()` / `flush()`)──► `[Database DELETE Issued]`
+
+| Initial Lifecycle State | Transition Trigger | Resulting State | Hibernate ActionQueue Event | Persistence Context Status | Database Synchronization Mechanics |
+|---|---|---|---|---|---|
+| **Uninstantiated** | `new Entity()` | `Transient` | None | Not enrolled | Pure JVM heap allocation; zero database awareness or ID generation. |
+| **`Transient`** | `em.persist(entity)` | `Managed` | `EntityInsertAction` scheduled | Enrolled in 1st-Level Cache | Enrolled in identity map; ID allocated (immediate if `IDENTITY`; on flush/commit if `SEQUENCE`). |
+| **`Managed`** | Field Mutation (`setX()`) | `Managed` | `EntityUpdateAction` queued | Actively tracked via snapshot | Dirty check compares current fields against hydration snapshot during `flush()`. |
+| **`Managed`** | `em.detach(e)` / `close()` / Tx End | `Detached` | None | Evicted from 1st-Level Cache | Entity modifications are silently ignored by Hibernate; no SQL generated. |
+| **`Detached`** | `em.merge(entity)` | `Managed` (New instance) | `EntityUpdateAction` or `EntityInsertAction` | New copy enrolled in Cache | Loads or creates managed entity, copies state onto it, and returns managed reference. |
+| **`Managed`** | `em.remove(entity)` | `Removed` | `EntityDeleteAction` scheduled | Marked for deletion | Generates SQL `DELETE` during flush/commit; entity removed from database upon commit. |
 
 ```java
 @Service
@@ -1987,17 +1958,10 @@ Hibernate's 2nd-level cache was architecturally designed for **in-process, zero-
 2. **Serialization Tax**: Every entity must be serialized and deserialized to/from byte arrays for Redis, consuming massive CPU.
 3. **Invalidation Storms**: When an entity is updated, Hibernate must broadcast invalidation keys to Redis, evicting entries and causing subsequent requests to miss and overwhelm the primary database.
 
-```
-+--------------------------------------------------------------------+
-| Local 2nd-Level Cache (Caffeine/Ehcache):                          |
-| JVM Memory Access: ~500 ns (Zero network serialization)            |
-+--------------------------------------------------------------------+
-                                vs
-+--------------------------------------------------------------------+
-| Remote Distributed 2nd-Level Cache (Redis):                        |
-| TCP Round-Trip: ~2,000,000 ns (2ms) + JSON/JDK Serialization Overhead|
-+--------------------------------------------------------------------+
-```
+| Cache Architecture Archetype | Latency & Lookup Overhead | Serialization Tax | Invalidation Storm Mechanics | Senior Staff Production Recommendation |
+|---|---|---|---|---|
+| **Local 2nd-Level Cache**<br>*(Caffeine / Ehcache)* | **~500 ns**<br>Direct in-process JVM heap/off-heap reference lookup. | **Zero**<br>Pass-by-reference without payload serialization. | Immediate JVM-local invalidation; cluster synchronization requires distributed pub/sub invalidation bus. | **Architectural Sweet Spot**: Recommended for small, frequently read, highly static reference and dictionary data. |
+| **Remote Distributed L2 Cache**<br>*(Redis / Memcached)* | **~1,000,000 – 3,000,000 ns (1–3 ms)**<br>TCP socket round-trip per entity query. | **Heavy**<br>JSON/JDK/Kryo byte array serialization & deserialization on every hit. | Updates broadcast evictions across Redis keys; cache misses trigger concurrent stampedes on RDBMS primary. | **Anti-Pattern for L2**: Use Redis instead at the **Application / DTO Cache Layer** (`@Cacheable`) to cache aggregated view payloads. |
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "If Redis is suboptimal as a Hibernate 2nd-level cache, how should Redis be used in Spring applications?"
@@ -2585,24 +2549,18 @@ You are the Lead Data Architect conducting the final Go/No-Go production readine
 ##### 3. Standout Technical Answer
 To certify a Spring Data JPA application for enterprise production, it must satisfy this **10-Point Architectural Gate**:
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  JPA & Hibernate Enterprise Production Gate                             |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| #  | Verification Gate           | Production Standard Requirement                      |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| 1  | OSIV Disabled               | spring.jpa.open-in-view=false strictly verified      |
-| 2  | DDL Safety                  | ddl-auto set to validate or none; Flyway enabled     |
-| 3  | N+1 Elimination             | Zero un-batched lazy collections; @EntityGraph used  |
-| 4  | Connection Pool Sized       | HikariCP maxPoolSize = (Cores * 2) + Spindles        |
-| 5  | Connection Leak Detection   | leak-detection-threshold = 2000ms configured         |
-| 6  | Socket Timeout Enforced     | JDBC socketTimeout set at driver level               |
-| 7  | Primary Key Batching        | SEQUENCE generators used with matching allocationSize|
-| 8  | Read-Only Optimization      | @Transactional(readOnly = true) on all query methods |
-| 9  | Logging Sanitization        | show-sql=false; Logging routed to SLF4J              |
-| 10 | Foreign Key Indexes         | 100% of foreign key columns backed by DB B-Tree index|
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-```
+| Gate # | Verification Gate | Production Standard Requirement | Failure Consequence & Latent Outage Risk |
+|:---:|---|---|---|
+| **1** | **OSIV Disabled** | `spring.jpa.open-in-view=false` strictly verified | Prevents database connection pool exhaustion during controller view rendering and JSON serialization. |
+| **2** | **DDL Safety** | `spring.jpa.hibernate.ddl-auto=validate` (or `none`); Flyway enabled | Prevents catastrophic schema mutations, dropped columns, or implicit table locks in production. |
+| **3** | **N+1 Elimination** | Zero un-batched lazy collections; `@EntityGraph` or `JOIN FETCH` used | Prevents exponential query multiplication and database connection starvation on high-cardinality endpoints. |
+| **4** | **Connection Pool Sized** | HikariCP `maximumPoolSize = (Cores * 2) + Spindles` | Prevents CPU thread context switching thrashing and database OS memory exhaustion under burst loads. |
+| **5** | **Connection Leak Detection** | `leak-detection-threshold = 2000ms` configured | Logs stack trace of rogue long-running transactions holding physical sockets, isolating socket leaks. |
+| **6** | **Socket Timeout Enforced** | Driver-level `socketTimeout` configured (e.g. 5000ms) | Prevents worker threads from blocking indefinitely when database hardware or network drops packets silently. |
+| **7** | **Primary Key Batching** | `SEQUENCE` generators configured with matching `allocationSize` | Enables Hibernate JDBC batching; avoids the single-row forced flush penalty of `GenerationType.IDENTITY`. |
+| **8** | **Read-Only Optimization** | `@Transactional(readOnly = true)` on all query methods | Disables Hibernate snapshot creation, skipping dirty-checking overhead and setting driver read-only hints. |
+| **9** | **Logging Sanitization** | `show-sql=false`; logging routed strictly to SLF4J at INFO level | Avoids high console I/O CPU penalties and prevents PII/sensitive data leakage into standard stdout streams. |
+| **10** | **Foreign Key Indexes** | 100% of foreign key columns backed by database B-Tree index | Eliminates table locks on parent deletions and optimizes child collection join scans. |
 
 ```java
 // Production Verification Runner

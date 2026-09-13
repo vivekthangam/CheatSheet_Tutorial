@@ -49,28 +49,17 @@ Instead of loading everything or processing one-by-one, you use an **Automated C
 4. **`ItemWriter`:** Seal the box and ship all 100 items to the truck in **one single database transaction commit**!
 5. If the power cuts out at item 5,400, Spring Batch looks at its clipboard (**`JobRepository`**), skips the first 5,300 successfully committed items, and resumes right at item 5,301!
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 JOB (The Factory Shift)                                 │
-│                                                                                        │
-│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
-│  │                              STEP (The Assembly Station)                         │  │
-│  │                                                                                  │  │
-│  │   ┌───────────────┐     ┌───────────────────┐     ┌───────────────┐              │  │
-│  │   │  ItemReader   │ ──► │   ItemProcessor   │ ──► │  ItemWriter   │              │  │
-│  │   │  (Read 1 item)│     │  (Transform/Filter│     │  (Write Chunk)│              │  │
-│  │   └───────────────┘     └───────────────────┘     └───────────────┘              │  │
-│  │          ▲                        ▲                       │                      │  │
-│  │          │                        │                       │                      │  │
-│  │          └──────── Loop N times ──┴───────────────────────┘                      │  │
-│  │                     (Until Chunk Commit Interval reached, e.g. 100)              │  │
-│  │                                                                                  │  │
-│  │   [ Transaction Boundary Begins ] ───────────────► [ Transaction Commits Chunk ] │  │
-│  └──────────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                        │
-│  Persisted to Database: [ JobRepository ] (BATCH_JOB_EXECUTION, BATCH_STEP_EXECUTION)  │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Spring Batch Chunk Processing & Transaction Demarcation Architecture
+
+| Processing Phase | Core Component | Granularity & Cardinality | Technical Operation & Database Boundary |
+| :--- | :--- | :--- | :--- |
+| **1. Job Orchestration** | `Job` / `JobLauncher` | Single Batch Run | Initiates batch execution; creates `JobExecution` and `JobInstance` records in `JobRepository` |
+| **2. Step Execution** | `TaskletStep` / `StepBuilder` | Sequenced Batch Phase | Manages step lifecycle, restart counters, and transactional execution context |
+| **3. Item Extraction** | `ItemReader<I>` | Item-by-item (`read()`) | Reads a single item per call from stream/cursor; returns `null` at EOF |
+| **4. Item Transformation**| `ItemProcessor<I, O>` | Item-by-item (`process()`) | Validates, enriches, or filters items; returning `null` drops item from the chunk |
+| **5. Chunk Aggregation** | `Chunk<O>` Accumulator | In-memory List (`N` items) | Loops steps 3 & 4 until chunk size interval (e.g., 100 or 500 records) is reached |
+| **6. Transactional Write**| `ItemWriter<O>` | Chunk batch (`write(Chunk)`) | Flushes entire chunk in a single batch database operation via `PlatformTransactionManager` |
+| **7. State Checkpoint** | `JobRepository` | ACID DB Commit | Commits chunk and persists step execution context checkpoint (`BATCH_STEP_EXECUTION`) to database |
 
 ---
 
@@ -243,7 +232,7 @@ When processing millions of records, bad records (e.g. corrupt CSV lines or miss
    - Instead of reading an entire dataset into memory or executing individual database commits per record, Chunk-Oriented Processing streams data in discrete units of size $N$ (e.g. 500 items). It provides constant $O(\text{chunk size})$ heap usage and commits transactions at exact chunk boundaries.
 
 2. **Underlying Algorithm & Execution Loop**:
-   ```
+   ```text
    [ Open Transaction ]
    Loop chunk_size times:
        item = ItemReader.read()
@@ -278,7 +267,7 @@ When processing millions of records, bad records (e.g. corrupt CSV lines or miss
    }
    ```
    - **Execution Log Output**:
-     ```
+     ```text
      INFO  o.s.b.c.s.c.TaskletStep - Step: [orderProcessingStep] executed in 450ms
      INFO  o.s.b.c.s.c.TaskletStep - Read: 100, Filtered: 5, Written: 95, Commit Count: 1
      ```

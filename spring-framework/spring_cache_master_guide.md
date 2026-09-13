@@ -27,47 +27,31 @@ A production-grade engineering handbook covering the **Spring Cache Abstraction*
 
 Latency numbers that every systems architect must know by heart:
 
-```
-+-----------------------------------------------------------------------------------------+
-|                               LATENCY NUMBERS EVERY ENGINEER MUST KNOW                  |
-+-----------------------------------------------------------------------------------------+
-| L1 CPU Cache Reference             : 0.5 - 1 ns                                         |
-| L2 CPU Cache Reference             : 3 - 4 ns                                           |
-| L3 CPU Cache Reference             : 10 - 20 ns                                         |
-| Main Memory (RAM) Reference        : 100 ns                                             |
-| L1 Local Heap Cache (Caffeine)     : 100 - 300 ns    <--- In-Memory (Same JVM Process)  |
-| L1 Off-Heap Cache (Ehcache 3)      : 1 - 3 µs        <--- In-Memory (No GC Overhead)    |
-| L2 Distributed Cache (Redis LAN)   : 500 µs - 1.5 ms <--- Remote Network Hop (TCP/Netty)|
-| NVMe SSD Direct Read               : 50 - 150 µs                                        |
-| Standard RDBMS Query (Indexed)     : 5 - 25 ms       <--- Disk I/O + Buffer Pool Locks  |
-| Complex Analytical RDBMS Join      : 100 - 5000 ms                                      |
-| Cross-Region WAN Round Trip        : 70 - 150 ms                                        |
-+-----------------------------------------------------------------------------------------+
-```
+### Hardware to Application Latency Hierarchy
+
+| Memory / Storage Subsystem | Typical Access Latency | Physical / Network Location | Architectural Implications |
+| :--- | :--- | :--- | :--- |
+| **L1 CPU Cache Reference** | 0.5 – 1.0 ns | On-die CPU core | Registers and primary instruction/data cache |
+| **L2 CPU Cache Reference** | 3.0 – 4.0 ns | On-die CPU core | Secondary cache, tightly coupled per core |
+| **L3 CPU Cache Reference** | 10 – 20 ns | Shared CPU die | Shared across multi-core processor sockets |
+| **Main Memory (RAM) Reference** | ~100 ns | Motherboard DIMM channels | Direct physical memory access bus |
+| **L1 Local Heap Cache (Caffeine)** | 100 – 300 ns | JVM Young/Old Generation | Same JVM process, zero network serialization |
+| **L1 Off-Heap Cache (Ehcache 3)** | 1.0 – 3.0 µs | Direct ByteBuffers / Unsafe | In-memory, zero GC pause overhead |
+| **NVMe SSD Direct Read** | 50 – 150 µs | PCIe bus / NVMe controller | Local non-volatile storage random read |
+| **L2 Distributed Cache (Redis LAN)**| 500 µs – 1.5 ms | Data center LAN network hop | TCP socket, multiplexed Netty client (`Lettuce`) |
+| **Standard RDBMS Query (Indexed)** | 5.0 – 25 ms | Persistent database server | Disk I/O, Buffer Pool locks, MVCC transactions |
+| **Cross-Region WAN Round Trip** | 70 – 150 ms | Inter-region fiber optic link | Speed-of-light propagation latency |
+| **Complex Analytical RDBMS Join** | 100 – 5,000 ms | RDBMS Data Warehouse | Heavy table scans, temp table disk spills |
 
 ### 2. The 5 Classic Cache Access Patterns
 
-```
-1. Cache-Aside (Lazy Loading):
-   App ---> Cache.get(k)
-     ├── [Hit]  ---> Return Value
-     └── [Miss] ---> App ---> DB.read(k) ---> Cache.put(k, v) ---> Return Value
-
-2. Read-Through:
-   App ---> CacheProvider.get(k)
-              ├── [Hit]  ---> Return Value
-              └── [Miss] ---> CacheProvider ---> DB.read(k) ---> Cache.put(k, v) ---> Return Value
-
-3. Write-Through:
-   App ---> CacheProvider.write(k, v) ---> CacheProvider writes DB synchronously ---> Cache.put(k, v)
-
-4. Write-Behind (Write-Back):
-   App ---> Cache.put(k, v) (Immediate Ack)
-              └── Async Queue (RingBuffer / Kafka) ---> Worker batched write to DB (High throughput, data loss risk on crash)
-
-5. Refresh-Ahead:
-   Cache predicts key expiration based on access frequency and refreshes from DB before TTL expires.
-```
+| Pattern Name | Request Flow & Sequence | Write Semantics | Failure & Consistency Trade-offs |
+| :--- | :--- | :--- | :--- |
+| **1. Cache-Aside (Lazy Loading)** | `App` ➔ `Cache.get(k)`<br>• Hit: Return cached value.<br>• Miss: `App` ➔ `DB.read(k)` ➔ `Cache.put(k, v)` ➔ Return value. | Writes go directly to DB; cache key is either invalidated or updated lazily. | Eventual consistency; cache misses incur 2x round-trips (Cache + DB). Highly resilient against cache crashes. |
+| **2. Read-Through** | `App` ➔ `CacheProvider.get(k)`<br>• Hit: Return cached value.<br>• Miss: `CacheProvider` transparently reads DB ➔ populates itself ➔ returns value. | Decouples application from DB fetch logic; provider encapsulates data source. | Transparent to application logic; cache provider failure blocks reads unless fallback configured. |
+| **3. Write-Through** | `App` ➔ `CacheProvider.write(k, v)`<br>• `CacheProvider` synchronously writes to DB ➔ updates cache ➔ returns success. | Synchronous write to both cache and primary database before acknowledging caller. | High consistency; write latency is bounded by slowest store (DB disk write). |
+| **4. Write-Behind (Write-Back)** | `App` ➔ `Cache.put(k, v)` (Immediate ACK)<br>• Async queue (RingBuffer / Kafka) buffers mutation ➔ background worker batch-writes to DB. | Asynchronous deferred writes batched to database. | Maximum write throughput and absorption of DB load spikes; risk of data loss if cache crashes before queue drains. |
+| **5. Refresh-Ahead** | Cache engine monitors access patterns and proactively queries DB to refresh keys before TTL expires. | Proactive background refresh triggered by access frequency metrics. | Eliminates cold-cache misses on hot keys; requires accurate access frequency prediction to avoid wasteful DB polling. |
 
 ---
 
@@ -92,30 +76,17 @@ Latency numbers that every systems architect must know by heart:
 
 Spring Cache is not an in-memory cache itself; it is a **declarative abstraction layer** implemented via Spring AOP:
 
-```
-Client Caller
-     │
-     ▼
-[ Spring AOP Proxy (CGLIB / JDK Dynamic) ]
-     │
-     ▼
-[ CacheInterceptor (extends CacheAspectSupport) ]
-     │
-     ├── 1. Evaluate SpEL Key & Condition
-     ├── 2. Resolve CacheManager & Cache instance
-     ├── 3. Execute Cache.get(key)
-     │       ├── [HIT]  ──> Return cached value (Method body is BYPASSED!)
-     │       └── [MISS] ──> Proceed to Target Method
-     │                          │
-     │                          ▼
-     │                 [ Target Service Bean ]
-     │                 (Executes SQL / Heavy API)
-     │                          │
-     │                          ▼
-     │                 [ Return Result ]
-     │                          │
-     └── 4. Evaluate 'unless' SpEL ──> Cache.put(key, result) ──> Return
-```
+### Spring Cache AOP Interception Architecture
+
+| Stage | Interception Component | Underlying Operation | Execution Path |
+| :--- | :--- | :--- | :--- |
+| **1. Inbound Dispatch** | Client Caller | `service.findUser(id)` | Invokes Spring AOP Proxy (`CglibAopProxy` or `JdkDynamicAopProxy`) |
+| **2. Interception** | `CacheInterceptor` | `CacheAspectSupport.execute()` | Intercepts method execution before reaching target bean |
+| **3. Key & Condition** | SpEL Evaluator | Expression evaluation | Resolves dynamic SpEL key (`#id`) and validates `@Cacheable(condition=...)` |
+| **4. Cache Resolution** | `CacheResolver` | `CacheManager.getCache(name)` | Locates underlying `Cache` instance (`CaffeineCache`, `RedisCache`) |
+| **5. Cache Lookup** | `Cache.get(key)` | Lookup in backing store | **Hit**: Returns cached value immediately; **target method body is completely bypassed**! |
+| **6. Target Execution** | Target Service Bean | SQL / RPC / Heavy Computation | **Miss**: Executes real service logic (`UserRepository.findById()`) |
+| **7. Post-Invocation** | Conditional Put | Evaluates `@Cacheable(unless=...)` | If condition passes, writes `Cache.put(key, result)` and returns value to caller |
 
 > [!CAUTION]
 > **The Self-Invocation Proxy Bypass**: If method `A()` calls `@Cacheable` method `B()` in the **same class** via `this.B()`, the call bypasses the Spring AOP proxy. **Caching is completely skipped and the database is hit on every invocation!**
@@ -316,38 +287,14 @@ public class TenantAwareCacheResolver implements CacheResolver {
 
 Caffeine uses Ben Manes' **W-TinyLFU** algorithm:
 
-```
-[ New Item Written ]
-         │
-         ▼
-+-------------------------------------------------------------+
-| 1. WINDOW CACHE (Eden / LRU) - 1% of total capacity         |
-| Protects recent bursts and newly allocated keys from        |
-| immediate eviction.                                         |
-+-------------------------------------------------------------+
-         │
-         ▼ (Eviction Candidate from Window)
-+-------------------------------------------------------------+
-| 2. ADMITTANCE FILTER: Count-Min Sketch (4-bit frequency)    |
-| Compares: Frequency(Candidate) >= Frequency(Victim)?         |
-+-------------------------------------------------------------+
-         │                                       │
-     [ Rejected ]                            [ Admitted ]
-         │                                       │
-         ▼                                       ▼
-    (Discarded)              +------------------------------------------+
-                             | 3. MAIN CACHE (SLRU - Segmented LRU)     |
-                             |                                          |
-                             | ┌──────────────────────────────────────┐ |
-                             | │ Probationary Segment (20% capacity)  │ |
-                             | └──────────────────┬───────────────────┘ |
-                             |                    │ (Hit promotes item) |
-                             |                    ▼                     |
-                             | ┌──────────────────────────────────────┐ |
-                             | │ Protected Segment (80% capacity)     │ |
-                             | └──────────────────────────────────────┘ |
-                             +------------------------------------------+
-```
+### Window TinyLFU (W-TinyLFU) Multi-Stage Eviction Pipeline
+
+| Cache Segment | Allocation Ratio | Eviction Policy / Algorithm | Function & Invalidation Mechanics |
+| :--- | :--- | :--- | :--- |
+| **1. Window Cache (Eden)** | **1% of Total Capacity** | Small LRU (Least Recently Used) Queue | Absorbs newly written keys and short-lived traffic spikes; guarantees new items are not immediately evicted. |
+| **2. Admittance Filter** | **Stateless 4-bit Filter** | Count-Min Sketch Frequency Estimator | When item is evicted from Window Cache, its access frequency is compared against the eviction victim of the Main Cache (`Freq(Candidate) >= Freq(Victim)`). Rejected items are immediately dropped. |
+| **3. Main Cache (Probation)**| **20% of Main Capacity** | Segmented LRU (Probationary SLRU) | Houses newly admitted items from the Filter. If an item in Probation experiences a subsequent hit, it is instantly promoted to the Protected Segment. |
+| **4. Main Cache (Protected)**| **80% of Main Capacity** | Segmented LRU (Protected SLRU) | Houses long-term high-frequency working set items. When capacity is exceeded, bottom items are demoted back to Probation. |
 
 ### Why Count-Min Sketch Solves the LFU Memory Problem:
 1. Standard LFU stores a 32-bit counter per entry $\to$ massive memory bloat.
@@ -413,28 +360,15 @@ Redis processes commands using a **single-threaded event loop** over non-blockin
 - **Why Single-Threaded?** Eliminates CPU context-switching overhead, lock contention, race conditions, and synchronization primitives.
 - **Where Bottlenecks Occur:** Heavy commands with $\mathcal{O}(N)$ complexity (e.g. `KEYS *`, `HGETALL` on 1,000,000 fields, Lua scripts with unbounded loops, or transferring 50MB Big Keys) block the entire Redis instance, causing all microservices to time out!
 
-```
-                    +------------------------------------------+
-                    |          Redis Client Connections        |
-                    +------------------------------------------+
-                               │           │           │
-                               ▼           ▼           ▼
-                    +------------------------------------------+
-                    |    I/O Multiplexer (epoll / kqueue)     |
-                    +------------------------------------------+
-                                         │
-                                         ▼
-                    +------------------------------------------+
-                    |      Single-Threaded Command Dispatcher  |
-                    |    Executes: GET, SET, ZADD, HSET        |
-                    +------------------------------------------+
-                                         │
-                                         ▼
-                    +------------------------------------------+
-                    |          In-Memory Key-Value Storage     |
-                    |  (SDS, Dicts, SkipLists, QuickLists)     |
-                    +------------------------------------------+
-```
+### Redis Single-Threaded Reactor Event Loop Architecture
+
+| Pipeline Stage | Architectural Component | Underlying Subsystem | Technical Operation |
+| :--- | :--- | :--- | :--- |
+| **1. Client Ingress** | Network Sockets | TCP Client Connections | Thousands of concurrent client connections bound to non-blocking file descriptors |
+| **2. I/O Multiplexing** | OS Kernel Polling | `epoll` (Linux) / `kqueue` (BSD/macOS) | Kernel monitors socket read/write readiness; passes ready events to Redis event loop without thread blocking |
+| **3. Reactor Loop** | `aeEventLoop` | File & Time Event Dispatcher | Continuously fetches batches of ready socket events in a single CPU execution thread |
+| **4. Command Execution** | Command Dispatcher | Redis Command Table (`dict`) | Maps parsed protocol tokens to C handler functions (`getCommand`, `setCommand`, `zaddCommand`) |
+| **5. In-Memory Store** | Memory Subsystem | SDS, Hash Tables, SkipLists, QuickLists | Executes mutations directly in memory; zero lock contention or context switching |
 
 ---
 
@@ -454,16 +388,14 @@ Redis processes commands using a **single-threaded event loop** over non-blockin
 
 The serialization strategy is the #1 source of production CVEs, CPU bottlenecks, and memory waste:
 
-```
-+------------------------------------+----------------+-------------------+----------------------------+
-| Serializer Strategy                | Payload Size   | CPU Overhead      | Production Verdict         |
-+------------------------------------+----------------+-------------------+----------------------------+
-| JdkSerializationRedisSerializer    | 100% (Massive) | High              | ❌ BANNED (RCE Exploit risk)|
-| GenericJackson2JsonRedisSerializer | 60% (Medium)   | Medium            | ⚠️ Leaks `@class` metadata |
-| Jackson2JsonRedisSerializer (DTO)  | 35% (Compact)  | Fast              | ✅ RECOMMENDED for DTOs    |
-| Protobuf / Kryo / Snappy           | 15% (Tiny)     | Ultra-Fast        | 🏆 BEST for High-Throughput|
-+------------------------------------+----------------+-------------------+----------------------------+
-```
+### Redis Serialization Strategy Comparison
+
+| Serializer Strategy | Wire Payload Size | CPU Overhead | Security & Production Verdict |
+| :--- | :--- | :--- | :--- |
+| **`JdkSerializationRedisSerializer`** | 100% (Massive byte footprint) | High CPU serialization overhead | ❌ **BANNED**: High Remote Code Execution (RCE) exploit vulnerability via deserialization gadgets. |
+| **`GenericJackson2JsonRedisSerializer`** | ~60% (Medium) | Moderate Jackson reflection overhead | ⚠️ **LEAKS METADATA**: Stores `@class` fully-qualified class names in JSON; brittle across microservice refactoring. |
+| **`Jackson2JsonRedisSerializer (DTO)`** | ~35% (Compact JSON) | Fast, optimized Jackson parsing | ✅ **RECOMMENDED**: Clean JSON schema, portable across languages, zero `@class` contamination. |
+| **`Protobuf` / `Kryo` / `Snappy`** | ~15% (Ultra-compact binary) | Ultra-Fast JIT serialization | 🏆 **BEST FOR ULTRA-THROUGHPUT**: Sub-millisecond latency, minimal Redis network bandwidth consumption. |
 
 ### Production Spring Boot `RedisCacheManager` Blueprint:
 
@@ -517,15 +449,13 @@ Redis Cluster does not use consistent hashing; it uses **16,384 Hash Slots**:
 
 $$\text{Slot} = \text{CRC16}(\text{Key}) \pmod{16384}$$
 
-```
-[ Redis Cluster Topology: 3 Masters, 3 Replicas ]
+### Redis Cluster 16,384 Hash Slot Topology
 
-  Master A [Slots 0 - 5460]        Master B [Slots 5461 - 10922]       Master C [Slots 10923 - 16383]
-          │                                  │                                   │
-      (Replication)                      (Replication)                       (Replication)
-          ▼                                  ▼                                   ▼
-  Replica A1                         Replica B1                          Replica C1
-```
+| Master Node | Managed Hash Slot Range | Associated Replica Node | Failover & High Availability Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Master A** | Slots `0` – `5460` | **Replica A1** | Asynchronous replication; automated promotion via cluster gossip consensus if Master A misses heartbeat. |
+| **Master B** | Slots `5461` – `10922` | **Replica B1** | Handles partition hashing for middle slot range; serves read requests when configured with `READONLY`. |
+| **Master C** | Slots `10923` – `16383` | **Replica C1** | Handles upper slot range; cluster remains fully operational if any single master fails and its replica promotes. |
 
 ### Multi-Key Commands & The Hash Tag Solution `{...}`:
 In Redis Cluster, commands operating on multiple keys (e.g. `MGET`, `MSET`, `EVAL` transactions) throw a **`CROSSSLOT Keys in request don't hash to the same slot`** error if keys belong to different slots!
@@ -542,33 +472,13 @@ In Redis Cluster, commands operating on multiple keys (e.g. `MGET`, `MSET`, `EVA
 
 In ultra-high-throughput systems ($> 100,000\text{ QPS}$), accessing remote Redis across the network incurs network saturation and TCP latency. The solution is **Multi-Tier Caching**:
 
-```
-Client HTTP Request
-        │
-        ▼
-+─────────────────────────────────────────────────────────────+
-| JVM Instance 1                                              |
-|                                                             |
-|  [ L1 Local Cache: Caffeine ] <--- Hit: 150 ns!             |
-|          │ (Miss)                                           |
-|          ▼                                                  |
-+──────────┼──────────────────────────────────────────────────+
-           │
-           ▼
-+─────────────────────────────────────────────────────────────+
-| Remote L2 Cache: Redis Cluster                              |
-|                                                             |
-|  [ Redis Key Lookup ] <--- Hit: 800 µs                      |
-|          │ (Miss)                                           |
-+──────────┼──────────────────────────────────────────────────+
-           │
-           ▼
-+─────────────────────────────────────────────────────────────+
-| Primary Database: PostgreSQL / MySQL                        |
-|                                                             |
-|  [ SQL Query Execution ] <--- Hit: 15 ms                    |
-+─────────────────────────────────────────────────────────────+
-```
+### Dual-Tier (L1 Local + L2 Distributed) Cache Topology
+
+| Tier Layer | Component Technology | Typical Access Latency | Cache Hit / Miss Resolution Path |
+| :--- | :--- | :--- | :--- |
+| **L1 Local Cache** | Caffeine (In-Memory JVM Heap) | **100 – 300 ns** | **Hit**: Returns immediately without network I/O.<br>**Miss**: Dispatches request to L2 Remote Cache. |
+| **L2 Distributed Cache**| Redis Cluster (LAN Multiplexed Netty) | **500 µs – 1.5 ms** | **Hit**: Populates local L1 cache and returns value.<br>**Miss**: Dispatches query to primary database. |
+| **Primary Database Tier**| PostgreSQL / MySQL RDBMS | **5 – 25 ms** | **Hit**: Populates both L2 Redis and L1 Caffeine caches; returns value.<br>**Miss**: Returns entity not found (or caches Null Object to prevent Cache Penetration). |
 
 ---
 
@@ -576,19 +486,16 @@ Client HTTP Request
 
 When JVM Instance 1 mutates an entity, its L1 cache and the L2 Redis cache are updated. But how do JVM Instances 2, 3, and 4 know their local Caffeine L1 caches are now **stale**?
 
-```
-JVM 1 (Writer)                       Redis Cluster                     JVM 2 (Reader)
-      │                                   │                                  │
-      ├── 1. DB.update(p)                 │                                  │
-      ├── 2. Redis.set("p", val)          │                                  │
-      ├── 3. Caffeine.invalidate("p")     │                                  │
-      │                                   │                                  │
-      ├── 4. PUBLISH "cache:inval" "p" ──>│                                  │
-      │                                   ├── Broadcast Message ────────────>│
-      │                                   │   "cache:inval" "p"              │
-      │                                   │                                  ├── 5. Caffeine.invalidate("p")
-      │                                   │                                  │      (Local L1 cleared!)
-```
+### Distributed Cache Invalidation Sequence (Pub/Sub)
+
+| Step | Initiator / Component | Target System | Action & Protocol |
+| :--- | :--- | :--- | :--- |
+| **1. Database Mutation** | JVM Instance 1 (Writer) | Primary Database | `DB.update(entity)` persists state to disk within ACID transaction. |
+| **2. L2 Cache Update** | JVM Instance 1 (Writer) | Redis Cluster | `Redis.set("user:1001", val)` updates centralized distributed cache. |
+| **3. Local L1 Clear** | JVM Instance 1 (Writer) | JVM 1 Caffeine Cache | `Caffeine.invalidate("user:1001")` purges local stale reference. |
+| **4. Invalidation Broadcast**| JVM Instance 1 (Writer) | Redis Pub/Sub Channel | `PUBLISH "cache:inval" "user:1001"` broadcasts invalidation key to cluster. |
+| **5. Message Propagation** | Redis Cluster | JVM Instance 2..N (Readers) | Relays broadcast packet across open Redis subscriber socket connections. |
+| **6. Peer L1 Eviction** | JVM Instance 2..N (Readers) | Peer Caffeine Caches | `Caffeine.invalidate("user:1001")` purges stale copy on all peer JVM nodes. |
 
 ### Production L1 Invalidation Subscriber:
 

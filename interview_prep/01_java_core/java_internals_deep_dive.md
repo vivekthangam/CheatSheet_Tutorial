@@ -8,7 +8,94 @@
 
 ## Architecture Blueprint: The HotSpot JVM Substrate
 
+![HotSpot JVM Architecture & Execution Substrate](../../assets/images/jvm/hotspot_jvm_substrate_architecture.jpg)
+
+```mermaid
+flowchart TB
+    subgraph L4 ["Layer 4: Execution Engine & Native Interface"]
+        direction LR
+        EE1["Template Interpreter<br/>(Bytecode Loop Dispatch)"]
+        EE2["Tiered JIT Compilers<br/>(C1 Client -> C2 Opto Server)"]
+        EE3["Native Boundary<br/>(JNI C-Bindings & Panama FFM)"]
+        EE4["Safepoint Engine<br/>(Polling Page & TTSP Coordinator)"]
+    end
+
+    subgraph L3 ["Layer 3: Runtime Data Areas & JVM Memory Subsystem"]
+        direction LR
+        M1["Java Heap (-Xms/-Xmx)<br/>Young (Eden + S0/S1 TLABs) & Old Gen"]
+        M2["Metaspace (-XX:MaxMetaspaceSize)<br/>Native C-Heap: Klass, vtables, ConstPool"]
+        M3["Per-Thread Stacks (-Xss)<br/>Stack Frames: Operand Stack & LocalVars"]
+        M4["Code Cache (-XX:ReservedCodeCache)<br/>JIT Machine Code & Adapter Stubs"]
+    end
+
+    subgraph L2 ["Layer 2: ClassLoader Subsystem & Verification Engine"]
+        direction LR
+        CL1["Delegation Hierarchy<br/>Bootstrap -> Platform -> Application -> Custom"]
+        CL2["Linking Pipeline<br/>Verification (StackMap) -> Preparation (Zeroes) -> Resolution"]
+        CL3["Initialization<br/>&lt;clinit&gt; Invocations & Class Init Lock"]
+    end
+
+    subgraph L1 ["Layer 1: Object Memory Layout (JOL Substrate)"]
+        direction LR
+        JOL1["Mark Word (64-bit)<br/>Hashcode, Age, Bias, Lock Bits (00/01/10/11)"]
+        JOL2["Klass Word (32/64-bit)<br/>CompressedClassPointers (3-bit shift)"]
+        JOL3["Instance Payload & Padding<br/>Field Packing Rules & 8-Byte Alignment"]
+    end
+
+    subgraph L0 ["Layer 0: Host Operating System & Hardware Substrate"]
+        direction LR
+        HW1["Virtual Address Space & MMU<br/>Page Tables, Huge Pages, TLB Shootdowns"]
+        HW2["CPU Registers & Hardware Cache<br/>L1/L2/L3 Cache Lines (MESI), Memory Fences"]
+        HW3["Kernel Syscalls & Threads<br/>pthread, clone(2), mprotect, mmap"]
+    end
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
+
+    classDef l4 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l0 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+
+    class EE1,EE2,EE3,EE4 l4;
+    class M1,M2,M3,M4 l3;
+    class CL1,CL2,CL3 l2;
+    class JOL1,JOL2,JOL3 l1;
+    class HW1,HW2,HW3 l0;
 ```
+
+#### Architectural Breakdown: The 5-Layer HotSpot JVM Substrate
+
+1. **Visual Architecture & Layer Anatomy**:
+   - **Layer 0 (Host Operating System & Hardware Substrate)**: Manages physical memory mapping, virtual page tables, MMU translations, TLB caches, hardware registers, and kernel primitives (`mmap`, `mprotect`, `clone(2)`). Native OS threads directly host Java platform threads in a 1:1 mapping.
+   - **Layer 1 (Object Memory Layout - JOL Substrate)**: Defines byte-level layout of all Java objects on the heap. Consists of an 8-byte Mark Word (biasing, age, locking state, identity hashcode), a 4-byte or 8-byte Klass pointer, instance payload fields arranged to minimize padding gaps, and 8-byte boundary alignment padding.
+   - **Layer 2 (ClassLoader Subsystem & Verification Engine)**: Implements parent-delegation hierarchy (Bootstrap, Platform, Application, Custom) and 3-stage linking (Verification of bytecode type safety via StackMapTable, Preparation allocating memory and zeroing static variables, and Resolution converting symbolic references in the constant pool to direct virtual addresses).
+   - **Layer 3 (Runtime Data Areas & JVM Memory Subsystem)**: Composed of thread-shared regions (Java Heap divided into Young Gen Eden/Survivors and Old Gen, off-heap Metaspace storing `InstanceKlass` C++ structures, and the native Code Cache) and thread-private regions (Java thread stacks with activation frames, PC register, and native C frames).
+   - **Layer 4 (Execution Engine & Native Interface)**: Coordinates bytecode interpretation and compilation via Tiered Compilation (Interpreter Tier 0, C1 Client Tiers 1-3, C2 Server Opto Tier 4). Safepoint engines synchronize all threads via memory protection page trap polls, while JNI and modern Project Panama (Foreign Function & Memory API) govern native boundaries.
+
+2. **Execution Flow & Lifecycle State Transitions**:
+   - **Phase 1: Bootstrapping & Class Resolution**: JVM bootstrap loader initializes the base module graph (`java.base`). When a class reference is encountered, the delegation chain queries parent loaders. If not found, `findClass()` reads bytecode. Linking verifies bytecode invariants without runtime crashes. Preparation allocates static storage with default zero values, and Initialization runs `<clinit>` under a class-level initialization lock.
+   - **Phase 2: Execution & Dynamic Profiling**: Bytecode instructions are initially processed by the Template Interpreter (Tier 0). Method invocation counters and backedge (loop) counters increment in the method's `MethodCounters`. When thresholds are crossed, compilation tasks queue in C1 (Client Compiler).
+   - **Phase 3: Tiered Optimization & Inlining**: C1 instruments profiling data (Method Data Objects - MDO) at Tier 3. Hot methods graduate to C2 (Tier 4), which performs aggressive Global Value Numbering (GVN), escape analysis, loop unrolling, and monomorphic/bimorphic inline caching to produce ultra-optimized native x86/ARM assembly.
+   - **Phase 4: Safepoint Synchronization & GC/Deoptimization**: When a GC cycle, class redefinition, or thread dump is triggered, the JVM initiates a global Safepoint. The memory page backing the Safepoint Poll is armed with `mprotect(PROT_NONE)`. Running threads hitting polling instructions incur a page fault signal (`SIGSEGV`), intercept it, and park their execution until the safepoint operation concludes.
+
+3. **Low-Level Kernel, JVM & Hardware Mechanics**:
+   - **Compressed OOPs & 32GB Ceiling (`-XX:+UseCompressedOops`)**: 64-bit pointers waste 50% more memory and thrash CPU L1/L2 caches. Because objects are aligned on 8-byte boundaries, the lowest 3 bits of every heap address are always `000`. The JVM drops these 3 zero bits and stores an ordinary 32-bit reference. On dereference, the CPU performs a hardware shift: `Address_64 = Compressed_OOP << 3`. This allows a 32-bit integer to address $2^{32} \times 8 = 32\text{ GB}$ of physical heap. Exceeding 32GB (`-Xmx32g`) immediately deactivates Compressed OOPs, jumping pointer size to 64 bits and degrading cache locality.
+   - **Thread-Local Allocation Buffers (TLAB)**: Multi-threaded heap allocation without synchronization. Each thread owns a dedicated chunk of Eden memory with private `top` and `end` pointers. Thread allocation simply increments `top` via bump-the-pointer assembly (`add [top], size`) with zero locks and zero atomic CAS instructions, executing in $< 2\text{ ns}$.
+   - **Safepoint Poll Page Mechanics**: In modern HotSpot (Java 10+ Thread-Local Handshakes and Safepoints), rather than arming a single global page, each thread has an individual safepoint polling address mapped in its thread structure (`thread->poll_data()`). Polling is compiled into method returns and loop backedges as a single read: `test eax, [safepoint_page]`.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **Metaspace vs Compressed Class Space Outage**: `java.lang.OutOfMemoryError: Compressed class space` triggers when dynamic proxies or CGLIB generators flood the 1GB fixed ceiling for class headers (`-XX:CompressedClassSpaceSize`), even if `-XX:MaxMetaspaceSize` has gigabytes of free native RAM. Diagnose using `jcmd <PID> VM.metaspace` and tune `-XX:CompressedClassSpaceSize=2g`.
+   - **Code Cache Exhaustion Performance Collapse**: If `-XX:ReservedCodeCacheSize` is exhausted, HotSpot halts JIT compilation, turns off Tiered Compilation, and falls back permanently to interpreter execution. Throughput drops by 80-95%. Inspect using `jcmd <PID> Compiler.codecache` and ensure `-XX:+UseCodeCacheFlushing` is active.
+   - **Time-To-Safepoint (TTSP) Latency Spikes**: Long-running non-counted `int` loops without safepoint polls prevent threads from reaching safepoints, causing all other threads to stall waiting for the STW phase. Profile with `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsTimeout=100` or `-Xlog:safepoint=debug:file=safepoints.log`.
+
+<details>
+<summary>View Legacy ASCII Architecture Blueprint</summary>
+
+```text
 +-----------------------------------------------------------------------------------+
 | Layer 4: Execution Engine & Native Interface                                      |
 | - Interpreter (Template Interpreter) -> C1 Compiler (Client) -> C2 (Opto Server) |
@@ -35,6 +122,8 @@
 | - Virtual Address Space, Page Tables, MMU, TLB Shootdowns, CPU Hardware Registers |
 +-----------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 
@@ -69,7 +158,51 @@ Diagram and detail the complete anatomy of the HotSpot JVM's Runtime Data Areas.
    - *The Problem of PermGen*: Resided inside the contiguous Java Heap bounded by `-XX:MaxPermSize` (default 64MB/82MB). Class metadata size was impossible to predict in enterprise applications using runtime bytecode generation (Spring AOP, CGLIB, Hibernate). Exhausting PermGen caused fatal `OutOfMemoryError: PermGen space` that forced Stop-The-World Full GCs and service crashes.
    - *The Metaspace Solution*: Allocates metadata out-of-line in **native OS memory** (`malloc`). By default, it auto-grows dynamically up to available physical OS RAM, bounded only by `-XX:MaxMetaspaceSize`. Class unloading occurs concurrently during GC cycles when the associated `ClassLoader` becomes unreachable.
 
+```mermaid
+flowchart TB
+    subgraph SHARED ["JVM Process Virtual Memory: Thread-Shared Subsystems"]
+        direction TB
+        subgraph HEAP ["Java Managed Heap (-Xms / -Xmx)"]
+            direction TB
+            Y_GEN["Young Generation<br/>Eden (TLABs) | Survivor S0 | Survivor S1"]
+            O_GEN["Old / Tenured Generation<br/>Long-Lived Objects & Huge Pre-Tenured Arrays"]
+        end
+
+        subgraph OFFHEAP ["Off-Heap Native Memory (OS C-Heap)"]
+            direction TB
+            META["Metaspace (-XX:MaxMetaspaceSize)<br/>InstanceKlass, vtables, itables, Constant Pools"]
+            CCS["Compressed Class Space (-XX:CompressedClassSpaceSize)<br/>32-bit shifted class pointers (1GB Default)"]
+            CC["Code Cache (-XX:ReservedCodeCacheSize)<br/>JIT x86/ARM Compiled Code & C2 Native Blobs"]
+        end
+    end
+
+    subgraph PRIVATE ["Thread-Private Subsystems (Allocated Per Native OS Thread)"]
+        direction TB
+        subgraph THREAD_N ["Thread N Execution Context"]
+            direction LR
+            STK["Java Execution Stack (-Xss1m)<br/>[Local Variable Table | Operand Stack | Frame Data]"]
+            PC["Program Counter (PC) Register<br/>Pointer to current bytecode offset"]
+            NSTK["Native Method Stack<br/>C-ABI Stack Frames for JNI & Panama"]
+        end
+    end
+
+    SHARED ~~~ PRIVATE
+
+    classDef shared fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef heap fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef offheap fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef priv fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class SHARED shared;
+    class Y_GEN,O_GEN heap;
+    class META,CCS,CC offheap;
+    class STK,PC,NSTK priv;
 ```
+
+<details>
+<summary>View Legacy ASCII Runtime Data Areas Layout</summary>
+
+```text
 HotSpot JVM Runtime Data Areas Layout:
 +-----------------------------------------------------------------------+
 | Thread-Shared Memory                                                  |
@@ -91,6 +224,8 @@ HotSpot JVM Runtime Data Areas Layout:
 |  +-----------------------------------+  +--------------------------+  |
 +-----------------------------------------------------------------------+
 ```
+
+</details>
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Does Metaspace store `static` variables in Java 8+?"
@@ -430,7 +565,42 @@ In a high-throughput microservice, 128 worker threads allocate 5,000,000 objects
    - If the requested object is **larger than the entire TLAB** (e.g., a massive 50MB array):
      The JVM bypasses TLAB entirely and allocates the object directly in shared Eden or Old Generation.
 
+```mermaid
+flowchart LR
+    subgraph EDEN ["Java Heap: Eden Generation Space"]
+        subgraph TLAB1 ["Thread 1 TLAB"]
+            T1_ALLOC["Allocated Objects"]
+            T1_TOP["top pointer (BumpPtr)"]
+            T1_END["end pointer"]
+        end
+        subgraph TLAB2 ["Thread 2 TLAB"]
+            T2_ALLOC["Allocated Objects"]
+            T2_TOP["top pointer (BumpPtr)"]
+            T2_END["end pointer"]
+        end
+        subgraph TLAB3 ["Thread 3 TLAB"]
+            T3_ALLOC["Allocated Objects"]
+            T3_TOP["top pointer (BumpPtr)"]
+            T3_END["end pointer"]
+        end
+        subgraph FREE_EDEN ["Unassigned Eden Arena"]
+            SHARED_CAS["Atomic CAS Allocation<br/>(Refills & Huge Objects &gt; TLAB)"]
+        end
+    end
+
+    classDef tlab fill:#1e1e2e,stroke:#a6e3a1,stroke-width:1.5px,color:#cdd6f4;
+    classDef eden fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef free fill:#1e1e2e,stroke:#f9e2af,stroke-width:1.5px,color:#cdd6f4;
+
+    class EDEN eden;
+    class TLAB1,TLAB2,TLAB3 tlab;
+    class FREE_EDEN free;
 ```
+
+<details>
+<summary>View Legacy ASCII Eden Memory Space Layout</summary>
+
+```text
 Eden Memory Space:
 +-------------------+-------------------+-------------------+-------------------+
 |  Thread 1 TLAB    |  Thread 2 TLAB    |  Thread 3 TLAB    | Free Eden Space   |
@@ -438,6 +608,8 @@ Eden Memory Space:
 | (Private BumpPtr) | (Private BumpPtr) | (Private BumpPtr) |  single CAS lock) |
 +-------------------+-------------------+-------------------+-------------------+
 ```
+
+</details>
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Can objects allocated inside Thread 1's TLAB be read by Thread 2?"
@@ -1428,7 +1600,27 @@ Trace the lifecycle of a method as it warms up from Tier 0 to Tier 4, and explai
 3. **Deoptimization**:
    If code at Tier 4 encounters an unexpected type that violates speculative assumptions (Uncommon Trap), it drops immediately back to **Tier 0 (Interpreter)**, updates the profile, and re-compiles back up to Tier 4.
 
+```mermaid
+stateDiagram-v2
+    [*] --> Tier0: JVM Startup & First Call
+    Tier0: Tier 0 - Template Interpreter (Raw Bytecode & Basic Counters)
+    Tier1: Tier 1 - Simple C1 (Zero Profiling / Light Load)
+    Tier2: Tier 2 - Limited C1 (Basic Invocation & Backedge Counters)
+    Tier3: Tier 3 - Full C1 (MethodDataObjects / MDO Branch & Type Profiling)
+    Tier4: Tier 4 - C2 Server Compiler (Peak Native Machine Code / SIMD / GVN)
+
+    Tier0 --> Tier3: Method Hits Warmup Threshold
+    Tier0 --> Tier1: C2 Queue Saturated / Trivial Leaf Method
+    Tier1 --> Tier4: High Counter Threshold
+    Tier2 --> Tier3: Queue Load Rebalancing
+    Tier3 --> Tier4: MDO Profile Saturated (Hot Method Peak Compilation)
+    Tier4 --> Tier0: Uncommon Trap Triggered (Speculation Invalidation Deoptimization)
 ```
+
+<details>
+<summary>View Legacy ASCII Tiered Compilation State Machine</summary>
+
+```text
 Tiered Compilation State Machine:
 [ Tier 0: Interpreter ]
           |
@@ -1443,6 +1635,8 @@ Tiered Compilation State Machine:
      (Uncommon Trap Triggered!)
           +---------------------------------------------> (Deoptimizes to Tier 0!)
 ```
+
+</details>
 
 ##### 4. Follow-Up Trap Question & Winning Answer
 - **Trap Question**: "Can you disable Tiered Compilation to force C2-only compilation using `-XX:-TieredCompilation`?"
@@ -2474,7 +2668,35 @@ Compare a standard `java.lang.StackOverflowError` with an OS native segmentation
 1. **The Anatomy of Stack Guard Pages**:
    When HotSpot allocates a 1MB native thread stack (`-Xss1m`), it partitions the stack into zones:
 
+```mermaid
+flowchart TB
+    subgraph STACK ["Thread Native Stack Anatomy (-Xss1m) [High to Low Memory]"]
+        direction TB
+        F_NORM["Active Java Method Activation Frames<br/>(Normal Stack Execution & Dynamic Invocation)"]
+        Z_RES["Reserved Zone<br/>(Emergency Headroom for Critical java.util.concurrent Lock Release)"]
+        Z_YEL["Yellow Zone (mprotect: PROT_READ | PROT_WRITE Revoked)<br/>Triggers Soft Page Fault -&gt; Dispatches java.lang.StackOverflowError"]
+        Z_RED["Red Zone (Hard Barrier: PROT_NONE)<br/>Zero Execution Margin -&gt; Immediate Kernel SIGSEGV & Process Crash"]
+    end
+
+    F_NORM --> Z_RES
+    Z_RES --> Z_YEL
+    Z_YEL --> Z_RED
+
+    classDef normal fill:#1e1e2e,stroke:#a6e3a1,stroke-width:1.5px,color:#cdd6f4;
+    classDef reserved fill:#1e1e2e,stroke:#89b4fa,stroke-width:1.5px,color:#cdd6f4;
+    classDef yellow fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef red fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+
+    class F_NORM normal;
+    class Z_RES reserved;
+    class Z_YEL yellow;
+    class Z_RED red;
 ```
+
+<details>
+<summary>View Legacy ASCII Stack Guard Pages Layout</summary>
+
+```text
 +-------------------------------------------------------------+ High Address
 | Current Method Execution Frames (Normal Stack Usage)        |
 +-------------------------------------------------------------+
@@ -2485,6 +2707,8 @@ Compare a standard `java.lang.StackOverflowError` with an OS native segmentation
 | Red Zone (Hard Barrier: PROT_NONE)                          |
 +-------------------------------------------------------------+ Low Address
 ```
+
+</details>
 
 2. **Java Stack Overflow Handling (Yellow Zone)**:
    - When recursive Java code exceeds the safe stack boundary, it hits the **Yellow Zone**.

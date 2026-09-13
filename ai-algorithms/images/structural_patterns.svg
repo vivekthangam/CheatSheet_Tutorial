@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 700" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080c17" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="purpleHead" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1150" height="700" fill="url(#bg2)" />
+  <rect x="15" y="15" width="1120" height="670" rx="10" fill="none" stroke="#1e293b" stroke-width="2" />
+
+  <!-- Header -->
+  <rect x="225" y="25" width="700" height="50" rx="8" fill="url(#purpleHead)" />
+  <text x="575" y="57" fill="#ffffff" font-family="'Segoe UI', sans-serif" font-size="20" font-weight="bold" text-anchor="middle">STRUCTURAL DESIGN PATTERNS: COMPOSITION &amp; BOUNDARIES</text>
+
+  <!-- Row 1: Adapter, Bridge, Composite -->
+  <!-- Adapter -->
+  <g transform="translate(40, 95)">
+    <rect width="340" height="170" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1.5" />
+    <rect x="0" y="0" width="340" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#818cf8" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">6. ADAPTER</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Wraps an incompatible interface.</text>
+    <text x="15" y="75" fill="#f8fafc" font-size="11" font-family="monospace">class StripeAdapter(PaymentGateway):</text>
+    <text x="25" y="95" fill="#94a3b8" font-size="10" font-family="monospace">def process(self, req: Req):</text>
+    <text x="35" y="115" fill="#818cf8" font-size="10" font-family="monospace">cents = int(req.amount * 100)</text>
+    <text x="35" y="135" fill="#818cf8" font-size="10" font-family="monospace">return self.sdk.charge(cents)</text>
+  </g>
+
+  <!-- Bridge -->
+  <g transform="translate(405, 95)">
+    <rect width="340" height="170" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5" />
+    <rect x="0" y="0" width="340" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#c084fc" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">7. BRIDGE</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Decouples Abstraction from Implementation.</text>
+    <text x="15" y="75" fill="#f8fafc" font-size="11" font-family="monospace">Abstraction: UrgentNotification</text>
+    <text x="15" y="95" fill="#94a3b8" font-size="11" font-family="monospace">Implementor: SmsSender / EmailSender</text>
+    <text x="15" y="125" fill="#34d399" font-size="11">Both can vary independently without</text>
+    <text x="15" y="145" fill="#34d399" font-size="11">exploding M x N class hierarchies.</text>
+  </g>
+
+  <!-- Composite -->
+  <g transform="translate(770, 95)">
+    <rect width="340" height="170" rx="8" fill="#1e293b" stroke="#ec4899" stroke-width="1.5" />
+    <rect x="0" y="0" width="340" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#f472b6" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">8. COMPOSITE</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Treats individual and groups uniformly.</text>
+    <text x="15" y="75" fill="#f8fafc" font-size="11" font-family="monospace">class FileNode(Protocol):</text>
+    <text x="25" y="95" fill="#f472b6" font-size="11" font-family="monospace">def get_size(self) -> int</text>
+    <text x="15" y="120" fill="#94a3b8" font-size="11">Directory (Composite) sums all</text>
+    <text x="15" y="140" fill="#94a3b8" font-size="11">child FileLeaf and nested Directory nodes.</text>
+  </g>
+
+  <!-- Row 2: Decorator, Facade, Flyweight, Proxy -->
+  <!-- Decorator -->
+  <g transform="translate(40, 290)">
+    <rect width="250" height="180" rx="8" fill="#1e293b" stroke="#06b6d4" stroke-width="1.5" />
+    <rect x="0" y="0" width="250" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#38bdf8" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">9. DECORATOR</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Wraps layers dynamically.</text>
+    <text x="15" y="75" fill="#f8fafc" font-size="10" font-family="monospace">stream = (</text>
+    <text x="25" y="95" fill="#38bdf8" font-size="10" font-family="monospace">EncryptedStream(</text>
+    <text x="35" y="115" fill="#38bdf8" font-size="10" font-family="monospace">CompressedStream(</text>
+    <text x="45" y="135" fill="#38bdf8" font-size="10" font-family="monospace">BaseStream())))</text>
+    <text x="15" y="160" fill="#94a3b8" font-size="10">Also Python @decorator syntax.</text>
+  </g>
+
+  <!-- Facade -->
+  <g transform="translate(315, 290)">
+    <rect width="250" height="180" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.5" />
+    <rect x="0" y="0" width="250" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#34d399" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">10. FACADE</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Unified API over chaos.</text>
+    <text x="15" y="75" fill="#f8fafc" font-size="11" font-family="monospace">OrderFulfillmentFacade:</text>
+    <text x="25" y="95" fill="#34d399" font-size="10" font-family="monospace">.place_order():</text>
+    <text x="35" y="115" fill="#94a3b8" font-size="10" font-family="monospace">- Inventory.reserve()</text>
+    <text x="35" y="135" fill="#94a3b8" font-size="10" font-family="monospace">- Payment.charge()</text>
+    <text x="35" y="155" fill="#94a3b8" font-size="10" font-family="monospace">- Logistics.ship()</text>
+  </g>
+
+  <!-- Flyweight -->
+  <g transform="translate(590, 290)">
+    <rect width="250" height="180" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" />
+    <rect x="0" y="0" width="250" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#fbbf24" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">11. FLYWEIGHT</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Saves RAM by sharing state.</text>
+    <text x="15" y="75" fill="#fbbf24" font-size="10" font-family="monospace">__slots__ = ('x','y','type')</text>
+    <text x="15" y="98" fill="#f8fafc" font-size="11">Intrinsic: Texture, Mesh</text>
+    <text x="15" y="118" fill="#94a3b8" font-size="11">Extrinsic: X, Y, Velocity</text>
+    <text x="15" y="145" fill="#34d399" font-size="11">1,000,000 entities in</text>
+    <text x="15" y="162" fill="#34d399" font-size="11">50MB instead of 1.2GB.</text>
+  </g>
+
+  <!-- Proxy -->
+  <g transform="translate(865, 290)">
+    <rect width="245" height="180" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="1.5" />
+    <rect x="0" y="0" width="245" height="30" rx="8" fill="#0f172a" />
+    <text x="15" y="21" fill="#f87171" font-family="'Segoe UI', sans-serif" font-size="13" font-weight="bold">12. PROXY</text>
+    <text x="15" y="52" fill="#cbd5e1" font-size="11">Surrogate gatekeeper.</text>
+    <text x="15" y="75" fill="#f87171" font-size="10" font-family="monospace">CircuitBreakerProxy</text>
+    <text x="15" y="95" fill="#94a3b8" font-size="10" font-family="monospace">- CLOSED (normal)</text>
+    <text x="15" y="115" fill="#94a3b8" font-size="10" font-family="monospace">- OPEN (fast fail)</text>
+    <text x="15" y="135" fill="#94a3b8" font-size="10" font-family="monospace">- HALF-OPEN (probe)</text>
+    <text x="15" y="160" fill="#cbd5e1" font-size="10">Protection &amp; Virtual Proxies</text>
+  </g>
+
+  <!-- Summary Banner -->
+  <g transform="translate(40, 500)">
+    <rect width="1070" height="160" rx="8" fill="#0f172a" stroke="#334155" />
+    <text x="30" y="35" fill="#f8fafc" font-size="14" font-weight="bold">Key Structural Rule in Python 3.12+:</text>
+    <text x="30" y="65" fill="#94a3b8" font-size="12">Prefer composition over inheritance. Use `typing.Protocol` for structural typing (duck typing with static checking) rather than forcing abstract inheritance trees.</text>
+    <text x="30" y="90" fill="#94a3b8" font-size="12">Combine decorators and proxies to intercept cross-cutting concerns (authentication, tracing, rate-limiting, circuit breakers) transparently.</text>
+    <text x="30" y="120" fill="#38bdf8" font-size="12">Flyweight with `__slots__` bypasses Python's instance `__dict__` overhead (reducing 152 bytes per object down to 48 bytes).</text>
+  </g>
+</svg>

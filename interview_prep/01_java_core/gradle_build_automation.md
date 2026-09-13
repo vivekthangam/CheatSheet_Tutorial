@@ -6,7 +6,120 @@
 
 ## Guide Architecture Overview
 
+```mermaid
+flowchart TB
+    subgraph L8 ["Layer 8: Production CLI & Performance Decision Matrix"]
+        direction LR
+        G1["CLI Flags: --scan, --build-cache<br/>(Develocity Scans, cache replay)"]
+        G2["Parallel & Worker API: --parallel, --max-workers=8<br/>(Process/Thread isolation)"]
+        G3["Daemon Maintenance: --status, --stop<br/>(Background JVM lifecycle)"]
+    end
+
+    subgraph L7 ["Layer 7: Configuration Anti-Patterns & Forensics"]
+        direction LR
+        E1["Configuration Phase I/O Trap<br/>(Network/disk calls freeze every run)"]
+        E2["subprojects / allprojects Poisoning<br/>(Couples modules, breaks config cache)"]
+        E3["Daemon Memory Leaks & Lockups<br/>(Metaspace exhaustion, file locks on Windows)"]
+    end
+
+    subgraph L6 ["Layer 6: Architecture Modularity & Composite Builds"]
+        direction LR
+        C1["includeBuild Composite Builds<br/>(Live cross-repo local source substitution)"]
+        C2["build-logic Convention Plugins<br/>(Type-safe custom Kotlin plugins)"]
+        C3["Version Catalogs (libs.versions.toml)<br/>(Type-safe multi-module dependency pinning)"]
+    end
+
+    subgraph L5 ["Layer 5: Configuration Cache & Remote Build Cache"]
+        direction LR
+        CC1["Configuration Cache<br/>(Serializes in-memory task DAG to disk)"]
+        CC2["Remote Build Cache (FROM-CACHE)<br/>(SHA-256 fingerprint HTTP artifact cache)"]
+        CC3["CC Disallowed Inputs<br/>(Direct Project references prohibited)"]
+    end
+
+    subgraph L4 ["Layer 4: Incremental Builds & UP-TO-DATE Mechanics"]
+        direction LR
+        I1["@Input / @InputFiles / @OutputDirectory<br/>(Annotated inputs & outputs)"]
+        I2["Cryptographic Hash Fingerprinting<br/>(Compares prior build snapshot hashes)"]
+        I3["Task State: UP-TO-DATE vs EXECUTED<br/>(Zero-time redundant execution skips)"]
+    end
+
+    subgraph L3 ["Layer 3: Dependency Resolution & Conflict Engine"]
+        direction LR
+        R1["api vs implementation<br/>(ABI leakage prevention & recompile avoidance)"]
+        R2["Highest Version Wins Engine<br/>(Gradle default resolution vs Maven nearest)"]
+        R3["Rich Version Constraints<br/>strictly, prefer, reject, require"]
+    end
+
+    subgraph L2 ["Layer 2: Task Execution Graph & Avoidance API"]
+        direction LR
+        T1["Task Execution Graph (DAG)<br/>(Topological sorting of dependsOn / mustRunAfter)"]
+        T2["Task Configuration Avoidance<br/>tasks.register() (lazy) vs tasks.create() (eager)"]
+        T3["Task Actions<br/>doFirst { } and doLast { } execution hooks"]
+    end
+
+    subgraph L1 ["Layer 1: Gradle 3-Phase Lifecycle & Settings"]
+        direction LR
+        P1["Initialization Phase<br/>(settings.gradle.kts determines projects)"]
+        P2["Configuration Phase<br/>(Executes build.gradle.kts to build task graph)"]
+        P3["Execution Phase<br/>(Traverses DAG and executes actions)"]
+    end
+
+    L8 --> L7
+    L7 --> L6
+    L6 --> L5
+    L5 --> L4
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+
+    classDef l8 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+    classDef l7 fill:#1e1e2e,stroke:#fab387,stroke-width:2px,color:#cdd6f4;
+    classDef l6 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l5 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l4 fill:#1e1e2e,stroke:#94e2d5,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89dceb,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+
+    class G1,G2,G3 l8;
+    class E1,E2,E3 l7;
+    class C1,C2,C3 l6;
+    class CC1,CC2,CC3 l5;
+    class I1,I2,I3 l4;
+    class R1,R2,R3 l3;
+    class T1,T2,T3 l2;
+    class P1,P2,P3 l1;
 ```
+
+#### Architectural Breakdown: The 8-Layer Gradle Build Automation & DAG Engine
+
+1. **Visual Architecture & Engine Layer Anatomy**:
+   - **Layer 1 (Gradle 3-Phase Lifecycle & Settings)**: The foundation of Gradle. Distinctly isolates the **Initialization Phase** (`settings.gradle.kts`), **Configuration Phase** (`build.gradle.kts` constructing the DAG), and **Execution Phase** (running task actions).
+   - **Layer 2 (Task Execution Graph & Avoidance API)**: Manages build work via an acyclic directed graph. Leverages the Task Configuration Avoidance API (`tasks.register()` creating lazy `TaskProvider` instances) to eliminate unnecessary object allocation and configuration time.
+   - **Layer 3 (Dependency Resolution & Conflict Engine)**: Manages dependencies via configurations. Enforces Application Binary Interface (ABI) isolation with `api` vs `implementation`. Unlike Maven's nearest-definition-wins, Gradle resolves version conflicts using **Highest Version Wins** by default, extensible via rich version constraints (`strictly`, `reject`).
+   - **Layer 4 (Incremental Builds & UP-TO-DATE Mechanics)**: High-speed execution engine. Tasks declare annotated inputs (`@Input`, `@InputFiles`) and outputs (`@OutputDirectory`). Gradle hashes inputs and outputs before running a task; if unchanged since the prior invocation, the task is marked `UP-TO-DATE` and skipped in 0ms.
+   - **Layer 5 (Configuration Cache & Remote Build Cache)**: Next-generation caching. Configuration Cache serializes the complete in-memory task execution graph directly to disk, bypassing Phase 2 on subsequent builds. Remote Build Cache shares task output JARs across teams and CI/CD pipelines via SHA-256 fingerprint matching (`FROM-CACHE`).
+   - **Layer 6 (Architecture Modularity & Composite Builds)**: Supports monorepos and multi-repo architectures. `includeBuild` enables local source substitution without publishing snapshot artifacts. Centralized `build-logic` convention plugins eliminate duplicated build configuration across sub-projects.
+   - **Layer 7 (Configuration Anti-Patterns & Forensics)**: Hardened guidance preventing slow configuration-phase I/O, leaky `subprojects` blocks, and Gradle daemon Metaspace memory leaks.
+   - **Layer 8 (Production CLI & Performance Decision Matrix)**: Developer operations and debugging tools including Gradle Build Scans (`--scan`), parallel worker thread limits (`--parallel`), and daemon lifecycle commands.
+
+2. **Execution Flow & Lifecycle State Transitions**:
+   - **Phase 1: Initialization**: Gradle parses `settings.gradle.kts`, resolves included builds (`includeBuild`), and creates `Project` descriptors for the root and all sub-modules.
+   - **Phase 2: Configuration**: Evaluates the `build.gradle.kts` buildscripts. Tasks register their inputs, outputs, and dependencies (`dependsOn`). Gradle computes the topological sort of the graph. If Configuration Cache is active and valid, Gradle loads the cached graph directly from disk and skips this entire phase.
+   - **Phase 3: Execution**: Gradle traverses the DAG. For each task, it compares input/output cryptographic fingerprints. If unchanged, it marks the task `UP-TO-DATE`. If cached remotely, it downloads the artifact (`FROM-CACHE`). Otherwise, it executes `doFirst` and `doLast` actions.
+
+3. **Low-Level Mediation & Cache Serialization Mechanics**:
+   - **`api` vs `implementation` Classpath Isolation**: When Module A depends on Module B via `implementation`, Module B's internal classes are placed on Module A's compile classpath, but are **excluded** from the compile classpath of any module that depends on Module A. When Module B changes its internal private code, downstream consumers of Module A do not need to recompile, enabling massive parallel build speedups.
+   - **Configuration Cache Fingerprinting**: The configuration cache records all inputs consumed during configuration (e.g. system properties, environment variables, Gradle files). If any recorded input changes, the cache is invalidated and Phase 2 runs again. Direct references to `Project` objects inside task actions are forbidden because `Project` contains live execution state that cannot be safely serialized.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **Configuration-Phase I/O Latency Trap**: Running network requests (e.g. fetching metadata from an internal API) or filesystem scans directly in the configuration phase blocks every build, even `./gradlew tasks`. SRE remediation: Migrate dynamic values into lazy providers (`providers.of()`) or dedicated task actions.
+   - **Gradle Daemon Metaspace Exhaustion**: On CI workers that run hundreds of builds with various dynamic plugins, long-lived Gradle daemon JVMs leak Metaspace memory, eventually crashing with `OutOfMemoryError: Metaspace`. SRE diagnostic command: `./gradlew --status` and ensure CI configurations invoke `./gradlew --stop` at the end of build agent runs.
+
+<details>
+<summary>View Legacy ASCII Overview</summary>
+
+```text
 ========================================================================================================================
                                      GRADLE BUILD ENGINE INTERVIEW GUIDE
 ========================================================================================================================
@@ -20,6 +133,8 @@
  [Layer 8: Rapid-Fire Cheat Sheet & Decision Matrix]       --> CLI Flags, Kotlin DSL Syntax, Performance Decision Matrix
 ========================================================================================================================
 ```
+
+</details>
 
 ---
 

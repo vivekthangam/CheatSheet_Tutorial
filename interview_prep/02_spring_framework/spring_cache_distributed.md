@@ -6,20 +6,16 @@
 
 ## Guide Architecture Overview
 
-```
-========================================================================================================================
-                                     SPRING CACHE & DISTRIBUTED CACHING ARCHITECTURE
-========================================================================================================================
- [Layer 1: Spring Cache Abstraction & Proxy Internals]   --> AOP Interceptor, sync=true Mutex, SpEL Key Collisions
- [Layer 2: In-Memory Caching & Caffeine W-TinyLFU]       --> Window TinyLFU, Count-Min Sketch, RingBuffers, MPSC Queues
- [Layer 3: Distributed Caching with Redis & Redisson]    --> Redis Cluster, 16384 Slots, Hash Tags, Redisson Lock Lua
- [Layer 4: Multi-Tier L1+L2 Hybrid Caching & Coherency]  --> Caffeine L1 + Redis L2, Pub/Sub Invalidation, Clock Skew
- [Layer 5: Ultra-Deep Real-World War-Room Incidents]     --> 7 Production Disasters (Avalanche, Hotkey, Big Key, Dirty Read)
- [Layer 6: Beginner Mistakes & Fatal Engineering Traps]  --> 7 Anti-Patterns (Self-Invocation, Mutable References, OOM)
- [Layer 7: Globally Reported Production Post-Mortems]    --> Real-World Post-Mortems (Facebook Memcached, Twitter Redis)
- [Layer 8: Rapid-Fire Cheat Sheet & Decision Matrix]     --> High-Speed Lookup Tables, Eviction Formulas, Redis Cheatsheet
-========================================================================================================================
-```
+| Architecture Layer | Subsystem Focus & Core Primitives | Operational Mechanisms & Deep-Dive Topics |
+|---|---|---|
+| **Layer 1: Cache Abstraction & Proxy Internals** | Spring AOP, `CacheInterceptor`, `CacheAspectSupport` | `@Cacheable`, `sync=true` mutex lock striping, custom `KeyGenerator`, SpEL collision prevention. |
+| **Layer 2: In-Memory Caching (Caffeine)** | W-TinyLFU, `CaffeineCacheManager`, RingBuffers | Window TinyLFU admission, Count-Min Sketch frequency filter, MPSC queues, sub-microsecond lookups. |
+| **Layer 3: Distributed Caching (Redis & Redisson)** | Redis Cluster, Lettuce, Redisson, Hash Tags | 16,384 hash slots, multi-key hash tag routing (`{user:101}`), Redisson distributed lock watchdog, Lua atomic scripts. |
+| **Layer 4: Multi-Tier L1+L2 Hybrid Caching** | Caffeine (L1) + Redis (L2), Redis Pub/Sub | Two-tier read hierarchy, distributed cache invalidation broadcasts, clock-skew mitigation, near-cache coherency. |
+| **Layer 5: War-Room Production Incidents** | Outage triage, Disaster Recovery | Mitigating cache avalanche, hotkey saturation, big key network degradation, stampedes, and dirty reads. |
+| **Layer 6: Engineering Traps & Anti-Patterns** | Architecture governance, code smells | Self-invocation proxy bypasses, mutable reference pollution, JVM heap OOM, default Java serialization traps. |
+| **Layer 7: Real-World Industry Post-Mortems** | Large-scale production analysis | Case studies from Facebook Memcached lease tokens, Twitter Redis cluster failovers, and cache breakdown incidents. |
+| **Layer 8: Rapid-Fire Cheat Sheet & Decision Matrix** | Executive reference matrices | Eviction policy selection formulas, TTL jitter calculators, Redis command complexity charts, production sizing. |
 
 ---
 
@@ -39,16 +35,17 @@ When `@EnableCaching` is present, Spring registers `CacheInterceptor` as an advi
    - **Cache Hit**: Returns the `ValueWrapper.get()` immediately. The underlying service method body is **never executed**!
    - **Cache Miss**: Invokes the target method, receives the database result, verifies the `unless` condition, puts the result into the cache via `cache.put(key, result)`, and returns to caller.
 
-```
-Client Caller ---> [ CGLIB Proxy ] ---> [ CacheInterceptor ]
-                                                │
-                          ┌─────────────────────┴─────────────────────┐
-                          ▼                                           ▼
-                     [ Cache Hit ]                               [ Cache Miss ]
-                 Return Cached Object                     Target Method Executed (DB Call)
-                 (Method bypassed!)                                   │
-                                                          Put to Cache & Return
-```
+> [!NOTE]
+> **Spring Cache Interception Pipeline**:  
+> `[Client Caller]` ──► `[Spring CGLIB / JDK Proxy]` ──► `[CacheInterceptor (CacheAspectSupport)]` ──► `[Cache Key Evaluation (SpEL / KeyGenerator)]`  
+> • **Cache Hit**: Returns cached `ValueWrapper.get()` immediately (underlying database/service method bypassed)  
+> • **Cache Miss**: Invokes target `@Service` method ──► Executes Database Query ──► Calls `cache.put(key, result)` ──► Returns payload to caller
+
+
+| Execution Branch | Condition & Verification | Target Method Execution | Cache State Mutation | Latency Profile |
+|---|---|---|---|---|
+| **Cache Hit** | Key found in `Cache` store and satisfies `unless` condition. | **Bypassed completely** (Zero DB queries issued). | None (`Hit` counter incremented). | **Sub-microsecond** (L1 Caffeine: $< 200\text{ns}$; L2 Redis: $< 1\text{ms}$). |
+| **Cache Miss** | Key missing from `Cache` or evicted due to TTL/size constraints. | **Target method invoked** (Executes full DB query / ORM hydration). | Stores return value via `cache.put(key, result)` unless `unless` condition matches. | **Database latency bound** (10ms – 100ms+ depending on query complexity). |
 
 #### Follow-Up Trap Question & Winning Answer
 - **Trap:** "What happens if the target `@Cacheable` method throws a `RuntimeException` during database access?"
@@ -297,18 +294,17 @@ Caffeine.newBuilder()
 #### Technical Deep Dive
 When caching 50GB to 200GB of objects in a single JVM, standard heap caching causes catastrophic GC pauses (G1/CMS mark-sweep phases).
 **Ehcache 3 Off-Heap Architecture**:
-```
-+─────────────────────────────────────────────────────────────+
-| JVM Heap Tier (Fastest, Small: 2 GB)                        |
-+─────────────────────────────────────────────────────────────+
-                              │ (Overflow / Eviction)
-                              ▼
-+─────────────────────────────────────────────────────────────+
-| Off-Heap Tier: Unsafe.allocateMemory (Direct RAM: 64 GB)    |
-| - Zero JVM Garbage Collection pauses                        |
-| - Requires byte serialization / deserialization overhead     |
-+─────────────────────────────────────────────────────────────+
-```
+
+> [!NOTE]
+> **Ehcache 3 Multi-Tiered Memory Storage Hierarchy**:
+> `Application Access` ➔ **Tier 1: On-Heap L1 Cache** `[JVM Heap (2 GB, Direct Object References)]` ➔ `Eviction / Overflow Tiering` ➔ **Tier 2: Off-Heap L2 Cache** `[Direct ByteBuffers via Unsafe.allocateMemory (64 GB Direct OS RAM)]` ➔ `Zero GC Pressure`
+
+| Memory Tier | Storage Medium & Allocation Mechanism | Capacity Profile | Access Latency | Serialization Overhead | Garbage Collection Impact |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **On-Heap Tier** | JVM Managed Heap (`byte[]`, object references) | Small ($1\text{ GB} - 4\text{ GB}$) | Ultra-fast ($\sim 100\text{ns}$) | Zero (Stores direct Java object references) | High (Subject to GC young-gen / old-gen scanning and compaction pauses). |
+| **Off-Heap Tier** | Native OS Virtual Memory (`Unsafe.allocateMemory` / Direct `ByteBuffer`) | Large ($10\text{ GB} - 256\text{ GB}$) | Sub-millisecond ($\sim 10\mu\text{s} - 50\mu\text{s}$) | Moderate (Requires byte serialization / deserialization on read/write) | **Zero GC Overhead**: Completely invisible to JVM garbage collectors (G1, ZGC, Shenandoah). |
+| **Disk Tier** | Local NVMe / Persistent Storage (`java.nio.channels.FileChannel`) | Massive ($100\text{ GB} - 2\text{ TB}$) | Low millisecond ($\sim 1\text{ms} - 5\text{ms}$) | High (Full disk serialization with write-ahead logging) | Zero GC Overhead; survives JVM crashes and process restarts. |
+
 
 ---
 
@@ -472,14 +468,19 @@ return current
 **Interviewer Evaluation:** Evaluates designing sub-microsecond local caching backed by a shared distributed store.
 
 #### Technical Deep Dive
-```
-Read Path:
-App ---> L1 Caffeine.get(k)
-           ├── [Hit]  ---> Return (< 200 ns)
-           └── [Miss] ---> L2 Redis.get(k)
-                             ├── [Hit]  ---> L1.put(k, v) ---> Return (< 1 ms)
-                             └── [Miss] ---> DB.query(k) ---> L2.put(k, v) ---> L1.put(k, v) ---> Return (25 ms)
-```
+> [!NOTE]
+> **Multi-Tier L1+L2 Read Hierarchy Pipeline**:  
+> `[Application Request]` ──► `[L1 Caffeine (Local JVM RAM)]`  
+> • **Branch A (L1 Hit)**: Returns cached instance directly ($< 200\text{ns}$)  
+> • **Branch B (L1 Miss ➔ L2 Hit)**: Queries `[L2 Redis (Distributed Cluster)]` ──► Backfills local L1 (`L1.put(k, v)`) ──► Returns payload ($< 1\text{ms}$)  
+> • **Branch C (L1 Miss ➔ L2 Miss ➔ DB Hit)**: Executes `[Primary Database Query]` ──► Backfills L2 (`L2.put(k, v)`) ──► Backfills L1 (`L1.put(k, v)`) ──► Returns payload (~$25\text{ms}$)
+
+
+| Tier Resolution | Data Location | Wire Protocol / Transport | Typical Latency | Network Bandwidth Tax |
+|---|---|---|---|---|
+| **L1 Hit** | In-Process JVM Heap (Caffeine) | Zero (direct memory reference) | **$< 200\text{ns}$** | Zero network bandwidth. |
+| **L2 Hit (L1 Miss)** | Distributed Shared Cache (Redis Cluster) | TCP socket multiplexing (Lettuce NIO) | **$< 1\text{ms}$** | Single LAN packet round-trip; backfills local L1. |
+| **Database Hit (L1+L2 Miss)**| Primary RDBMS (PostgreSQL / MySQL) | TCP connection socket (HikariCP pool) | **$10\text{ms} - 50\text{ms}$** | Heavy; queries SQL engine, serializes rows, backfills both L2 and L1. |
 - **Benefit**: Eliminates Redis network bandwidth and CPU load for hot keys; delivers nanosecond responses from local RAM.
 
 ---
@@ -557,20 +558,15 @@ Under concurrent read and write operations:
 **Interviewer Evaluation:** Evaluates decoupling caching invalidation from application code.
 
 #### Technical Deep Dive
-```
-[ App Service ] ---> Writes SQL ---> [ PostgreSQL Master ]
-                                              │
-                                     (WAL / Write-Ahead Log)
-                                              ▼
-                                     [ Debezium Connector ]
-                                              │
-                                              ▼
-                                     [ Apache Kafka Topic ]
-                                              │
-                                              ▼
-                                     [ Cache Invalidator Worker ]
-                                     Executes: redis.del(key)
-```
+> **Debezium CDC Cache Invalidation Pipeline**:  
+> `[App Service]` ──(Mutates Data via SQL)──► `[PostgreSQL Master]` ──(Durable Commit to WAL)──► `[Debezium Connector]` ──(CDC Event JSON)──► `[Apache Kafka Invalidation Topic]` ──(Consumer Worker)──► `[Cache Invalidator Worker]` ──(`redis.del(key)`)──► `[Redis Cluster Cache Evicted]`
+
+| Invalidation Architecture Stage | Component / Primitive | Operational Invariant | Consistency & Failure Guarantee |
+|---|---|---|---|
+| **1. Database Mutation** | Spring `@Service` + RDBMS | Application issues standard SQL `UPDATE` / `DELETE` within transaction boundary. | Atomicity guaranteed by database transaction engine; no premature cache eviction in application code. |
+| **2. Log Tail Mining** | PostgreSQL WAL + Debezium | Debezium monitors database Write-Ahead Log (WAL) replication stream via PostgreSQL `pgoutput`. | Guarantees cache invalidation events are emitted **only after** the transaction is durably committed to disk. |
+| **3. Asynchronous Bus** | Apache Kafka Topic (`db.cdc.customer`) | Formats row-level change events into idempotent CDC envelopes with before/after state. | Decouples database write path from caching infrastructure; buffers invalidations during cache outages. |
+| **4. Eviction Execution** | Invalidator Consumer Worker | Reads Kafka partition and executes atomic `redis.del(key)` (and broadcasts L1 eviction via Redis Pub/Sub). | Idempotent key deletion prevents dual-write race conditions and stale overwrite anomalies. |
 - Completely eliminates dual-write race conditions.
 - Cache is invalidated only **after** the transaction is durably committed to the database WAL.
 
@@ -778,7 +774,7 @@ public class OrderDto { // ❌ Missing implements Serializable
 
 #### Anti-Pattern
 Deploying an updated class without explicit `serialVersionUID`:
-```
+```log
 java.io.InvalidClassException: local class incompatible: stream classdesc serialVersionUID = -4819...
 ```
 Cache reads fail on 100% of requests after rolling deployment! Use Jackson JSON or Protobuf serializers instead.

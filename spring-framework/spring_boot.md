@@ -190,16 +190,19 @@ public class OrderService {
 
 Spring's core is the **Inversion of Control (IoC) Container** (`ApplicationContext`), which instantiates, configures, and manages the lifecycle of Java Beans.
 
-```mermaid
-flowchart TD
-    A[Component Scanning / Configuration] --> B[BeanFactory / ApplicationContext]
-    B --> C{Bean Lifecycle}
-    C --> D[1. Instantiation: Constructor]
-    D --> E[2. Populate Properties: DI]
-    E --> F[3. @PostConstruct / InitializingBean]
-    F --> G[4. Bean Ready in Container]
-    G --> H[5. @PreDestroy / DisposableBean]
-```
+### Spring IoC Container & Bean Lifecycle Execution Pipeline
+
+| Lifecycle Phase | Internal Mechanism | Hook / Annotation | Container Action & Proxy Implication |
+| :--- | :--- | :--- | :--- |
+| **1. Discovery & Registry** | Classpath Scanning | `@ComponentScan`, `@Configuration` | Parses classes into `BeanDefinition` metadata records inside `DefaultListableBeanFactory`. |
+| **2. Instantiation** | Reflection / CGLIB | `Constructor.newInstance()` | Heap allocation of the raw Java instance using constructor arguments. |
+| **3. Property Population** | Dependency Injection | `@Autowired`, `@Value` | `AutowiredAnnotationBeanPostProcessor` injects collaborator references and configuration properties. |
+| **4. Aware Notifications** | Container Introspection | `BeanNameAware`, `ApplicationContextAware` | Injects framework runtime references into the target instance. |
+| **5. Pre-Initialization** | BPP Hook | `BeanPostProcessor.postProcessBeforeInitialization()` | Invokes JSR-250 `@PostConstruct` lifecycle methods. |
+| **6. Custom Init** | Initialization Contract | `InitializingBean.afterPropertiesSet()`, `@Bean(initMethod)` | Executes custom validation and startup bootstrapping logic. |
+| **7. Post-Initialization** | BPP Hook | `BeanPostProcessor.postProcessAfterInitialization()` | **Creates Dynamic AOP Proxies** (`@Transactional`, `@Async`, `@Cacheable`). |
+| **8. In-Service (Ready)** | Singleton Registry | `DefaultSingletonBeanRegistry.singletonObjects` | Bean is live and concurrently accessible across all application worker threads. |
+| **9. Graceful Teardown** | Container Shutdown Hook | `@PreDestroy`, `DisposableBean.destroy()`, `destroyMethod` | Closes network sockets, drains queues, and flushes thread pools before JVM termination. |
 
 ### Dependency Injection Best Practice: Constructor Injection
 > [!TIP]
@@ -281,13 +284,15 @@ public class UserController {
 ## 💾 3. Persistence, JPA & Transaction Management
 
 ### 3.1 `@Transactional` Propagation & Isolation Levels
-```mermaid
-flowchart TD
-    A[Outer Transaction: REQUIRED] --> B{Call Inner Method}
-    B -->|Propagation.REQUIRED| C[Joins Outer Transaction: Fails together]
-    B -->|Propagation.REQUIRES_NEW| D[Suspends Outer: Commits/Rolls back independently]
-    B -->|Propagation.NESTED| E[Savepoint: Can rollback inner without outer]
-```
+| Propagation Behavior | Active Outer Transaction Exists | No Outer Transaction Exists | Commit & Rollback Isolation | Recommended Production Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| **`REQUIRED`** (Default) | Joins existing transaction | Creates brand-new transaction | Fails and rolls back as a single atomic unit | Standard business service methods executing atomic CRUD |
+| **`REQUIRES_NEW`** | Suspends outer; creates independent new transaction | Creates brand-new transaction | Outer rollback has **no effect** on inner committed transaction | Security audit logging, payment capture gateway calls |
+| **`NESTED`** | Creates a JDBC savepoint inside existing transaction | Creates brand-new transaction | Can rollback inner to savepoint without failing outer transaction | Batch item processing where single-item errors shouldn't abort batch |
+| **`MANDATORY`** | Joins existing transaction | **Throws `TransactionRequiredException`** | Runs within caller's transaction boundary | Internal repository/mutation methods that must never run un-transactionally |
+| **`SUPPORTS`** | Joins existing transaction | Runs non-transactionally without Tx context | Inherits outer rollback semantics if outer exists | Read-only lookup methods that can run both with or without a Tx |
+| **`NOT_SUPPORTED`** | Suspends outer; runs non-transactionally | Runs non-transactionally | No rollback behavior; direct autocommit JDBC operations | Long-running third-party HTTP/REST API calls inside a workflow |
+| **`NEVER`** | **Throws `IllegalTransactionStateException`** | Runs non-transactionally | No rollback behavior | Heavy CPU/analytical tasks that must never hold open a DB connection |
 
 ### 3.2 The Checked Exception Rollback Gotcha
 > [!CAUTION]
@@ -462,13 +467,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 ### 🧩 Scenario 4: Resolving Circular Dependencies Gracefully
 **Problem:** `ServiceA` injects `ServiceB`, and `ServiceB` injects `ServiceA`. Spring fails with `BeanCurrentlyInCreationException`.
 
-```mermaid
-flowchart LR
-    A[ServiceA] -->|Injects| B[ServiceB]
-    B -->|Injects| A
-    style A fill:#ff9999
-    style B fill:#ff9999
-```
+| Dependency Injection Cycle | Root Cause Exception | Immediate Tactical Fix | Architectural Target Architecture |
+| :--- | :--- | :--- | :--- |
+| **`ServiceA` -> `ServiceB` -> `ServiceA`** | `BeanCurrentlyInCreationException` during constructor graph compilation | `@Lazy` on constructor parameter (injects a dynamic lazy-lookup proxy) | Decouple via Domain Events (`ApplicationEventPublisher`), extract shared interface, or introduce a Mediator service |
 
 **Solution:** Decouple using an Event or Mediator pattern, or as a temporary bridge, `@Lazy`:
 ```java

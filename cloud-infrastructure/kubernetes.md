@@ -48,51 +48,35 @@
      - `Observed State (Current)` vs `Desired State (etcd)`.
      - If Pod #2 crashes on Node 3, the `kube-controller-manager` detects `Current = 2, Desired = 3` and commands `kube-scheduler` to immediately schedule a replacement pod on Node 1!
 
-```
-                  ┌──────────────────────────────┐
-                  │   1. Read Desired State      │
-                  │   (from etcd declarative YAML)
-                  └──────────────┬───────────────┘
-                                 │
-                                 ▼
-┌──────────────────────┐  2. Compare  ┌──────────────────────┐
-│ Current Actual State │ <───────────>│ Desired State in YAML│
-└──────────┬───────────┘              └──────────────────────┘
-           │
-           ▼
-3. Take Action to Reconcile (Spin up / Kill Pods)
-```
+### The Declarative Reconciliation Loop
+The core engine of Kubernetes operates on a continuous, infinite control loop:
+1. **Read Desired State**: The controller reads the declarative specifications persisted in `etcd`.
+2. **Observe Actual State**: Informers stream real-time cluster status from worker nodes.
+3. **Compare & Compute Drift**: $\Delta = \text{Desired State} - \text{Observed State}$.
+4. **Reconcile**: Dispatches API instructions to spin up missing pods, kill zombie containers, or attach volumes.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│                             KUBERNETES APPLICATION FLOW                                  │
-│                                                                                          │
-│  [ External Traffic ] ──► [ Ingress Controller ] (Nginx / ALB - TLS & Host Routing)      │
-│                                  │                                                       │
-│                                  ▼                                                       │
-│                           [ K8s Service ] (ClusterIP - Stable Virtual IP & DNS)          │
-│                                  │                                                       │
-│                  ┌───────────────┴───────────────┐                                       │
-│                  ▼                               ▼                                       │
-│          [ Pod Replica 1 ]               [ Pod Replica 2 ]        (Ephemeral Pod IPs)     │
-│       ┌──────────────────────┐        ┌──────────────────────┐                           │
-│       │ Spring Boot App      │        │ Spring Boot App      │                           │
-│       │ └─ ConfigMap / Secret│        │ └─ ConfigMap / Secret│                           │
-│       └──────────────────────┘        └──────────────────────┘                           │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![Kubernetes Topology & Control Plane Architecture](../assets/images/devops/kubernetes_architecture_control_plane.jpg)
 
 ---
 
-## 2. The 5 Core Building Blocks
+## 2. The Core Architectural Building Blocks (Blueprint Deep-Dive)
 
-| Term | What It Means | Real-World Analogy |
-| :--- | :--- | :--- |
-| **Pod** | The smallest deployable unit in K8s. Encapsulates 1 or more tightly-coupled containers sharing network namespace (`localhost`) and storage volumes. | A pea pod holding 1 or 2 peas that must live and travel together on the same plate. |
-| **Deployment** | A declarative controller that manages Pod replicas, zero-downtime rolling updates, and self-healing. | A factory foreman whose sole rule is: *"There must always be 3 bakers at work. If one faints, hire a replacement immediately."* |
-| **Service (`ClusterIP`)** | A stable internal IP address and DNS name (`payment-svc.default.svc.cluster.local`) that load balances traffic across healthy Pods. | A company switchboard phone number. Customers dial 1-800-COMPANY; the operator forwards the call to whichever desk agent is free. |
-| **ConfigMap & Secret** | Externalized configuration key-values and base64-encoded credentials injected into Pods as environment variables or mounted files. | Nametags and hotel keycards handed to employees on their first day so no passwords are hardcoded in application code. |
-| **Ingress** | An intelligent L7 reverse proxy router managing external HTTP/S access, SSL termination, and path-based routing (`/api/v1` -> `payment-svc`). | The airport terminal information board and gate guide routing incoming international travelers to specific domestic boarding gates. |
+| Component | Layer | Technical Systems Role | Real-World Production Function |
+| :--- | :--- | :--- | :--- |
+| **`kube-apiserver`** | Control Plane | REST Gateway & Policy Engine | Stateless HTTP server. Enforces Authentication, RBAC Authorization, Mutating/Validating Admission Webhooks, and persists cluster state strictly to `etcd`. |
+| **`etcd`** | Control Plane | Distributed Consensus Key-Value Store | Raft-backed consistent storage engine (`bbolt`). Requires $(N/2)+1$ quorum for writes. Retains MVCC revision history and streams change watches. |
+| **`kube-scheduler`** | Control Plane | Two-Phase Placement Engine | Selects nodes for unscheduled pods using **Filtering** (resource fit, taints/tolerations, affinity) and **Scoring** (balanced allocation, image locality, topology spread). |
+| **`kube-controller-manager`** | Control Plane | Autonomous Reconciliation Daemons | Hosts background control loops (`DeploymentController`, `ReplicaSetController`, `NodeLifecycleController`, `EndpointSliceController`) driving actual state to desired state. |
+| **`kubelet`** | Worker Node | Primary Node Supervisor Daemon | Manages pod lifecycle via Container Runtime Interface (CRI over gRPC), runs PLEG sync loop, embeds cAdvisor telemetry, and sends 10s Lease heartbeats. |
+| **`kube-proxy`** | Worker Node | Distributed Network Proxy | Implements `Service` virtual IPs (ClusterIP). Uses Linux `IPVS` ($\mathcal{O}(1)$ ipset hashing) or `iptables` chains or `eBPF` kernel socket bypass to load-balance traffic. |
+| **`Pause Container`** | Pod Core | Namespace Anchor (`k8s.gcr.io/pause`) | Minimal C program calling `pause(2)`. Anchors the shared Linux Network & IPC namespaces so application container crashes do not lose the Pod's IP address. |
+| **`Pod`** | Workload Unit | Atomic Compute Envelope | 1 or more tightly coupled containers sharing Network (`localhost`), IPC, and storage volumes. |
+| **`Deployment`** | Controller | Declarative Lifecycle Manager | Manages ReplicaSets to enforce desired scale, zero-downtime rolling updates, and instant rollbacks. |
+| **`Service (ClusterIP)`** | Network | Stable Virtual IP & L4 Load Balancer | Provides an immutable DNS name and IP address routing traffic across healthy Pod endpoints matching a label selector. |
+| **`ConfigMap & Secret`** | Configuration | Externalized Configuration Store | Injects runtime parameters and base64 credentials into Pods as environment variables or mounted `tmpfs` files. |
+| **`Ingress / Gateway API`** | Edge Router | L7 Reverse Proxy & TLS Terminator | Routes external HTTP/HTTPS traffic to internal cluster Services based on hostname and URL path rules. |
+
+---
 
 ---
 

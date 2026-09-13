@@ -8,7 +8,85 @@
 
 ## Architecture Blueprint: The JVM Memory & Execution Substrate
 
+![JVM Memory & Execution Substrate Architecture](../../assets/images/jvm/jvm_memory_substrate_architecture.jpg)
+
+```mermaid
+graph TB
+    subgraph OS_RSS ["Linux OS Process Address Space (RSS)"]
+        subgraph Native_Mem ["JVM Native Memory (Off-Heap / OS Malloc)"]
+            Meta["Metaspace<br/>(Klass Metadata, Method Bytecode, Constant Pool)"]
+            CodeC["JIT Code Cache<br/>(Tier 1 C1 / Tier 2 C2 Native Machine Code)"]
+            Stacks["Thread Stacks (-Xss1m)<br/>(OS Pthreads, Local Variables, Stack Frames)"]
+            DirectBuf["Direct ByteBuffers<br/>(NIO Off-Heap Buffers, Netty Channels)"]
+            CHeap["Native C-Heap<br/>(glibc malloc arenas, jemalloc, JNI allocations)"]
+            GCMeta["GC Metadata<br/>(Card Tables, Remembered Sets, Marking Bitmaps)"]
+        end
+        subgraph Managed_Heap ["Managed JVM Heap (-Xms / -Xmx)"]
+            subgraph Young_Gen ["Young Generation"]
+                Eden["Eden Space<br/>(Thread-Local Allocation Buffers - TLAB)"]
+                S0["Survivor S0<br/>(FromSpace)"]
+                S1["Survivor S1<br/>(ToSpace)"]
+            end
+            subgraph Old_Gen ["Old Generation (Tenured)"]
+                Tenured["Tenured Space<br/>(Long-Lived Objects, Singletons, Caches)"]
+            end
+            subgraph Regional_Heap ["Region-Based Architecture (G1 / ZGC / Shenandoah)"]
+                Regs["Dynamic Heap Regions (1MB - 32MB)<br/>[Eden] [Survivor] [Old] [Humongous] [Free]"]
+            end
+        end
+    end
+    Eden -->|"Minor GC Evacuation"| S0
+    S0 -->|"Object Aging (Age++ )"| S1
+    S1 -->|"Tenuring (Age >= Threshold)"| Tenured
+    DirectBuf -.->|"DMA Zero-Copy I/O"| OS_RSS
 ```
+
+#### Visual Architecture & Deep Mechanics of JVM Memory Substrate
+
+##### 1. Visual Architecture & Node Anatomy
+* **Linux OS Process Address Space (RSS)**: The total physical and swapped memory pages currently allocated to the JVM process PID by the Linux kernel. Monitored via Linux `/proc/<PID>/status` (`VmRSS`) and container cgroups `memory.current`.
+* **Managed JVM Heap (`-Xms` / `-Xmx`)**: The contiguous or regional virtual memory partition managed exclusively by HotSpot garbage collectors:
+  - **Eden Space**: The initial allocation landing zone. Subdivided into per-thread **Thread-Local Allocation Buffers (TLABs)** where allocations occur via lock-free pointer bumping (`top += obj_size`).
+  - **Survivor Spaces (`S0` and `S1`)**: Equal-sized semi-spaces acting as staging buffers to filter short-lived transient objects from premature promotion.
+  - **Tenured Space (Old Generation)**: Holds long-lived enterprise application state (Spring singletons, caching layers, pooled connections).
+  - **Humongous Regions (G1 GC)**: Contiguous region spans dedicated to single objects exceeding 50% of `G1HeapRegionSize`.
+* **Native Memory (Off-Heap Space)**: All memory mapped by the JVM process outside the managed heap:
+  - **Metaspace**: Stores native class metadata, runtime constant pools, vtables, and method bytecode.
+  - **JIT Code Cache**: Reserved memory area holding native x86_64/ARM machine code compiled by C1 and C2 optimizing JIT compilers.
+  - **Thread Stacks**: 1 MB native thread memory per OS pthread allocated via `mmap(MAP_ANONYMOUS)`.
+  - **Direct ByteBuffers**: Off-heap I/O buffers utilized by Java NIO channels and Netty for kernel zero-copy transfer.
+  - **Native C-Heap**: Unmanaged heap utilized by JVM internal subsystems and third-party native C/C++ libraries via JNI.
+
+##### 2. Execution Flow & State Transitions
+1. **Thread Allocation**: Application thread executes `new Order()`. The JVM attempts allocation in the thread's local TLAB inside Eden.
+2. **TLAB Exhaustion**: When TLAB space runs out, the thread requests a new TLAB chunk from Eden using a synchronized atomic CAS bump.
+3. **Minor GC Evacuation**: When Eden fills completely, a Stop-The-World Young GC triggers. Live objects in Eden and `FromSpace` (e.g., S0) are copied to `ToSpace` (S1).
+4. **Age Promotion**: Each object header Mark Word records survival count (4 bits, max age 15). When `age >= MaxTenuringThreshold` (or dynamic survivor ratio threshold is breached), objects promote to Old Generation.
+5. **Major/Concurrent GC**: When Old Generation occupancy crosses the Initiating Heap Occupancy Percent (IHOP, default 45% in G1), background concurrent marking triggers to compact tenured memory.
+
+##### 3. Low-Level Kernel & JVM Mechanics
+* **Deterministic RSS Formula**:
+  $$\text{RSS} = \text{Heap} + \text{Metaspace} + \text{CodeCache} + (\text{Thread Count} \times \text{Stack Size}) + \text{DirectMemory} + \text{GC Metadata} + \text{Native C-Heap}$$
+* **Cgroup Limit Enforcement**: Inside Kubernetes, the cgroup memory subsystem monitors `memory.current`. If RSS exceeds `memory.max` (`resources.limits.memory`), the Linux kernel OOM Killer immediately sends `SIGKILL` (Exit Code 137).
+* **glibc Malloc Arena Fragmentation**: By default, `glibc` creates up to $8 \times \text{vCPUs}$ memory arenas to prevent allocation lock contention across multi-threaded processes. This causes severe virtual memory fragmentation, inflating RSS by hundreds of megabytes unless tuned via `MALLOC_ARENA_MAX=2` or replaced with `jemalloc`.
+
+##### 4. Production Failure Modes & SRE Diagnostics
+* **Kubernetes Exit 137 (OOMKilled)**: Occurs when engineers size container limit equal to `-Xmx` (e.g. limit 4Gi, `-Xmx4g`). Native memory pushes RSS to ~4.8GB, triggering kernel termination without creating a `.hprof` heap dump.
+* **DirectByteBuffer Silent Leak**: Netty buffers allocated outside the heap are not tracked by GC pause metrics. If reference counters are not decremented or direct memory is uncapped, the host crashes.
+* **Production Diagnostic Runbook**:
+  ```bash
+  # Enable Native Memory Tracking at startup
+  java -XX:NativeMemoryTracking=detail -XX:+UnlockDiagnosticVMOptions -jar app.jar
+  
+  # Baseline and diff native memory in production
+  jcmd <PID> VM.native_memory baseline
+  jcmd <PID> VM.native_memory detail.diff
+  ```
+
+<details>
+<summary>Text Representation (ASCII Blueprint)</summary>
+
+```text
 +---------------------------------------------------------------------------------------------------+
 |                                     OS Process Address Space (RSS)                                |
 |                                                                                                   |
@@ -35,6 +113,8 @@
 |                                                                   +----------------------------+  |
 +---------------------------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

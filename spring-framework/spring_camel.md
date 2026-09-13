@@ -60,19 +60,15 @@ Imagine you manage an international airport logistics warehouse:
 3. **The Package Envelope (`Exchange`)**: Carries the physical item (**Body**) and shipping labels (**Headers**).
 4. **The Damaged Package Hospital (Dead Letter Channel)**: When a package is torn or unreadable, rather than halting the entire factory line, the belt diverts it into a quarantine room for inspection (**DLQ**).
 
-```
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│                           CAMEL CONTEXT (The Freight Hub)                         │
-│                                                                                   │
-│  [Source: SFTP/Kafka] ──► [Envelope: Exchange] ──► [Conveyor Belt: Route]         │
-│                                  │                            │                   │
-│                        ┌─────────┴─────────┐                  ▼                   │
-│                        │ In Message Body   │         [Inspector: Processor]       │
-│                        │ Headers / Metadata│                  │                   │
-│                        └───────────────────┘                  ▼                   │
-│                                                     [Destination: Database/REST]  │
-└───────────────────────────────────────────────────────────────────────────────────┘
-```
+### Apache Camel Context & Exchange Architecture
+
+| Pipeline Phase | Architectural Component | Entity / Data Structure | Technical Responsibility |
+| :--- | :--- | :--- | :--- |
+| **1. Ingestion Endpoint** | `Consumer` / `Endpoint` | `from("kafka:raw-shipments")` / `from("file:inbox")` | Ingests raw byte streams or socket packets from messaging systems or network protocols |
+| **2. Message Carrier** | `Exchange` Envelope | `org.apache.camel.Exchange` | Encapsulates In-Message (Body + Headers), Out-Message, Exchange Pattern (InOnly/InOut), and Exception |
+| **3. Routing Pipeline** | `RouteDefinition` | `from().filter().process().to()` | Chains routing logic, Enterprise Integration Patterns (EIPs), and error handling policies |
+| **4. Inspection & Mutate**| `Processor` / `Bean` | `org.apache.camel.Processor` | Executes business logic, header manipulation, type conversions, and payload enrichment |
+| **5. Egress Dispatch** | `Producer` / `Endpoint` | `to("jdbc:dataSource")` / `to("http:upstream")` | Serializes outbound payload and dispatches to terminal destination systems or queues |
 
 ---
 
@@ -359,25 +355,15 @@ In Apache Camel, a route is compiled into a tree of **`AsyncProcessor`** nodes. 
 2. Execution delegates recursively down the chain.
 3. If an asynchronous boundary is reached (e.g. `to("seda:queue")`), the thread releases immediately, and completion is signaled via the `AsyncCallback`.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        CAMEL ASYNC PROCESSOR PIPELINE                  │
-│                                                                        │
-│   Inbound Exchange ──► [ Channel: Instrumentation / Interceptors ]     │
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ Processor 1: Filter ]                      │
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ Processor 2: Transform ]                   │
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ Endpoint Producer (Kafka) ]                │
-│                                      │                                 │
-│                                      ▼                                 │
-│                           [ AsyncCallback.done(false) ]                │
-└────────────────────────────────────────────────────────────────────────┘
-```
+### Camel Asynchronous Processor Pipeline Mechanics
+
+| Stage | Pipeline Primitive | Thread Model / Callback | Runtime Operation |
+| :--- | :--- | :--- | :--- |
+| **1. Channel Ingress** | `CamelInternalProcessor` | Inbound Worker Thread | Applies tracing interceptors, route policy checks, and OpenTelemetry span propagation |
+| **2. Filter Evaluation** | `FilterProcessor` | Synchronous / Reactive Thread | Evaluates predicate against Exchange body/header; halts pipeline if condition fails |
+| **3. Transformation** | `TransformProcessor` | Non-blocking Pipeline Worker | Converts payload format (e.g., XML to JSON, Protobuf to POJO) via `TypeConverterRegistry` |
+| **4. Producer Dispatch** | `AsyncProcessor` (Kafka/SEDA) | Worker / Netty EventLoop | Hands off Exchange to outbound transport buffer; releases caller thread if asynchronous |
+| **5. Callback Signaling**| `AsyncCallback.done(boolean)` | Completion Signal | `done(false)` indicates asynchronous background completion; triggers downstream continuations |
 
 ---
 

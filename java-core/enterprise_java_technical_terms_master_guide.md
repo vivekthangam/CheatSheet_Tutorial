@@ -93,6 +93,68 @@ Every single term in this guide strictly follows the **6-Part Zero-Ambiguity Bre
 - **Why It Exists & What It Solves:**
   Without proxies, cross-cutting concerns (like opening database transactions, checking JWT security tokens, or logging execution times) would have to be copy-pasted manually inside every single method of your business logic! Proxies keep your business code 100% clean by intercepting invocations transparently.
 - **Under-the-Hood Mechanics:**
+```mermaid
+flowchart TD
+    subgraph ProxyInterceptionPipeline["Spring Enterprise Proxy Interception Pipeline"]
+        direction TB
+
+        Caller["Caller Service / HTTP Controller"] -->|"1. invokeMethod()"| Proxy["Proxy Wrapper Instance<br/>(JDK Proxy $Proxy0 / CGLIB Enhancer)"]
+
+        subgraph InterceptorChain["Spring AOP Interceptor Chain (ReflectiveMethodInvocation)"]
+            direction TB
+            SecCheck["Security Interceptor<br/>(@PreAuthorize Token Check)"]
+            TxBefore["Transaction Advisor (Before Advice)<br/>(Begin DB Tx / Bind Connection)"]
+            TargetExec["Real Target Bean (Business Logic)<br/>(e.g., orderRepository.save())"]
+            TxAfter["Transaction Advisor (After Returning)<br/>(Commit Transaction to RDBMS)"]
+            TxRollback["Transaction Advisor (After Throwing)<br/>(Rollback on RuntimeException)"]
+
+            SecCheck -->|"proceed()"| TxBefore
+            TxBefore -->|"invoke real method"| TargetExec
+            TargetExec -->|"Success"| TxAfter
+            TargetExec -.->|"Exception Thrown"| TxRollback
+        end
+
+        Proxy --> SecCheck
+        TxAfter -->|"2. Return Business Result"| ReturnOk["Return Payload to Caller"]
+        TxRollback -.->|"Rethrow Handled Exception"| ReturnErr["Propagate Exception"]
+        ReturnOk --> Caller
+        ReturnErr -.-> Caller
+    end
+
+    classDef callerStyle fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc;
+    classDef proxyStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef interceptStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef targetStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef errStyle fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+
+    class Caller,ReturnOk callerStyle;
+    class Proxy proxyStyle;
+    class SecCheck,TxBefore,TxAfter interceptStyle;
+    class TargetExec targetStyle;
+    class TxRollback,ReturnErr errStyle;
+```
+
+#### Architectural Deep Dive: Proxy Interception Topology
+- **Part 1: Visual Architecture & Proxy Interceptor Chain Anatomy**: When Spring instantiates a bean configured with cross-cutting concerns (`@Transactional`, `@PreAuthorize`, `@Cacheable`, `@Async`), it injects a dynamic proxy rather than the raw class. The proxy encapsulates an ordered interceptor chain (`List<MethodInterceptor>`) structured as a recursive Russian-doll pipeline managed by `ReflectiveMethodInvocation`.
+- **Part 2: Invocation Flow & Transaction Lifecycle State Machine**:
+  1. The client invokes a business method on the injected reference. The call hits the proxy's `invoke()` / `intercept()` entrypoint.
+  2. The proxy evaluates security authorization (`MethodSecurityInterceptor`). If unauthorized, it aborts immediately with `AccessDeniedException`.
+  3. The `TransactionInterceptor` runs before advice: it consults `PlatformTransactionManager`, obtains a JDBC connection from `HikariDataSource`, binds it to the current thread via `TransactionSynchronizationManager`, and disables auto-commit (`connection.setAutoCommit(false)`).
+  4. Execution cascades to the real domain instance (`TargetExec`).
+  5. If the target returns cleanly, after-returning advice executes `connection.commit()`. If an unchecked exception (`RuntimeException` or `Error`) is thrown, after-throwing advice intercepts the stack unwind and triggers `connection.rollback()`.
+- **Part 3: Low-Level JVM Stack & Bytecode Mechanics**: Inside `ReflectiveMethodInvocation.proceed()`, an internal `currentInterceptorIndex` incrementor walks the interceptor array. Interceptors wrap calls with a recursive `invocation.proceed()` invocation frame on the JVM call stack. The underlying JDBC connection pointer is bound to a thread-local map (`ThreadLocal<Map<Object, Object>> resources`), ensuring that downstream repository calls using `EntityManager` or `JdbcTemplate` on the same thread reuse the identical physical database connection without connection leaks.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Checked Exception Rollback Trap*: By default, `@Transactional` only rolls back on `RuntimeException` and `Error`. If a method throws a checked `Exception` (e.g., `IOException`), Spring commits the transaction! Fix: `@Transactional(rollbackFor = Exception.class)`.
+  - *Self-Invocation Proxy Bypass*: Calling `this.secondaryMethod()` inside the same bean jumps directly to the local memory address on the CPU without going through the proxy interceptor chain, causing `@Transactional` or `@Async` to fail silently.
+  - *SRE Triage Logging*: Enable granular proxy and transaction logging:
+    ```properties
+    logging.level.org.springframework.aop=TRACE
+    logging.level.org.springframework.transaction=TRACE
+    ```
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 Caller ---> [ Proxy Object (Checks @Transactional / @PreAuthorize) ]
                   | (Before Advice: Begins DB Transaction)
@@ -102,6 +164,8 @@ Caller ---> [ Proxy Object (Checks @Transactional / @PreAuthorize) ]
                   v
 Caller <--- [ Returns Result ]
 ```
+
+</details>
 - **Key Takeaway:** When you inject `@Autowired private OrderService orderService;`, Spring never injects your real class directly; it injects a **Proxy Wrapper** that intercepts every method call!
 
 ---
@@ -205,6 +269,78 @@ proxyInstance.processPayment(100.0);
 ### 1.5 AOP Anatomy: Aspect, Advice, JoinPoint, Pointcut
 Here is the definitive guide to memorizing the 4 fundamental AOP terms without confusion:
 
+```mermaid
+flowchart TD
+    subgraph AOPAnatomy["Spring AOP Structural Anatomy & Execution Matrix"]
+        direction TB
+
+        subgraph AspectContainer["Aspect (The Modular Unit)"]
+            AspectDef["@Aspect public class SecurityAuditAspect<br/>Encapsulates cross-cutting concerns"]
+
+            subgraph PointcutDef["Pointcut (The Selector / Filter)"]
+                PC["@Pointcut('execution(* com.corp..*Service.*(..))')<br/>WHICH methods/classes are targeted"]
+            end
+
+            subgraph AdviceDef["Advice (The Action & Trigger Phase)"]
+                AdvBefore["@Before (Pre-execution validation)"]
+                AdvAround["@Around (Surrounds JoinPoint via pjp.proceed())"]
+                AdvAfterRet["@AfterReturning (Post-execution payload audit)"]
+                AdvAfterThrow["@AfterThrowing (Exception capture & alerting)"]
+                AdvAfter["@After (Cleanup / finally semantics)"]
+            end
+        end
+
+        subgraph RuntimeExecution["JoinPoint (The Physical Runtime Target)"]
+            JP["JoinPoint / ProceedingJoinPoint<br/>The exact running instant in JVM heap/stack<br/>(Method: orderService.createOrder, Args: [OrderDTO])"]
+            RealBean["Target Spring Bean Instance<br/>(Business Domain Execution)"]
+            JP --> RealBean
+        end
+
+        PC -->|"Matches Candidate Signatures"| JP
+        AdvBefore -->|"1. Fires Before"| JP
+        AdvAround -->|"Wraps Execution Cycle"| JP
+        JP -->|"2. Normal Return"| AdvAfterRet
+        JP -.->|"3. Error Thrown"| AdvAfterThrow
+        AdvAfterRet -->|"4. Finally"| AdvAfter
+        AdvAfterThrow -->|"4. Finally"| AdvAfter
+    end
+
+    classDef aspectStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef pcStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef advStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef jpStyle fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff7ed;
+
+    class AspectDef aspectStyle;
+    class PC pcStyle;
+    class AdvBefore,AdvAround,AdvAfterRet,AdvAfterThrow,AdvAfter advStyle;
+    class JP,RealBean jpStyle;
+```
+
+#### Architectural Deep Dive: AOP Anatomy & Execution Mechanics
+- **Part 1: Visual Architecture & AOP Anatomical Topology**: Aspect-Oriented Programming decomposes modular cross-cutting concerns into 4 distinct primitives:
+  1. *Aspect*: The enclosing container class (annotated with `@Aspect`) coordinating pointcuts and advice.
+  2. *Pointcut*: The predicate expression determining structural eligibility (which methods, packages, or annotations are intercepted).
+  3. *JoinPoint*: The physical execution candidate in the JVM program flow (in Spring AOP, strictly method execution joinpoints).
+  4. *Advice*: The executable interceptor payload triggered at defined lifecycle phases relative to the joinpoint.
+- **Part 2: Interception Flow & Advice State Machine**: Invocations enter the advice chain in strict precedence order:
+  - `@Around` outer boundary: Advice acquires control before the method executes and holds a `ProceedingJoinPoint` reference.
+  - `@Before`: Executes assertions, permission checks, or contextual MDC logging.
+  - Target `JoinPoint`: The real domain logic executes.
+  - `@AfterReturning`: Intercepts and may mutate or log the return value upon successful termination.
+  - `@AfterThrowing`: Intercepts uncaught exceptions before unwinding the thread stack.
+  - `@After`: Runs unconditional cleanup routines resembling a `finally` block.
+- **Part 3: Low-Level JVM Bytecode & Reflection Mechanics**: Spring parses pointcut expressions via `AspectJExpressionPointcut` using AspectJ's PointcutParser library, compiling expressions into Abstract Syntax Trees (ASTs). During bean post-processing, Spring inspects target class method descriptors via ASM bytecode visitors. If a pointcut matches, Spring wraps the bean in a proxy and binds an array of `MethodInterceptor` advisors. The `JoinPoint` instance materializes as `MethodInvocationProceedingJoinPoint`, encapsulating method arguments on the thread stack without requiring full JNI reflection invocations when compiled by the C2 JIT compiler.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Pointcut Evaluation Latency*: Complex regular expressions or heavy use of `args()` and `@annotation()` over high-frequency loops (e.g., inside 100k msg/sec stream processors) degrade throughput by up to 25%. Ensure pointcuts rely on fast prefix package filters (`execution(* com.mycorp..*)`).
+  - *Swallowed Exceptions in @Around Advice*: Forgetting to re-throw exceptions inside an `@Around` advice block suppresses database rollback logic in `@Transactional`, causing silent data corruption.
+  - *SRE Inspection*: Verify active advisors on running beans via Spring Boot Actuator:
+    ```bash
+    curl -s http://localhost:8080/actuator/beans | jq '.. | select(.aliases? and (.aliases | contains(["orderService"])))'
+    ```
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 [ POINTCUT ] -------------------> WHICH methods should be targeted?
 (e.g., @annotation(Transactional))
@@ -218,6 +354,8 @@ Here is the definitive guide to memorizing the 4 fundamental AOP terms without c
 [ ASPECT ] ---------------------> The CONTAINER class combining Pointcut + Advice.
 (@Aspect public class SecurityAspect)
 ```
+
+</details>
 
 1. **Aspect:** The Java class that contains your cross-cutting feature (e.g. `LoggingAspect`, `TransactionAspect`). Annotated with `@Aspect`.
 2. **Advice:** The action taken at a specific point.
@@ -354,6 +492,77 @@ public class UserService {
 ### 3.1 Persistence Context & Entity Lifecycle States
 - **Persistence Context:** A first-level in-memory cache and staging area managed by Hibernate's `EntityManager`. Every database row read or written during a transaction lives here.
 - **The 4 Entity Lifecycle States:**
+```mermaid
+flowchart TD
+    subgraph EntityStateEngine["Hibernate / JPA Entity Lifecycle & Persistence Context State Machine"]
+        direction TB
+
+        subgraph TransientZone["Transient / New State"]
+            NewObj["new Entity()<br/>(Heap-allocated POJO, No DB Identity, Untracked)"]
+        end
+
+        subgraph PersistenceContext["Persistence Context (First-Level Cache / SessionImpl)"]
+            direction TB
+            ManagedObj["Managed / Persistent State<br/>(Has DB Identity, Snapshot Stored, Tracked by Dirty Checking)"]
+            ActionQ["ActionQueue (Write-Behind SQL Buffer)<br/>(EntityInsertAction / EntityUpdateAction / EntityDeleteAction)"]
+            ManagedObj --> ActionQ
+        end
+
+        subgraph DetachedZone["Detached State"]
+            DetachedObj["Detached State<br/>(Has DB Identity, Session Closed, Unmonitored)"]
+        end
+
+        subgraph RemovedZone["Removed State"]
+            RemovedObj["Removed State<br/>(Scheduled for SQL DELETE at Flush)"]
+        end
+
+        subgraph Storage["RDBMS Database Storage"]
+            DBRow[("Database Table Rows<br/>(ACID Relational Tuples)")]
+        end
+
+        NewObj -->|"em.persist(entity)"| ManagedObj
+        DBRow -->|"em.find() / JPQL query / Criteria"| ManagedObj
+        ManagedObj -->|"em.detach() / em.clear() / session.close()"| DetachedObj
+        DetachedObj -->|"em.merge(entity)"| ManagedObj
+        ManagedObj -->|"em.remove(entity)"| RemovedObj
+        RemovedObj -->|"em.persist(entity) (resurrect)"| ManagedObj
+        ActionQ ==>|"Transaction Commit / Auto-Flush"| DBRow
+    end
+
+    classDef transientStyle fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc;
+    classDef managedStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef detachedStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef removedStyle fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+    classDef dbStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+
+    class NewObj transientStyle;
+    class ManagedObj,ActionQ managedStyle;
+    class DetachedObj detachedStyle;
+    class RemovedObj removedStyle;
+    class DBRow dbStyle;
+```
+
+#### Architectural Deep Dive: Entity Lifecycle & Persistence Mechanics
+- **Part 1: Visual Architecture & Entity State Machine Topology**: JPA entities transition across 4 deterministic states governed by Hibernate's `EntityManager` / `SessionImpl`:
+  1. *Transient*: Freshly instantiated in JVM heap memory (`new User()`); contains no database primary key and is unknown to the persistence context.
+  2. *Managed*: Linked to an active `PersistenceContext` session, possesses a database ID, and is actively monitored by Hibernate's dirty-checking engine.
+  3. *Detached*: Previously managed entity whose persistence context has closed or cleared (`em.clear()`, `@Transactional` boundary exited); holds an ID but is unmonitored.
+  4. *Removed*: An entity scheduled for SQL `DELETE` execution during the subsequent flush cycle.
+- **Part 2: State Transition Life Cycle & Persistence Context Operations**:
+  - `persist()`: Transitions Transient to Managed. If using `IDENTITY` generation, triggers immediate SQL `INSERT` to retrieve the auto-generated ID; if using `SEQUENCE` (pooled-lo), fetches the ID from the sequence allocator and defers the SQL `INSERT` to commit.
+  - `find()` / Query: Reads rows from database, hydrates the entity, registers it into the first-level cache map (`Map<EntityKey, Object>`), and takes a deep snapshot copy of all fields.
+  - `detach()` / Session Close: Evicts the entity from the session. Future property modifications will not be tracked or synced to the database.
+  - `merge()`: Copies property values from a detached entity onto a freshly retrieved managed instance (or creates a new managed instance) and returns the managed reference.
+  - `remove()`: Schedules an `EntityDeleteAction` in the `ActionQueue` to be executed on next flush.
+- **Part 3: Low-Level JVM Heap, Hibernate First-Level Cache & Dirty Checking Mechanics**: Inside `SessionImpl`, the `PersistenceContext` maintains an `EntityEntry` registry. When an entity is hydrated, Hibernate allocates two memory structures: the live entity POJO and an `Object[]` snapshot array containing exact copies of every mapped attribute. At flush time, Hibernate executes `DefaultFlushEntityEventListener`, iterating through managed entities and running a two-way array comparator (`Type[].isDirty()`). If differences are detected, Hibernate schedules an `EntityUpdateAction` inside its internal `ActionQueue`, which sorts database operations (Inserts $\to$ Updates $\to$ Deletes) to prevent foreign key constraint violations and batch-executes JDBC prepared statements (`addBatch()`).
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *LazyInitializationException*: Occurs when code traverses an uninitialized `@OneToMany` proxy outside of an active transaction (`no Session`). Mitigation: Fetch eagerly via `JOIN FETCH`, Spring Data `@EntityGraph`, or DTO projections.
+  - *Accidental Dirty Updates*: Calling a setter on a managed entity (even for transient calculations or logging) triggers automatic SQL `UPDATE` on transaction commit, silently modifying database records.
+  - *Heap Exhaustion in Batch Processing*: Loading 100,000 entities in a single transaction keeps all instances and snapshots inside the `PersistenceContext` (L1 cache) permanently, triggering `OutOfMemoryError: Java heap space`. SRE fix: Batch iteration with periodic `em.flush()` and `em.clear()` every 500 rows.
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
   [ New / Transient ] --( persist() )--> [ Managed ] <--( find() / query )-- [ Database ]
            |                                  |
@@ -365,6 +574,8 @@ public class UserService {
                                               v
                                          [ Removed ]
 ```
+
+</details>
 1. **Transient / New:** Created with `new User()`. Has no database ID and is NOT tracked by Hibernate.
 2. **Managed / Persistent:** Associated with an active `EntityManager` session and has a database ID. **Any change to its fields is automatically saved to the database on transaction commit via Dirty Checking!**
 3. **Detached:** Session is closed. The object has a database ID, but Hibernate is no longer tracking field changes.

@@ -8,7 +8,92 @@
 
 ## Architecture Blueprint: The CompletableFuture State Machine
 
+```mermaid
+flowchart TB
+    subgraph L4 ["Layer 4: Modern Asynchronous Resilience & Schedulers (Java 9 - 21+)"]
+        direction LR
+        O1["orTimeout(duration)<br/>(Fails with TimeoutException)"]
+        O2["completeOnTimeout(fallback)<br/>(Completes with Default DTO)"]
+        O3["exceptionallyCompose()<br/>(Async Error Recovery Pipeline)"]
+        O4["Loom Virtual Threads<br/>(Executors.newVirtualThreadPerTaskExecutor)"]
+    end
+
+    subgraph L3 ["Layer 3: Multi-Stage Coordination & DAG Aggregation"]
+        direction LR
+        C1["allOf(F1...Fn) Barrier<br/>(Waits for complete array)"]
+        C2["anyOf(F1...Fn) Race<br/>(Fastest speculative win)"]
+        C3["thenCombine(F2, BiFunction)<br/>(Parallel Fan-In Aggregation)"]
+        C4["thenCompose(Function)<br/>(Monadic flatMap Unwrapping)"]
+    end
+
+    subgraph L2 ["Layer 2: Pipeline Transformation & Exception Mechanics"]
+        direction LR
+        T1["thenApply / thenApplyAsync<br/>(Synchronous/Async Functor Map)"]
+        T2["thenAccept / thenRun<br/>(Terminal Side-Effect Consumers)"]
+        T3["handle / whenComplete<br/>(BiFunction / BiConsumer Interceptors)"]
+        T4["AltResult Sentinel<br/>(Packages Throwable in CompletionException)"]
+    end
+
+    subgraph L1 ["Layer 1: Internal Runtime & Treiber Stack Mechanics"]
+        direction LR
+        S1["volatile Object result<br/>(CAS: nil -> Value | AltResult)"]
+        S2["Lock-Free Treiber Stack<br/>(Head pointer to Completion nodes)"]
+        S3["Completion Node Types<br/>UniApply, UniCompose, BiApply, CoCompletion"]
+        S4["Dispatch Modes<br/>Inlined on Completer Thread vs Executor Dispatch"]
+    end
+
+    subgraph L0 ["Layer 0: Execution Substrate & Hardware Threading"]
+        direction LR
+        E1["Custom Bounded Thread Pools<br/>(ThreadPoolExecutor with ArrayBlockingQueue)"]
+        E2["ForkJoinPool.commonPool()<br/>(Default work-stealing pool: CPU cores - 1)"]
+        E3["OS Kernel Scheduling<br/>(Futex sleep, pthread_create, CPU cache line MESI)"]
+    end
+
+    L4 --> L3
+    L3 --> L2
+    L2 --> L1
+    L1 --> L0
+
+    classDef l4 fill:#1e1e2e,stroke:#cba6f7,stroke-width:2px,color:#cdd6f4;
+    classDef l3 fill:#1e1e2e,stroke:#89b4fa,stroke-width:2px,color:#cdd6f4;
+    classDef l2 fill:#1e1e2e,stroke:#a6e3a1,stroke-width:2px,color:#cdd6f4;
+    classDef l1 fill:#1e1e2e,stroke:#f9e2af,stroke-width:2px,color:#cdd6f4;
+    classDef l0 fill:#1e1e2e,stroke:#f38ba8,stroke-width:2px,color:#cdd6f4;
+
+    class O1,O2,O3,O4 l4;
+    class C1,C2,C3,C4 l3;
+    class T1,T2,T3,T4 l2;
+    class S1,S2,S3,S4 l1;
+    class E1,E2,E3 l0;
 ```
+
+#### Architectural Breakdown: The 5-Layer CompletableFuture Engineering Substrate
+
+1. **Visual Architecture & Component Topology**:
+   - **Layer 0 (Execution Substrate & Hardware Threading)**: Physical worker threads allocated via custom `ThreadPoolExecutor` or JVM-wide `ForkJoinPool.commonPool()`. Governed by OS kernel scheduling (`futex`, `clone` syscalls) and CPU L1/L2/L3 cache line MESI invalidation queues.
+   - **Layer 1 (Internal Runtime & Treiber Stack Mechanics)**: The engine of `CompletableFuture`. Houses the volatile `result` field (which stores the computed value, `NIL` sentinel for null, or `AltResult` for exceptions) and a lock-free Treiber stack of `Completion` callback nodes (`UniApply`, `UniCompose`, `BiApply`, `CoCompletion`).
+   - **Layer 2 (Pipeline Transformation & Exception Mechanics)**: Monadic mapping operations (`thenApply`), consumer sinks (`thenAccept`), and dual-outcome inspection stages (`handle`, `whenComplete`). Errors are automatically converted into `AltResult` objects, bypassing normal downstream execution until intercepted by an error boundary.
+   - **Layer 3 (Multi-Stage Coordination & DAG Aggregation)**: Barrier primitives that fan-in multiple concurrent streams. `allOf` coordinates an array of futures via recursive countdown tree nodes; `anyOf` races tasks to completion; `thenCombine` joins two independent streams; `thenCompose` flattens nested asynchronous futures (`flatMap`).
+   - **Layer 4 (Modern Asynchronous Resilience & Schedulers)**: Java 9+ timeout guards (`orTimeout`, `completeOnTimeout`), asynchronous error recovery (`exceptionallyCompose`), and seamless interop with Java 21 Project Loom virtual thread per task executors.
+
+2. **Execution Flow & State Machine Dynamics**:
+   - **Step 1: Ingestion & Registration**: When a callback is registered (e.g. `future.thenApply(fn)`), `CompletableFuture` checks if `result` is already non-null. If already complete, the callback executes immediately. If incomplete, a `UniApply` node is created and pushed onto the Treiber stack via CAS.
+   - **Step 2: Atomic State Transition**: When the background producer finishes, it calls `complete(val)` or `completeExceptionally(ex)`. HotSpot executes an atomic CPU CAS instruction (`LOCK CMPXCHG`) to write `result`. Once written, the state is immutable.
+   - **Step 3: Cascading Post-Complete**: The thread that successfully transitions `result` calls `postComplete()`. It pops nodes from the Treiber stack one by one. If the callback was registered with an `Async` suffix (`thenApplyAsync`), it submits the task to the designated `Executor`; if non-async (`thenApply`), it runs the callback **in-line on the completing thread**, eliminating context-switching overhead.
+
+3. **Low-Level Kernel & JVM Mechanics**:
+   - **Treiber Stack Lock-Free Concurrency**: Thread safety is achieved entirely without OS mutexes (`pthread_mutex`) or synchronized blocks. The head of the callback stack is a volatile reference (`stack`). Pushing a new stage invokes an optimistic CAS loop:
+     `do { c.next = head; } while (!CAS(STACK, head, c));`. This ensures pipeline construction scales linearly with CPU cores.
+   - **Volatile Write Memory Barriers**: Writing to `result` emits a `StoreStore` and `StoreLoad` CPU barrier instruction (`MFENCE` on x86). This ensures that all memory writes performed by the background worker thread prior to calling `complete()` are globally visible across all CPU caches before any consumer thread reads `result`.
+
+4. **Production Failure Modes & SRE Diagnostics**:
+   - **Thread Starvation via Default CommonPool**: Unconfigured `supplyAsync()` calls dump tasks into `ForkJoinPool.commonPool()`, which has only $\text{CPU cores} - 1$ threads. A single slow database query or remote API call blocks a common pool worker, causing cascading stalls across all parallel streams and async jobs in the JVM. SRE remediation: Always pass an explicit, bounded executor to every async invocation.
+   - **Unbounded Queue Memory Bloat (OOM)**: Submitting tasks to an `ExecutorService` backed by an unbounded `LinkedBlockingQueue` allows millions of tasks to queue up during downstream outages, bloating the JVM heap and triggering container OOM (Exit Code 137). SRE mitigation: Use bounded `ArrayBlockingQueue` with an explicit rejection policy (`ThreadPoolExecutor.CallerRunsPolicy`).
+
+<details>
+<summary>View Legacy ASCII Blueprint</summary>
+
+```text
 +---------------------------------------------------------------------------------+
 | Layer 4: Modern Asynchronous Orchestration (Java 9 - 21+)                       |
 | - orTimeout(), completeOnTimeout(), exceptionallyCompose(), Virtual Threads     |
@@ -29,6 +114,8 @@
 | - Custom Bounded Thread Pools vs Shared ForkJoinPool.commonPool()               |
 +---------------------------------------------------------------------------------+
 ```
+
+</details>
 
 ---
 

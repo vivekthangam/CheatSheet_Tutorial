@@ -9,45 +9,16 @@
 
 ## Architecture Blueprint: The Spring WebFlux & Reactor Stack
 
-```
-+--------------------------------------------------------------------------------------------+
-|                          Spring WebFlux Reactive Architecture                               |
-|                                                                                             |
-|  HTTP Request (TCP Socket)                                                                  |
-|       │                                                                                     |
-|       ▼                                                                                     |
-|  +--------------------------+                                                               |
-|  | Netty (Non-blocking I/O) |  ← Boss Thread Pool: Accepts TCP connections                  |
-|  | Boss Thread Group        |  ← Worker Thread Pool: N = 2 × CPU Cores (EventLoops)         |
-|  | Worker EventLoops (N×)   |  ← Non-blocking Selector loop (epoll / kqueue / NIO)          |
-|  +--------------------------+                                                               |
-|       │                                                                                     |
-|       ▼ Reactive HTTP Request (ServerHttpRequest)                                           |
-|  +--------------------------+                                                               |
-|  | DispatcherHandler         |  ← Reactive entry point (Equivalent to DispatcherServlet)    |
-|  | ├─ HandlerMapping        |  ← Route matching (@RequestMapping or RouterFunction)        |
-|  | ├─ HandlerAdapter        |  ← Invokes reactive handler method                           |
-|  | └─ HandlerResultHandler  |  ← Marshals Mono<T>/Flux<T> to HTTP response body             |
-|  +--------------------------+                                                               |
-|       │                                                                                     |
-|       ▼ Publisher<T> (Mono / Flux Pipeline)                                                 |
-|  +--------------------------+  +---------------------------+  +-------------------------+   |
-|  | Project Reactor Core     |  | Schedulers (Threading)    |  | Core Operators          |   |
-|  | ├─ Mono<T> (0..1 item)   |  | ├─ parallel() (CPU bound) |  | map, flatMap, filter    |   |
-|  | ├─ Flux<T> (0..N items)  |  | ├─ boundedElastic() (I/O) |  | zip, merge, concat      |   |
-|  | └─ Subscription Lifecycle|  | ├─ single() (Dedicated)   |  | retryWhen, timeout      |   |
-|  |    Assembly vs Subscribe |  | └─ immediate() (Caller)   |  | onErrorResume, doOnError|   |
-|  +--------------------------+  +---------------------------+  +-------------------------+   |
-|       │                                                                                     |
-|       ▼ Reactive Data Source / Downstream Microservice                                      |
-|  +--------------------------+  +---------------------------+  +-------------------------+   |
-|  | R2DBC (Reactive SQL)     |  | Spring WebClient          |  | Reactive Kafka / Redis  |   |
-|  | ├─ r2dbc-postgresql      |  | ├─ Connection Pooling     |  | ├─ ReactiveKafkaConsumer|   |
-|  | ├─ TransactionalOperator |  | ├─ Non-blocking HTTP/2    |  | ├─ ReactiveRedisTemplate|   |
-|  | └─ ReactiveRepository    |  | └─ DNS / Read Timeouts    |  | └─ Backpressure Flow    |   |
-|  +--------------------------+  +---------------------------+  +-------------------------+   |
-+--------------------------------------------------------------------------------------------+
-```
+> **Spring WebFlux Reactive Pipeline**:  
+> `[HTTP Request (TCP Socket)]` ──► `[Netty Boss/Worker EventLoops (epoll/kqueue)]` ──► `[DispatcherHandler (ServerHttpRequest)]` ──► `[Project Reactor: Mono<T> / Flux<T>]` ──► `[Reactive Drivers: R2DBC / WebClient / Reactive Redis]`
+
+| Reactive Subsystem Layer | Core Primitives & Classes | Wire Protocol & Runtime Invariants | Concurrency & Threading Constraints |
+|---|---|---|---|
+| **Non-blocking Transport Engine (Netty)** | `NioEventLoopGroup` / `EpollEventLoopGroup`, `ChannelPipeline` | Accepts TCP connections on Boss threads; delegates socket read/write channels to $N = 2 \times \text{Cores}$ worker EventLoops via OS epoll/kqueue. | **Golden Rule**: Never block an EventLoop thread! Blocking one worker stalls $\frac{1}{N}$th of all active connections. |
+| **Reactive Web Layer (Spring WebFlux)** | `DispatcherHandler`, `HandlerMapping`, `HandlerAdapter`, `HandlerResultHandler` | Reactive equivalent of `DispatcherServlet`; decodes non-blocking `ServerHttpRequest` streams without buffering entire payloads in memory. | Fully non-blocking from socket frame ingress to streaming HTTP chunk serialization. |
+| **Reactive Streams Engine (Project Reactor)** | `Mono<T>` ($0..1$ item), `Flux<T>` ($0..N$ items), `Publisher<T>`, `Subscriber<T>` | Asynchronous push/pull stream model enforcing Reactive Streams Specification with native backpressure signals (`request(n)`). | Strict distinction between **Assembly Time** (pipeline building) and **Subscription Time** (`subscribe()`). |
+| **Thread Schedulers (`Schedulers`)** | `parallel()`, `boundedElastic()`, `single()`, `fromExecutorService()` | Offloads execution context across thread pool archetypes via `publishOn` and `subscribeOn`. | `parallel()` capped at CPU cores (CPU-bound); `boundedElastic()` capped at $10 \times \text{Cores}$ (legacy blocking I/O). |
+| **Reactive Data & Egress Drivers** | R2DBC (`DatabaseClient`), `WebClient`, `ReactiveRedisTemplate`, Reactive Kafka | Asynchronous wire protocols for relational databases (PostgreSQL/MySQL), external HTTP/2 APIs, and distributed event streams. | End-to-end backpressure-aware; zero JDBC thread blocking; socket memory managed via Netty `ByteBuf` allocators. |
 
 ---
 
@@ -1973,17 +1944,16 @@ HTTP/2 provides flow control, but only at the **byte stream layer** (via `WINDOW
 
 **RSocket** is a binary application protocol that implements the **Reactive Streams specification directly at Layer 5/6**. A downstream consumer sends binary `REQUEST_N` frames across the TCP connection:
 
-```
-[Consumer Service]                                     [Producer Service]
-       │                                                       │
-       │ ─── REQUEST_N (n = 50) Frame ───────────────────────► │ (Only produces 50 objects)
-       │ ◄── PAYLOAD Frame (Object 1) ──────────────────────── │
-       │ ◄── PAYLOAD Frame (Object 2) ──────────────────────── │
-       │                        ...                            │
-       │ ◄── PAYLOAD Frame (Object 50) ─────────────────────── │ (Producer stops! Waits for more)
-       │                                                       │
-       │ ─── REQUEST_N (n = 25) Frame ───────────────────────► │ (Resumes production)
-```
+> [!NOTE]
+> **RSocket Layer 5/6 Reactive Backpressure Frame Protocol Exchange**:
+> `[Consumer Service]` ➔ **Step 1: REQUEST_N (n=50)** ➔ `[Producer Service (Limits emission to 50 items)]` ➔ **Step 2: Stream Payloads** ➔ `[Producer streams PAYLOAD frames 1..50]` ➔ `[Producer Pauses: Awaiting Demand]` ➔ **Step 3: REQUEST_N (n=25)** ➔ `[Producer Resumes Streaming]`
+
+| Step | Initiator | Frame Type | Wire Payload / Flags | Reactive Streams Mapping | Flow Control State |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Demand Request** | Consumer Service | `REQUEST_N` | Binary frame header + `n = 50` | `Subscription.request(50)` | Producer receives explicit demand budget; allocates resources only for 50 items. |
+| **2. Stream Emission** | Producer Service | `PAYLOAD` | Binary data stream (Objects 1..50) + `FOLLOWS` flag | `Subscriber.onNext(item)` | Producer emits items sequentially across multiplexed TCP socket without buffering in heap. |
+| **3. Demand Exhaustion**| Producer Service | `PAUSE` | Internal state (Zero remaining demand) | Demand counter reaches `0` | Producer actively stops reading from database/source; zero CPU/heap overhead while awaiting consumer. |
+| **4. Demand Renewal** | Consumer Service | `REQUEST_N` | Binary frame header + `n = 25` | `Subscription.request(25)` | Producer replenishes demand counter and resumes streaming backpressure-governed payloads. |
 
 ```java
 // Spring Boot RSocket Controller
@@ -3328,24 +3298,18 @@ You are the Principal Architect conducting a final Go/No-Go architecture review 
 ##### 3. Standout Technical Answer
 To certify a Spring WebFlux application for enterprise production, it must satisfy this **10-Point Architectural Gate**:
 
-```
-+─────────────────────────────────────────────────────────────────────────────────────────+
-|                  WebFlux Enterprise Production Readiness Matrix                         |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| #  | Verification Gate           | Production Standard Requirement                      |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-| 1  | Zero-Blocking Enforcement   | BlockHound installed in CI integration test suite    |
-| 2  | Database Driver Integrity   | 100% R2DBC / Reactive Mongo; Zero JDBC/JPA on EventLoop|
-| 3  | Outbound HTTP Sizing        | WebClient ConnectionProvider bounded with idle TTL   |
-| 4  | Thread Pool Offloading      | Unavoidable legacy I/O wrapped in custom bounded pool|
-| 5  | Backpressure Boundaries     | All unbounded streams protected with onBackpressure* |
-| 6  | Error & Retry Safety        | Exponential backoff + Jitter; No blind .retry()      |
-| 7  | Observability & Tracing     | Micrometer context propagation enabled; MDC synced   |
-| 8  | Off-Heap Memory Guard       | Netty leak detection set to SIMPLE; DirectMemory set |
-| 9  | Upstream Proxy Sync         | X-Accel-Buffering disabled; Ingress timeouts > 1hr   |
-| 10 | Graceful Pod Draining       | server.shutdown: graceful + Kubernetes preStop hook  |
-+----+─────────────────────────────+──────────────────────────────────────────────────────+
-```
+| Gate # | Verification Gate | Production Standard Requirement | Failure Consequence & Latent Incident Risk |
+|:---:|---|---|---|
+| **1** | **Zero-Blocking Enforcement** | `BlockHound.install()` strictly active in CI integration test suite | Detects hidden blocking calls (`Thread.sleep`, `InputStream.read`, synchronous DB drivers) on EventLoop threads before merging. |
+| **2** | **Database Driver Integrity** | 100% R2DBC or Reactive MongoDB; zero JDBC/JPA drivers loaded on EventLoop | Prevents catastrophic EventLoop starvation caused by thread-blocking JDBC socket reads. |
+| **3** | **Outbound HTTP Sizing** | `WebClient` `ConnectionProvider` bounded with strict `maxConnections` and `maxIdleTime` | Eliminates stale TCP connections, connection pool leaks, and upstream connection exhaustion. |
+| **4** | **Thread Pool Offloading** | Unavoidable legacy I/O wrapped in `Schedulers.boundedElastic()` with custom limits | Isolates blocking legacy code from Netty EventLoops, preventing cross-tenant thread starvation. |
+| **5** | **Backpressure Boundaries** | All unbounded streams protected with `onBackpressureBuffer()` or `onBackpressureDrop()` | Defends JVM against OutOfMemoryErrors when publishers emit items faster than consumers can process them. |
+| **6** | **Error & Retry Safety** | `retryWhen(Retry.backoff(...).jitter(...))` configured; zero unconstrained `.retry()` calls | Prevents thundering herd retries from taking down recovering downstream microservices during outages. |
+| **7** | **Observability & Tracing** | Micrometer context propagation enabled; MDC headers synchronized across operators | Ensures distributed trace IDs (`traceId`, `spanId`) are preserved across asynchronous reactive thread hops. |
+| **8** | **Off-Heap Memory Guard** | Netty leak detection configured to `SIMPLE`; JVM `-XX:MaxDirectMemorySize` sized | Detects unreleased pooled `ByteBuf` direct memory buffers and prevents silent JVM native memory crashes. |
+| **9** | **Upstream Proxy Sync** | Reverse proxy configured with `X-Accel-Buffering: no` and ingress idle timeouts $>1\text{hr}$ | Enables real-time streaming for Server-Sent Events (SSE) and avoids premature proxy socket drops. |
+| **10** | **Graceful Pod Draining** | `server.shutdown=graceful` enabled with Kubernetes `preStop` sleep hook | Allows in-flight reactive streaming requests to complete cleanly before SIGTERM/SIGKILL termination. |
 
 ```java
 // Production Verification Checklist Utility

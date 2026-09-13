@@ -1,4 +1,4 @@
-﻿# 📚 Master Directory: All Markdown Guides Categorized
+# 📚 Master Directory: All Markdown Guides Categorized
 ### The Complete Architectural Inventory of All 150+ Engineering Documents across the Repository
 
 > **Repository Master Index**: This directory catalogs every single Markdown (`.md`) guide in this repository. All documents are organized by domain, technical discipline, and engineering tier with direct links, scope descriptions, and target audience.
@@ -9,7 +9,7 @@
 
 | # | Category Domain | Total Files | Key Highlights |
 | :-: | :--- | :-: | :--- |
-| **1** | [Core Java, Concurrency & JVM Internals](#1-core-java-concurrency--jvm-internals) | 16 | Threads, JMM, Memory, JIT, I/O, Collections, Streams, GC |
+| **1** | [Core Java, Concurrency & JVM Internals](#1-core-java-concurrency--jvm-internals) | 17 | Threads, JMM, Memory, JIT, I/O, Collections, Streams, GC |
 | **2** | [Spring Boot & Spring Framework Ecosystem](#2-spring-boot--spring-framework-ecosystem) | 15 | IoC, AOP, JPA, Security 6, WebFlux, Batch, Camel, Kafka |
 | **3** | [200+ & 50+ Production Scenarios Deep Dives](#3-200--50-production-scenarios-deep-dives) | 22 | Strict 4-Part & 5-Part War Room Scenario Interview Banks |
 | **4** | [Technical Terms & Zero-Jargon Encyclopedias](#4-technical-terms--zero-jargon-encyclopedias) | 6 | Plain-English definitions, mental models & trap breakdowns |
@@ -36,6 +36,7 @@
 
 | Document Title | File Link | Focus Areas & Technical Depth | Target Level |
 | :--- | :--- | :--- | :--- |
+| **Java Master Guide** | [`java_master_guide.md`](java-core/java_master_guide.md) | Flagship Guide: JVM Internals, Tiered JIT, ClassLoaders, Java 17/21 Records & Sealed Types, Generational GC, JCF, NIO.2, Virtual Threads Loom. | Beginner to Staff |
 | **Java Interview Master Guide** | [`java_interview_master_guide.md`](java-core/java_interview_master_guide.md) | Collections Internals, JMM, Singleton Masterclass, Generics, Reflection in Spring, AOP, Thread Safety, Flagship Programs. | Intermediate to Senior |
 | **Java Concurrency & Threads** | [`java_thread.md`](java-core/java_thread.md) | Synchronized blocks, Locks, Reentrancy, ExecutorService, Virtual Threads, Thread Dumps. | Senior Engineer |
 | **CompletableFuture & Async I/O** | [`completable_future.md`](java-core/completable_future.md) | Non-blocking pipelines, Thread pool isolation, Exception handling, Timeout guards. | Intermediate to Senior |

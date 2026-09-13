@@ -92,6 +92,70 @@ HotSpot JIT operates under a completely different paradigm: **Aggressive Specula
 
 ## 1.3 The Execution Lifecycle: From Bytecode to Native Instructions
 
+```mermaid
+flowchart TD
+    subgraph JITExecutionLifecycle["JVM HotSpot JIT Execution Substrate & Compilation Pipeline"]
+        direction TB
+
+        Src["Java Source (.java)"] -->|"javac frontend"| Bytecode["Bytecode (.class) in Metaspace"]
+        Bytecode --> Interpreter["Tier 0: Template Interpreter<br/>- Immediate startup via assembly templates<br/>- Increments Invocation & Backedge Counters"]
+
+        subgraph ProfilingPhase["Profiling & Early Compilation"]
+            Interpreter -->|"Invocation Counter Exceeded"| C1["Tiers 1, 2, 3: C1 Client Compiler<br/>- Rapid compilation with low latency<br/>- Generates MethodDataOop (MDO)<br/>- Profiles branch & type distribution"]
+        end
+
+        subgraph OptimizationPhase["Peak Optimization Engine"]
+            C1 -->|"Sustained Hot Traffic & Stable MDO"| C2["Tier 4: C2 Server Compiler / Graal<br/>- Sea-of-Nodes SSA Intermediate Representation<br/>- Aggressive Inlining & Speculative Devirtualization<br/>- Escape Analysis & Scalar Replacement<br/>- Superword SIMD Vectorization (AVX-512)"]
+        end
+
+        subgraph ExecutionSubstrate["Native CPU Execution Substrate"]
+            C2 -->|"Emits Native Assembly (nmethod)"| CodeCache[("JVM Code Cache (Executable RAM)<br/>Segmented: Non-NMethods, Profiled, Non-Profiled")]
+            CodeCache --> PhysicalCPU["Physical Host CPU Core<br/>- Executes directly at bare-metal clock speed<br/>- Zero JVM bytecode interpretation overhead"]
+        end
+
+        C2 -.->|"Speculation Fails: Uncommon Trap"| Deopt["Deoptimization Subsystem<br/>- Reads Debug Scope Map<br/>- Unwinds native frame & reconstructs interpreter stack"]
+        Deopt -.-> Interpreter
+    end
+
+    classDef srcStyle fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#f8fafc;
+    classDef interpStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef c1Style fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef c2Style fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef cacheStyle fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff7ed;
+    classDef deoptStyle fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+
+    class Src,Bytecode,PhysicalCPU srcStyle;
+    class Interpreter interpStyle;
+    class C1 c1Style;
+    class C2 c2Style;
+    class CodeCache cacheStyle;
+    class Deopt deoptStyle;
+```
+
+![HotSpot JVM Architecture & Execution Substrate](../assets/images/jvm/hotspot_jvm_substrate_architecture.jpg)
+
+#### Architectural Deep Dive: Execution Lifecycle & Compilation Substrates
+- **Part 1: Visual Architecture & Subsystem Topology**: The HotSpot JVM blends interpretation with multi-tier dynamic compilation. Bytecode loaded into Metaspace starts inside the Template Interpreter (Tier 0). Methods exhibiting high call counts or loop iterations promote through the C1 Client Compiler (Tiers 1–3) to accumulate profiling metadata, before reaching peak native compilation under the C2 Server Compiler (Tier 4). Generated machine code resides in the executable JVM Code Cache.
+- **Part 2: Execution Flow & Tier Promotion State Machine**:
+  1. *Interpretation (Tier 0)*: Bytecodes execute sequentially. Every method entry and backward loop jump increments thread-local hardware counters.
+  2. *Tier 2 / Tier 3 (C1 Compilation)*: When invocation thresholds exceed `CompileThreshold` ($\sim 2,000$), C1 compiles the method, embedding profiling instructions into a `MethodDataOop` (MDO) object to track type frequencies at call sites and branch paths.
+  3. *Tier 4 (C2 Compilation)*: When counters surpass tier thresholds ($\sim 15,000$), the C2 compiler ingests the MDO profile. C2 builds a Sea-of-Nodes graph, inlines hot call targets, executes escape analysis, eliminates redundant synchronization, vectorizes loops via SIMD, and emits highly optimized x86/ARM machine code (`nmethod`).
+  4. *Deoptimization*: If assumptions are invalidated at runtime (e.g., a branch marked dead is entered, or a new subclass loads), an **Uncommon Trap** executes, tearing down native frames and synthesizing interpreter frames on the fly.
+- **Part 3: Low-Level HotSpot Runtime, CPU Registers & Hardware Execution**: Compiled `nmethod` artifacts reside in non-garbage-collected native RAM marked executable via kernel system calls (`mprotect(..., PROT_READ | PROT_WRITE | PROT_EXEC)`). C2 optimizes register allocation using Chaitin's graph-coloring algorithm, assigning hot variables directly to general-purpose hardware registers (e.g., `RAX`, `RBX`, `R12-R15` on x86-64), avoiding roundtrips to L1 data caches. Vectorized loops emit AVX-256 or AVX-512 instructions (`vmovups`, `vpaddd`), processing multiple 32-bit floats or integers per CPU cycle.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Warmup CPU Jitter & Latency Spikes*: During cold microservice boot, hundreds of threads trigger simultaneous C2 compilations, spiking CPU usage to 100% and causing Kubernetes readiness probe timeouts. SRE mitigations: JVM warmup traffic scripts, Application Class Data Sharing (AppCDS), or CRaC (Coordinated Restore at Checkpoint).
+  - *Deoptimization Storms*: Dynamically loading classes via reflection inside high-throughput loops invalidates Class Hierarchy Analysis (CHA), triggering mass deoptimizations and dumping thousands of methods back to the slow interpreter.
+  - *Diagnostic Triage Commands*:
+    ```bash
+    # Print real-time JIT compilation events
+    java -XX:+PrintCompilation -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining -jar app.jar
+    # Inspect Code Cache status via jcmd
+    jcmd <pid> Compiler.Code_Cache
+    ```
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 Java Source Code (.java) ──► javac ──► Bytecode (.class)
                                             │
@@ -127,6 +191,8 @@ Java Source Code (.java) ──► javac ──► Bytecode (.class)
                         │   - Zero JVM interpreter overhead       │
                         └─────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -196,6 +262,76 @@ Every systems engineer working with low-latency Java must master these internal 
 
 Tiered Compilation (enabled by default since Java 8 via `-XX:+TieredCompilation`) solves the classic JVM dilemma: **Fast startup time (Client compiler) vs. Peak long-term throughput (Server compiler)**.
 
+```mermaid
+flowchart TD
+    subgraph TieredCompilationPipeline["HotSpot Tiered Compilation State Machine (Levels 0 through 4)"]
+        direction TB
+
+        T0["Tier 0: Template Interpreter<br/>- Immediate startup<br/>- Invocation (i) & Backedge (b) counters"]
+
+        subgraph C1Tiers["C1 Client Compiler Tiers (Low Compilation Latency)"]
+            T1["Tier 1: C1 Simple Native Code<br/>- Zero profiling instrumentation<br/>- Ideal for trivial getters/setters & leaf methods"]
+            T2["Tier 2: C1 Limited Profiling<br/>- Basic invocation counters<br/>- Used when C2 compiler queue is saturated"]
+            T3["Tier 3: C1 Full Profiling<br/>- Instruments branch directions<br/>- Records type profiles & inline caches into MethodDataOop"]
+        end
+
+        subgraph C2Tier["Tier 4: C2 Server Compiler / Graal (Peak Throughput)"]
+            T4["Tier 4: C2 Server Compiler<br/>- Sea-of-Nodes SSA Graph Optimization<br/>- Speculative Inlining & Devirtualization<br/>- Escape Analysis, Scalar Replacement & Lock Elision<br/>- Superword SIMD Vectorization"]
+        end
+
+        T0 -->|"Method is Trivial / Leaf<br/>(i + b >= Tier1Threshold)"| T1
+        T0 -->|"C2 Queue Overflow<br/>(Backpressure Shedding)"| T2
+        T0 -->|"Normal Method Heating<br/>(i + b >= Tier3Threshold)"| T3
+
+        T2 -->|"Profile Matures"| T3
+        T3 -->|"Stable MDO & High Frequency<br/>(i + b >= Tier4Threshold)"| T4
+
+        T4 -.->|"Uncommon Trap Fired<br/>(Assumption Invalidated)"| DeoptRoute["Deoptimization Engine<br/>- Discards C2 nmethod (marks not-entrant)<br/>- Synthesizes Interpreter Frames"]
+        DeoptRoute -.->|"Rollback to Interpreter"| T0
+        DeoptRoute -.->|"Reprofile if Needed"| T3
+    end
+
+    classDef t0Style fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef c1Style fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef c2Style fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef deoptStyle fill:#7f1d1d,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+
+    class T0 t0Style;
+    class T1,T2,T3 c1Style;
+    class T4 c2Style;
+    class DeoptRoute deoptStyle;
+```
+
+#### Architectural Deep Dive: Tiered Compilation State Mechanics
+- **Part 1: Visual Architecture & 5-Tier Pipeline Topology**: HotSpot's tiered compilation orchestrates 5 runtime tiers to balance startup latency with peak algorithmic throughput:
+  - *Tier 0 (Interpreter)*: Direct execution with invocation and loop backedge accounting.
+  - *Tier 1 (C1 Simple)*: Generates native machine code without any profiling hooks; terminal tier for simple accessors.
+  - *Tier 2 (C1 Limited)*: Emits native code with basic execution counters when compiler queues experience backpressure.
+  - *Tier 3 (C1 Full)*: Injects comprehensive profiling instrumentation into the `MethodDataOop` (MDO).
+  - *Tier 4 (C2 Server)*: Consumes stable MDO profiles to generate maximum-performance native assembly.
+- **Part 2: Tier Promotion State Machine & Adaptive Feedback Loop**:
+  1. A method starts executing in Tier 0.
+  2. If the method is detected to be trivial (e.g., getter/setter with $< 35$ bytes and no branches), it transitions directly to Tier 1, avoiding profiling overhead entirely.
+  3. Standard business methods promote from Tier 0 to Tier 3 when `invocation_count + backedge_count` surpasses `Tier3MinInvocationThreshold`. Tier 3 profiles polymorphic call sites (monomorphic, bimorphic, or megamorphic) and branch probabilities.
+  4. When profiling stabilizes and throughput justifies deep optimization, the method compiles in Tier 4.
+  5. If an optimization assumption fails (e.g., class loading breaks Class Hierarchy Analysis), Tier 4 executes an Uncommon Trap, deoptimizing execution back to Tier 0 or Tier 3 for reprofiling.
+- **Part 3: Low-Level JVM Counters, MDO & Compiler Queue Mechanics**: Tier promotion decisions are evaluated using dynamic formulas:
+  $$i \cdot F_i + b \cdot F_b > \text{Threshold}$$
+  where $i$ is the invocation counter, $b$ is the backedge counter, and $F$ represents queue-load weighting factors. HotSpot manages two background compiler queues: the C1 queue and the C2 queue. If the C2 queue backs up due to massive compilation tasks, HotSpot automatically reroutes incoming methods to Tier 2 to quickly shed interpreter load without stalling on heavy C2 optimization graphs.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *Deoptimization Flapping / Compiler Thrashing*: A method repeatedly optimizes to Tier 4, hits an uncommon trap, drops to Tier 0, reprofiles in Tier 3, and recompiles in Tier 4. After 5 deoptimizations for the same reason (`PerMethodTrapLimit=100`), C2 permanently disables the speculative optimization for that method.
+  - *Compiler Queue Starvation*: Container environments configured with single-core or fractional CPU quotas starve compiler threads (`C1CompilerThread`, `C2CompilerThread`), causing application startup warmup to drag out for tens of minutes.
+  - *SRE Diagnostics & Flags*:
+    ```bash
+    # View tiered compilation state transitions live
+    java -XX:+PrintTieredEvents -XX:+PrintCompilation -jar app.jar
+    # For serverless / CLI tools where peak throughput is secondary to instant startup:
+    java -XX:TieredStopAtLevel=1 -jar app.jar
+    ```
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
        ┌────────────────────────────────────────────────────────┐
        │               Tier 0: Template Interpreter             │
@@ -215,6 +351,8 @@ Tiered Compilation (enabled by default since Java 8 via `-XX:+TieredCompilation`
                                        │   (Peak Optimizations) │
                                        └────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -462,6 +600,91 @@ The **Code Cache** is a dedicated region of native memory (outside the Java Heap
 
 Starting with Java 9, the Code Cache is partitioned into three independent segments to prevent fragmentation:
 
+```mermaid
+flowchart TD
+    subgraph ReservedCodeCache["Java 9+ Segmented Code Cache Architecture (RAM Substrate)"]
+        direction TB
+
+        subgraph TotalCodeCache["Reserved Code Cache (-XX:ReservedCodeCacheSize)"]
+            direction LR
+
+            subgraph NonNMethods["1. Non-NMethods Segment<br/>(CodeHeap 'non-nmethods')"]
+                S1["JVM Runtime Stubs"]
+                S2["C1/C2 Interpreter Adapters"]
+                S3["GC Allocation Barriers & Trampolines"]
+                S4["Compiler Buffers"]
+                S1 --- S2 --- S3 --- S4
+            end
+
+            subgraph Profiled["2. Profiled NMethods Segment<br/>(CodeHeap 'profiled nmethods')"]
+                P1["Tier 2 C1 Limited Code"]
+                P2["Tier 3 C1 Full Profiling Code"]
+                P3["MethodDataOop (MDO) Hooks"]
+                P4["Short-Lived Instrumentation<br/>(High Churn / Frequent Sweeping)"]
+                P1 --- P2 --- P3 --- P4
+            end
+
+            subgraph NonProfiled["3. Non-Profiled NMethods Segment<br/>(CodeHeap 'non-profiled nmethods')"]
+                NP1["Tier 1 Simple Leaf Code"]
+                NP2["Tier 4 C2 Server Code"]
+                NP3["Graal JIT Compiled Artifacts"]
+                NP4["Peak Performance / Long-Lived<br/>(Zero Profiling Overhead)"]
+                NP1 --- NP2 --- NP3 --- NP4
+            end
+        end
+
+        subgraph SweeperEngine["HotSpot Code Cache Sweeper Lifecycle"]
+            Alive["alive: Actively Executing Code"] -->|"Deoptimized / Higher Tier Built"| NotEntrant["not-entrant: Existing Threads Finish<br/>New Callers Route to Interpreter"]
+            NotEntrant -->|"No Active Frames on Any Stack"| Zombie["zombie: Ready for Deallocation"]
+            Zombie -->|"Code Sweeper Reclaims Block"| Freed["freed: Returned to Segment Free-List"]
+        end
+
+        Profiled -.-> SweeperEngine
+        NonProfiled -.-> SweeperEngine
+    end
+
+    classDef totalStyle fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef nonNMethodStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef profiledStyle fill:#701a75,stroke:#f472b6,stroke-width:2px,color:#fdf2f8;
+    classDef nonProfiledStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef sweepStyle fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#fff7ed;
+
+    class S1,S2,S3,S4 nonNMethodStyle;
+    class P1,P2,P3,P4 profiledStyle;
+    class NP1,NP2,NP3,NP4 nonProfiledStyle;
+    class Alive,NotEntrant,Zombie,Freed sweepStyle;
+```
+
+#### Architectural Deep Dive: Segmented Code Cache Mechanics
+- **Part 1: Visual Architecture & Segmented Code Cache Topology**: Starting with Java 9 (JEP 197), the monolithic HotSpot Code Cache was divided into 3 physically isolated heap segments:
+  1. *Non-NMethods*: Houses JVM runtime stubs, compiler trampolines, and type adapters. This segment is static and never swept.
+  2. *Profiled NMethods*: Stores Tier 2 and Tier 3 C1 code embedded with branch and type profiling instructions. Highly dynamic and volatile.
+  3. *Non-Profiled NMethods*: Stores permanent Tier 1 simple code and Tier 4 C2 peak-optimized code. Low churn and high cache-line density.
+- **Part 2: Code Allocation, Promotion & Sweeper Flushing Cycle**:
+  - Code is allocated into its corresponding heap segment based on the active compiler tier.
+  - When Tier 4 finishes compiling a method, the previous Tier 3 implementation transitions to `not-entrant`. Existing threads running inside the old method finish their stack frames; subsequent callers invoke the new Tier 4 entrypoint.
+  - When the JVM safepoint sweep verifies that no active thread stack references the `not-entrant` method, its state flips to `zombie`.
+  - The Sweeper unlinks the code block and releases memory back to the segment's segregated free-list (`freed`), preventing fragmentation from cross-polluting long-lived C2 code with short-lived C1 profiling stubs.
+- **Part 3: Low-Level OS Virtual Memory, MMU & Execution Permissions**: Memory blocks in the Code Cache require executable permissions managed via `mprotect(2)` system calls (`PROT_READ | PROT_WRITE | PROT_EXEC`). Segmenting the cache optimizes host CPU instruction caching (I-Cache) and Translation Lookaside Buffer (TLB) hits by clustering long-lived, hot C2 instructions together on contiguous physical pages, preventing cold runtime stubs from thrashing CPU L1i caches. Memory is aligned to `CodeCacheSegmentSize=64` bytes matching standard x86 CPU cache lines.
+- **Part 4: Production Failure Modes & SRE Diagnostics**:
+  - *The Latency Cliff (Compiler Shutdown)*: If any segment exhausts its allocated quota (`NonProfiledCodeHeapSize`, `ProfiledCodeHeapSize`, or `NonNMethodCodeHeapSize`), HotSpot issues:
+    `Java HotSpot(TM) 64-Bit Server VM warning: CodeCache is full. Compiler has been disabled.`
+    When this triggers, the JIT compiler shuts down permanently. Uncompiled methods remain trapped in the interpreter forever, causing throughput to collapse by up to 90%.
+  - *SRE Production Tuning & Commands*:
+    ```bash
+    # Tune total and segmented code cache in high-throughput microservices
+    java -XX:ReservedCodeCacheSize=512m \
+         -XX:NonProfiledCodeHeapSize=350m \
+         -XX:ProfiledCodeHeapSize=130m \
+         -XX:NonNMethodCodeHeapSize=32m \
+         -XX:+UseCodeCacheFlushing -jar app.jar
+    # Inspect live segment utilization via jcmd
+    jcmd <pid> Compiler.Code_Cache
+    ```
+
+<details>
+<summary>View Legacy ASCII Diagram</summary>
+
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                      RESERVED CODE CACHE (RAM)                         │
@@ -473,6 +696,8 @@ Starting with Java 9, the Code Cache is partitioned into three independent segme
 │                        │   instrumentation     │   long-lived code     │
 └────────────────────────┴───────────────────────┴───────────────────────┘
 ```
+
+</details>
 
 ---
 

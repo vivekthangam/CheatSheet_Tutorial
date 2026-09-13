@@ -20,14 +20,14 @@ Imagine you are the chief civil engineer building a modern city:
    - If the script fails at step 180, re-running it creates duplicate servers and fails with `NameAlreadyExists`.
    - The script describes *how* to build the city step-by-step, not *what* the city should look like.
 
-```
-Imperative Bash / Python Scripting (Fragile & Error-Prone):
-Step 1: Create VPC ──> Success
-Step 2: Create Subnet ──> Success
-Step 3: Create Gateway ──> Network Timeout!
-Re-run Script:
-Step 1: Create VPC ──> ERROR: VPC CIDR already allocated! (Halt!)
-```
+| Step Execution | Imperative Bash / Python Script Execution | Declarative Terraform Reconciliation |
+| :--- | :--- | :--- |
+| **Initial Run - Step 1** | `aws ec2 create-vpc` -> Created `vpc-1001` | Reads desired state; records `aws_vpc.main` in plan. |
+| **Initial Run - Step 2** | `aws ec2 create-subnet` -> Created `subnet-2001` | Computes dependency on VPC; provisions subnet. |
+| **Initial Run - Step 3** | `aws ec2 create-internet-gateway` -> **Network Timeout!** | Network error caught; `.tfstate` records steps 1 & 2 cleanly. |
+| **Re-Run - Step 1** | `aws ec2 create-vpc` -> **Fatal Crash: CIDR 10.0.0.0/16 already allocated!** | State comparison identifies VPC already exists (`vpc-1001`); **Skips creation**. |
+| **Re-Run - Step 2** | Script aborted at Step 1; system deadlocked. | Identifies Subnet exists; **Skips creation**. |
+| **Re-Run - Step 3** | Manual console cleanup required. | Retries only the missing Internet Gateway; **Reaches 100% convergence**. |
 
 **The Declarative Solution: Terraform (The City Architect's Blueprint)**
 Instead of telling the cloud provider *how* to build resources imperatively:
@@ -36,54 +36,74 @@ Instead of telling the cloud provider *how* to build resources imperatively:
 - **The Plan Engine (`terraform plan`)**: Terraform queries the live cloud provider APIs, compares the real world against your state file and your code, and prints a precise diff: `+ 2 to add, ~ 1 to change, - 0 to destroy`.
 - **Idempotent Reconciliation (`terraform apply`)**: Terraform executes only the exact API calls necessary to bring the cloud into alignment with your code. Running `apply` 10 times in a row makes zero changes if the system is already in the desired state.
 
-```
-Declarative Infrastructure as Code (Stateful & Reconciled):
-[Your HCL Code] <───(Diff Engine)───> [Live Cloud Reality (AWS)]
-        │                                      │
-        └──────────────> [terraform.tfstate] <─┘
-Plan Output:
-  + Create 1 Subnet
-  ~ Modify 1 Security Group
-  0 Destroyed
-Apply: Executes strictly the delta! 100% idempotent.
-```
+![Terraform Declarative Infrastructure as Code Architecture](../assets/images/devops/terraform_architecture_iac.jpg)
+
+## 1.2 Deep-Dive Architectural Breakdown: Declarative Infrastructure as Code Blueprint
+
+The following exhaustive technical breakdown decodes the six core subsystems, internal engines, protocol interfaces, and state-machine transitions depicted in the architectural blueprint above:
+
+### 1. Authoring Layer: HCL2 Grammar, AST Parsing, and Hierarchical Module Graphs
+- **Grammar & Lexical Tokenization**: HashiCorp Configuration Language v2 (HCL2) is built on top of the open-source `hcl/v2` lexer and the unified `cty` type system. The authoring layer accepts declarative syntax blocks: `terraform`, `provider`, `variable`, `locals`, `resource`, `data`, `module`, and `output`.
+- **Abstract Syntax Tree (AST) Compilation**: When Terraform parses `*.tf` files, it does not execute sequentially; it ingests all configuration files within the working directory into an AST representation. Dynamic expressions (`for_each`, `count`, ternary conditions `condition ? true : false`, `dynamic` nested attribute blocks) are parsed into un-evaluated syntax nodes.
+- **Hierarchical Module Ingestion**: Child modules (`module "vpc" { source = "./modules/vpc" }`) create distinct namespaces within the AST. Variables act as public parameters passed downward into the child module scope; outputs act as return values bubbled back up to the calling root module. The authoring engine guarantees strict encapsulation: resources inside child modules cannot access variables or resources in the parent root module unless explicitly passed via module arguments.
+
+### 2. Terraform Core Graph Engine: In-Memory Directed Acyclic Graph (DAG) & Topological Sorting
+- **Node Synthesis**: Terraform compiles the parsed AST into an in-memory Directed Acyclic Graph (DAG) using a specialized Go graph package (`github.com/hashicorp/terraform/internal/dag`). Graph nodes are synthesized for every declared entity: provider configurations, data sources, resource definitions, resource instances (expanded after evaluating `count` and `for_each`), and module outputs.
+- **Edge Construction (Implicit vs. Explicit)**:
+  - *Implicit Edges*: Inferred automatically through attribute cross-referencing (e.g., `aws_subnet.public.vpc_id = aws_vpc.main.id` forces the DAG to generate a directed edge: `aws_subnet.public` -> `aws_vpc.main`).
+  - *Explicit Edges*: Declared manually using the `depends_on = [...]` meta-argument, injecting hard dependency constraints into the DAG when no attribute reference exists in code.
+- **Cycle Detection via Tarjan’s Algorithm**: Before any execution plan is formed, the Core Graph Engine runs Tarjan’s Strongly Connected Components algorithm. If a cyclic dependency exists ($A \rightarrow B \rightarrow A$), compilation halts immediately with a fatal `Cycle in graph` diagnostic.
+- **Topological Sorting & Parallel Walk**: The engine calculates a reverse topological ordering of the DAG. Independent leaf nodes (nodes with zero unmet upstream dependencies) are dispatched simultaneously to a concurrent worker pool (governed by `-parallelism=N`, default `10` threads).
+
+### 3. Diff Computation Engine: 3-Way Merge State Reconciliation
+- **The Tripartite State Model**: Terraform computes execution deltas through a 3-way reconciliation merge:
+  1. **Desired State ($S_{desired}$)**: Extracted from local HCL2 files.
+  2. **Recorded State ($S_{recorded}$)**: Extracted from the persisted snapshot in `terraform.tfstate`.
+  3. **Observed Cloud Reality ($S_{observed}$)**: Queried live from cloud provider APIs via RPC during the initial `refresh` phase.
+- **The Diff Decision Matrix**:
+  - *Resource in $S_{desired}$, absent from $S_{recorded}$ & $S_{observed}$*: Marked for **Creation (`+`)**.
+  - *Resource in $S_{desired}$, $S_{recorded}$, & $S_{observed}$ with identical attributes*: **No-Op (0 changes)**.
+  - *Resource in $S_{desired}$, $S_{recorded}$, & $S_{observed}$, but mutable attribute drift in cloud*: Marked for **In-Place Update (`~`)**.
+  - *Resource in $S_{desired}$, $S_{recorded}$, & $S_{observed}$, but immutable attribute changed in HCL (e.g., VPC CIDR)*: Marked for **Destruction and Recreation (`-/+`)**.
+  - *Resource in $S_{recorded}$ & $S_{observed}$, but absent from $S_{desired}$*: Marked for **Destruction (`-`)**.
+  - *Resource in $S_{desired}$ & $S_{recorded}$, but absent from $S_{observed}$ (out-of-band deletion)*: Marked for **Recreation (`+`)**.
+- **Speculative Plan Generation**: The calculated diff is compiled into a cryptographically sealed speculative plan artifact (`tfplan` Protobuf binary), locking the exact actions to be taken.
+
+### 4. State Management Engine: Schema v4, Remote Backends, and Distributed Mutex Locking
+- **JSON Schema v4 Architecture**: The `terraform.tfstate` document adheres to a strict versioned schema. It includes:
+  - `format_version`: Currently `0.2` or `1.0` within State Schema `v4`.
+  - `terraform_version`: The exact CLI release that compiled the state.
+  - `serial`: A monotonically increasing integer counter incremented with every state mutation.
+  - `lineage`: A globally unique UUID generated upon initial project creation to detect accidental cross-environment state overwrites.
+  - `resources`: A nested array containing resource types, names, provider URIs, instances, schema version hashes, and full attribute dictionaries (including secrets and private keys).
+- **Remote Backend Transport & Encryption**: In enterprise production, state is never stored locally. Remote backends (Amazon S3, Google Cloud Storage, Azure Blob Storage, HashiCorp HCP Terraform) transmit state over TLS 1.3. At rest, state files are protected by customer-managed KMS envelope encryption with strict access policies.
+- **Distributed Mutex Locking**: To prevent concurrent state mutations and race conditions between team members or parallel CI/CD runners, Terraform acquires a distributed lock before reading or writing:
+  - *AWS Backend*: Uses Amazon DynamoDB with a primary hash key `LockID`. Terraform executes a conditional write (`PutItem` with `attribute_not_exists(LockID)`).
+  - *GCS Backend*: Leverages Google Cloud Storage native object generation pre-conditions (`x-goog-if-generation-match`).
+  - *Failure Mode*: If a lock is held, any secondary invocation terminates instantly with `Error: Error acquiring the state lock`.
+
+### 5. Execution Lifecycle Engine: Init, Plan, Apply Worker Pools, and Tainted Semantics
+- **Phase 1: `terraform init`**: Scans the root module and child modules, verifies provider constraints, contacts the Terraform Registry via HTTPS, downloads platform-specific provider binaries into `.terraform/providers/`, records SHA-256 hashes into `.terraform.lock.hcl`, and configures backend storage.
+- **Phase 2: `terraform plan`**: Acquires backend lock, refreshes remote state via provider APIs, builds the DAG, computes the 3-way merge diff, and serializes the speculative execution plan.
+- **Phase 3: `terraform apply`**: Validates operator approval (or `-auto-approve`), traverses the DAG in topological order, and dispatches CRUD tasks to worker threads.
+- **Partial Failure & Tainted Resource Semantics**: If an API call fails mid-provisioning (e.g., an EC2 instance launches but user-data bootstrap times out), Terraform does not roll back existing created resources. It records the created resource in `terraform.tfstate` and marks it **Tainted** (`tainted = true` or via `terraform apply -replace`). On the next execution, Terraform automatically destroys and recreates the tainted resource to achieve a clean, pristine state.
+- **Phase 4: `terraform destroy`**: Graph engine inverts all edges of the DAG ($A \rightarrow B$ becomes $B \rightarrow A$) and systematically sends Delete API requests to tear down infrastructure without orphaned dependencies.
+
+### 6. Provider Plugin Ecosystem: gRPC Protocol, Unix Domain Sockets, and SDK Handlers
+- **Out-of-Process Plugin Architecture**: Terraform Core contains zero cloud provider code. Every provider (AWS, Azure, GCP, Cloudflare, Kubernetes) is a standalone binary compiled in Go using `terraform-plugin-framework` or `terraform-plugin-sdk/v2`.
+- **Inter-Process Communication (IPC)**: When Core executes, it spawns provider binaries as child processes using standard OS `execve(2)`. Communication occurs over a high-throughput, low-latency **local gRPC channel** via Unix Domain Sockets (`/tmp/tf-plugin-*.sock` on Linux/macOS) or Windows Named Pipes (`\\.\pipe\tf-plugin-*`).
+- **Standardized RPC Handlers**: Core communicates with provider binaries through defined gRPC service definitions:
+  1. `GetProviderSchema`: Core queries the provider for supported resource types, attribute types, and deprecations.
+  2. `ValidateProviderConfig` & `ValidateResourceConfig`: Validates syntactical types, regex patterns, and mandatory fields without calling cloud APIs.
+  3. `ConfigureProvider`: Passes authentication credentials (IAM keys, OAuth tokens, endpoint URLs) to initialize the vendor SDK client (e.g., AWS SDK for Go).
+  4. `ReadResource` / `PlanResourceChange`: Queries live infrastructure and calculates proposed state attributes.
+  5. `ApplyResourceChange`: Executes the physical HTTP REST / gRPC API mutation against the cloud provider endpoint and returns the updated state payload.
 
 ---
 
 ## 2. The 5 Core Building Blocks
 
 Every Terraform configuration is built from five core building blocks:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. PROVIDERS (The Cloud API Plugins)                        │
-│    aws, azurerm, google, kubernetes, cloudflare (gRPC)     │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Authenticates & Communicates
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. RESOURCES & DATA SOURCES (The State Elements)            │
-│    Resource: Create/Manage | Data Source: Read-Only Query   │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Governed by
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. VARIABLES & OUTPUTS (The Interface Layer)                │
-│    input vars (parameters) -> locals (math) -> outputs (APIs│
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Reconciled against
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 4. THE STATE FILE (terraform.tfstate)                       │
-│    Cryptographic mapping of code definitions to cloud IDs   │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Modularized into
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5. MODULES (The Reusable Infrastructure Blueprints)        │
-│    Self-contained packages of resources with inputs/outputs │
-└─────────────────────────────────────────────────────────────┘
-```
 
 | Component | Physical World Analogy | Technical Definition | Key Architectural Rule |
 | :--- | :--- | :--- | :--- |
@@ -99,26 +119,12 @@ Every Terraform configuration is built from five core building blocks:
 
 Understanding the four core commands and their underlying execution mechanics:
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 1. terraform init                                                       │
-│    Scans *.tf files ──> Downloads Provider Plugins ──> Configures Backend│
-│    Creates: .terraform/ and locks versions in .terraform.lock.hcl       │
-├─────────────────────────────────────────────────────────────────────────┤
-│ 2. terraform plan                                                       │
-│    Acquires State Lock ──> Refreshes Cloud Reality via API ──>          │
-│    Computes In-Memory DAG (Graph) ──> Outputs Speculative Execution Diff│
-├─────────────────────────────────────────────────────────────────────────┤
-│ 3. terraform apply                                                      │
-│    Re-runs Plan ──> Prompts Operator Approval ──>                       │
-│    Executes Cloud API Calls in Dependency Order ──> Updates State File  │
-│    Releases State Lock                                                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│ 4. terraform destroy                                                    │
-│    Inverts the Dependency Graph ──> Deletes all managed cloud resources │
-│    Leaves state file clean and empty ──> Releases Lock                  │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+| CLI Command | Internal Lifecycle Operations | Filesystem & State Mutations | Concurrency & Wire Actions |
+| :--- | :--- | :--- | :--- |
+| **`terraform init`** | Scans `*.tf` files; queries public/private registry; downloads provider plugins; configures remote backend. | Creates `.terraform/providers/`; generates or verifies checksums in `.terraform.lock.hcl`. | Zero cloud resource modification; validates provider compatibility. |
+| **`terraform plan`** | Acquires backend distributed mutex lock; queries live cloud provider APIs via gRPC refresh; compiles in-memory DAG; computes 3-way diff. | Can serialize speculative execution plan to a binary file (e.g. `tfplan`). | Read-only execution; acquires DynamoDB/Consul mutex lock and releases upon completion. |
+| **`terraform apply`** | Re-computes or reads speculative plan; prompts operator confirmation (unless `-auto-approve`); walks DAG in topological order. | Commits updated attributes to encrypted `terraform.tfstate`; increments serial number. | Dispatches concurrent API calls across worker pools (`-parallelism=N`); releases lock upon termination. |
+| **`terraform destroy`** | Inverts all edges in Directed Acyclic Graph ($A \rightarrow B$ becomes $B \rightarrow A$); validates teardown order. | Deletes resources from `terraform.tfstate`, leaving empty state structure. | Dispatches Delete API calls to cloud provider in reverse dependency order; releases lock. |
 
 ---
 
@@ -305,24 +311,13 @@ terraform apply ──> [Error: Provider Auth Failed] ──> Expired AWS STS cr
 
 ## 6. Top 5 Beginner Mistakes in Production
 
-```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                           TOP 5 BEGINNER PITFALLS                              │
-├──────────────────────────────────────┬─────────────────────────────────────────┤
-│ Pitfall                              │ Production Consequence                  │
-├──────────────────────────────────────┼─────────────────────────────────────────┤
-│ 1. Committing `terraform.tfstate` to │ Exposes plaintext DB passwords & keys   │
-│    Git Version Control               │ in public or corporate repos            │
-├──────────────────────────────────────┼─────────────────────────────────────────┤
-│ 2. Missing `prevent_destroy` on DBs  │ Accidental schema deletion on rename    │
-├──────────────────────────────────────┼─────────────────────────────────────────┤
-│ 3. Omitting `.terraform.lock.hcl`    │ Provider drift breaks CI pipeline builds│
-├──────────────────────────────────────┼─────────────────────────────────────────┤
-│ 4. Massive Monolithic Root Modules   │ 45-minute plan times & huge blast radius│
-├──────────────────────────────────────┼─────────────────────────────────────────┤
-│ 5. Modifying Cloud Console Manually  │ State drift causes unexpected destroys  │
-└──────────────────────────────────────┴─────────────────────────────────────────┘
-```
+| Critical Beginner Pitfall | Underlying Failure Mechanism | Catastrophic Production Consequence | Mitigation & Architectural Fix |
+| :--- | :--- | :--- | :--- |
+| **1. Committing `terraform.tfstate` to Git** | State file stores all declared resource attributes in plaintext JSON, including database passwords and TLS private keys. | Exposes sensitive corporate secrets in public or company Git history. | Store state exclusively in remote encrypted backends (S3/GCS); add `*.tfstate` to `.gitignore`. |
+| **2. Missing `prevent_destroy` on Stateful Resources** | Renaming an HCL identifier or modifying an immutable attribute triggers destruction and re-creation. | Accidental catastrophic database or storage volume deletion during automated CI apply. | Enforce `lifecycle { prevent_destroy = true }` on all production databases, disks, and stateful stores. |
+| **3. Omitting `.terraform.lock.hcl` from Git** | Without lock files, CI runners download latest floating provider patch or minor releases. | Provider dependency drift introduces unexpected breaking schema updates and crashes deployments. | Commit `.terraform.lock.hcl` into Git version control alongside `.tf` files. |
+| **4. Massive Monolithic Root Modules** | Single state file managing thousands of resources across networking, compute, and database tiers. | 45-minute plan times, serial locking bottlenecks, and massive organizational blast radius on error. | Decouple architectures into discrete, layered state stacks (e.g., `01-networking`, `02-security`, `03-apps`). |
+| **5. Out-of-Band Cloud Console Edits** | Operators modify security groups or instances manually via AWS web console without updating IaC. | Out-of-band drift causes Terraform to overwrite or destroy manual configurations on next apply. | Enforce strict read-only IAM console access; reconcile legitimate drift using `terraform import` or refresh. |
 
 ---
 
@@ -380,25 +375,12 @@ terraform apply ──> [Error: Provider Auth Failed] ──> Expired AWS STS cr
 
 Infrastructure as Code frameworks are classified into four foundational archetypes based on language paradigm, state management, and abstraction layers:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       IaC FRAMEWORK TAXONOMY SPECTRUM                       │
-├────────────────────────┬───────────────────────────┬────────────────────────┤
-│ Archetype              │ Language / Abstraction    │ State Management Model │
-├────────────────────────┼───────────────────────────┼────────────────────────┤
-│ 1. Declarative Domain  │ Domain-Specific Language  │ Independent State File │
-│    (Terraform / Tofu)  │ HashiCorp HCL             │ (Client-Side Reconcile)│
-├────────────────────────┼───────────────────────────┼────────────────────────┤
-│ 2. Cloud Native DSL    │ Proprietary JSON / YAML   │ Cloud Managed Engine   │
-│    (CloudFormation/ARM)│ Proprietary Vendor Schema │ (Server-Side State)    │
-├────────────────────────┼───────────────────────────┼────────────────────────┤
-│ 3. Imperative Polyglot │ General Programming Lang  │ Synthesizes DSL or     │
-│    (Pulumi / AWS CDK)  │ TypeScript, Python, Go    │ Custom Cloud Backend   │
-├────────────────────────┼───────────────────────────┼────────────────────────┤
-│ 4. Agentless Config    │ Declarative YAML          │ Stateless Live Query   │
-│    (Ansible)           │ Operating System Focus    │ (Push over SSH)        │
-└────────────────────────┴───────────────────────────┴────────────────────────┘
-```
+| Archetype | Exemplar Frameworks | Language / Syntax Abstraction | State Management & Reconciliation Model | Primary Scope & Sweet Spot |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Declarative Domain-Specific** | **HashiCorp Terraform**, OpenTofu | Declarative HCL2 domain-specific language | Independent state ledger (`.tfstate`) with client-side 3-way reconciliation | Multi-cloud infrastructure provisioning, cloud network landing zones, IAM |
+| **2. Cloud-Native Managed Engine** | **AWS CloudFormation**, Azure ARM/Bicep | Vendor proprietary JSON / YAML / Bicep | Fully managed server-side state engine inside cloud provider control plane | Single-cloud native workloads with automated cloud-side stack rollbacks |
+| **3. Imperative Polyglot SDK** | **Pulumi**, AWS CDK (synthesis layer) | General-purpose languages (TypeScript, Python, Go, C#) | Client-side state engine or cloud backend; compiles imperative loops to resource nodes | Developer-centric platforms, deep unit testing, complex dynamic loops |
+| **4. Agentless Push Automation** | **Ansible** | Declarative YAML Playbooks | Stateless; live target inspection over SSH / WinRM without state files | OS configuration management, package installation, patching, security auditing |
 
 ---
 
@@ -440,30 +422,12 @@ Infrastructure as Code frameworks are classified into four foundational archetyp
 
 ## 4. Architectural Decision Tree: Choosing Your IaC Platform
 
-```
-                             [START: Infrastructure Architecture]
-                                              │
-                                              ▼
-                        Are you managing ONLY AWS infrastructure and
-                        want zero state files or backend management?
-                                      /              \
-                                   [YES]             [NO]
-                                     │                 │
-                           [AWS CloudFormation]        ▼
-                           (or AWS CDK)       Do you need developers to write
-                                              infrastructure in TypeScript/Python/Go?
-                                                            /        \
-                                                         [YES]       [NO]
-                                                           │           │
-                                                       [Pulumi]        ▼
-                                                                Do you want the global
-                                                                enterprise standard with
-                                                                the largest provider ecosystem?
-                                                                      /        \
-                                                                   [YES]       [NO]
-                                                                     │           │
-                                                             [Terraform/Tofu] [Other]
-```
+| Enterprise Architecture Decision Factor | Organizational Constraints & Needs | Recommended Tooling | Strategic Rationale & Trade-Offs |
+| :--- | :--- | :--- | :--- |
+| **Exclusive AWS Footprint & Managed State** | Organization wants zero backend S3/DynamoDB maintenance, fully managed rollbacks, and native AWS service support. | **AWS CloudFormation** (or AWS CDK) | Deepest native AWS integration with zero client-side state files, but strictly locks the enterprise into AWS with zero multi-cloud portability. |
+| **Software Engineering Native Tooling** | Teams demand real programming languages (TypeScript, Python, Go), native IDE auto-complete, unit tests (Jest/PyTest), and OOP abstractions. | **Pulumi** | Unlocks full power of general-purpose software languages and npm/pip packages, but requires strict software architectural discipline to avoid unmaintainable sprawl. |
+| **Global Enterprise Standard & Multi-Cloud** | Multi-account, multi-cloud platform (AWS, GCP, Azure, Cloudflare, Datadog) requiring the largest provider ecosystem and vendor neutrality. | **HashiCorp Terraform / OpenTofu** | Industry standard declarative HCL with 3,500+ providers, strict deterministic DAG execution, and massive community module reusability. |
+| **OS Configuration & Dynamic Mutation** | Workloads require post-provisioning software installation, config file templating, kernel tuning, and ad-hoc orchestration over SSH. | **Ansible** (in tandem with Terraform) | Use Terraform to provision the underlying cloud compute/networking (VPCs, Subnets, EC2), and trigger Ansible to configure inside the operating system. |
 
 ---
 
@@ -473,34 +437,12 @@ Infrastructure as Code frameworks are classified into four foundational archetyp
 
 At its core, Terraform is a **Graph Execution Engine**. When you execute `terraform plan` or `terraform apply`, Terraform does not read your files top-to-bottom. It compiles your code into an in-memory Directed Acyclic Graph (DAG).
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ DIRECTED ACYCLIC GRAPH (DAG) DEPENDENCY COMPILER                            │
-│                                                                             │
-│  1. Ingestion Phase: AST Parsing                                            │
-│     Parses all *.tf files in current directory into an Abstract Syntax Tree.│
-│                                                                             │
-│  2. Node Synthesis & Dependency Analysis                                    │
-│     Creates a graph node for every resource, data source, and provider.     │
-│     Draws directed edges based on interpolations:                           │
-│                                                                             │
-│       [aws_vpc.main] ◄──────┐                                               │
-│             ▲               │                                               │
-│             │               │                                               │
-│     [aws_subnet.public]     │ (Implicit Dependency via VPC ID)              │
-│             ▲               │                                               │
-│             │               │                                               │
-│     [aws_instance.web] ─────┴──────────────────> [aws_security_group.web]   │
-│                                                                             │
-│  3. Cycle Detection                                                         │
-│     Runs Tarjan's Strongly Connected Components Algorithm.                  │
-│     If a cycle exists (A -> B -> A), compilation HALTS with "Graph Cycle"! │
-│                                                                             │
-│  4. Topological Sort & Concurrent Walk                                      │
-│     Computes the reverse topological ordering.                              │
-│     Walks independent leaf nodes concurrently in parallel worker pools!    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+| Compilation Phase | Internal Algorithm & Engine | Data Structures & Operations | Runtime Outcome & Concurrency |
+| :--- | :--- | :--- | :--- |
+| **1. Ingestion & AST Parsing** | `hcl/v2` Lexer & Parser | Ingests all `*.tf` files in working directory into an Abstract Syntax Tree. | Resolves blocks, attributes, dynamic blocks, and variable references into an un-evaluated syntax tree. |
+| **2. Node Synthesis & Dependency Analysis** | Graph Builder (`internal/dag`) | Instantiates graph nodes for every provider, data source, resource, and module output. | Draws directed edges from child resources to parents based on implicit references (`aws_subnet.vpc_id = aws_vpc.id`) and explicit `depends_on`. |
+| **3. Cycle Detection** | Tarjan's Strongly Connected Components | Identifies whether the graph contains circular dependency loops ($A \rightarrow B \rightarrow A$). | If a loop is found, compilation halts immediately with `Cycle in graph`; prevents infinite execution deadlocks. |
+| **4. Topological Sorting & Parallel Walk** | Reverse Topological Sort (`Kahn's Algorithm`) | Computes linear evaluation sequence respecting all dependency constraints. | Dispatches independent root/leaf nodes concurrently across worker thread pool (`-parallelism=10`). |
 
 ### Implicit vs Explicit Dependencies:
 - **Implicit Dependency**: Created automatically when an attribute references another resource:
@@ -519,35 +461,14 @@ At its core, Terraform is a **Graph Execution Engine**. When you execute `terraf
 
 Terraform does **not** compile cloud provider SDKs directly into its main binary. It uses an out-of-process **Plugin Architecture**.
 
-```
-┌────────────────────────┐                   ┌───────────────────────────────┐
-│ TERRAFORM CORE BINARY  │                   │ AWS PROVIDER PLUGIN (Go)      │
-│ (HCL Parser, DAG, State)                   │ (terraform-provider-aws)      │
-└───────────┬────────────┘                   └───────────────┬───────────────┘
-            │                                                │
-            │ 1. Spawns Child Process: execve(provider-aws)  │
-            ├───────────────────────────────────────────────>│
-            │                                                │
-            │ 2. Establishes Local gRPC Socket Connection    │
-            │    (Unix Domain Socket or localhost:10000+)    │
-            │<──────────────────────────────────────────────>│
-            │                                                │
-            │ 3. RPC Call: ConfigureProvider(Credentials)    │
-            ├───────────────────────────────────────────────>│
-            │                                                │
-            │ 4. RPC Call: PlanResourceChange(Schema, State) │
-            ├───────────────────────────────────────────────>│
-            │<──────────────────────────────────────────────┤
-            │    Returns Calculated State Diff via Protobuf  │
-            │                                                │
-            │ 5. RPC Call: ApplyResourceChange()             │
-            ├───────────────────────────────────────────────>│
-            │                                                ├── Calls AWS API
-            │                                                │   (ec2.CreateVpc)
-            │<──────────────────────────────────────────────┤
-            │    Returns Created Resource Attributes         │
-            ▼                                                ▼
-```
+| Step | Calling Component | Target Component | Wire Protocol & RPC Method | Payload & Low-Level Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Terraform Core** | OS Process Manager | `execve(2)` OS Syscall | Core spawns `terraform-provider-aws` as an independent child OS process. |
+| **2** | **Terraform Core** | Provider Plugin | Local gRPC over Unix Domain Socket / Named Pipe | Core and provider establish secure IPC channel via `/tmp/tf-plugin-*.sock`. |
+| **3** | **Terraform Core** | Provider Plugin | gRPC: `ConfigureProvider(Credentials)` | Core transmits parsed AWS IAM access keys, region, and endpoint configs. |
+| **4** | **Terraform Core** | Provider Plugin | gRPC: `PlanResourceChange(Schema, State)` | Provider validates attributes against Go schema; returns proposed diff in Protobuf format. |
+| **5** | **Terraform Core** | Provider Plugin | gRPC: `ApplyResourceChange(Plan)` | Provider receives approved plan; invokes native AWS Go SDK (`ec2.CreateVpc`). |
+| **6** | **Provider Plugin** | **Terraform Core** | gRPC Response: `ApplyResourceChangeResponse` | Provider returns physical cloud resource ID (`vpc-01234abcd`) and computed attributes to be committed to `.tfstate`. |
 
 ---
 
