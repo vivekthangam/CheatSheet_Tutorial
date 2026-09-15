@@ -1,0 +1,14 @@
+version: v1
+name: buf.build/enterprise/omni-api
+modules:
+  - path: ../specs
+lint:
+  use:
+    - DEFAULT
+    - COMMENTS
+  except:
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE
+    - WIRE_JSON

@@ -1,0 +1,54 @@
+{
+  "name": "omni-api-realtime-platform",
+  "version": "1.0.0",
+  "description": "Unified Enterprise Multi-Protocol Platform: REST + Swagger, GraphQL + DataLoader, gRPC + Protobuf, SSE, WebSockets, Socket.IO & Event Envelope Standards",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "grpc:client": "ts-node src/grpc/client.ts",
+    "buf:lint": "buf lint config",
+    "buf:generate": "buf generate --template config/buf.gen.yaml",
+    "codegen:graphql": "graphql-codegen --config config/codegen.ts"
+  },
+  "keywords": [
+    "rest",
+    "openapi",
+    "swagger",
+    "graphql",
+    "dataloader",
+    "grpc",
+    "protobuf",
+    "sse",
+    "websockets",
+    "socketio",
+    "realtime"
+  ],
+  "author": "Antigravity Architecture Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.6",
+    "@grpc/proto-loader": "^0.7.13",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "graphql": "^16.8.1",
+    "graphql-http": "^1.22.1",
+    "socket.io": "^4.7.5",
+    "swagger-ui-dist": "^5.17.14",
+    "uuid": "^9.0.1",
+    "ws": "^8.16.0",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.5.10",
+    "@types/yamljs": "^0.2.34",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

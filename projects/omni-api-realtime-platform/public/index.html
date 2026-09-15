@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omni-Protocol Realtime Platform | REST, GraphQL, WS, SSE, Webhooks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-brand">
+      <h1>
+        <span>⚡ Omni-Protocol Platform</span>
+        <span class="badge-tag">v2.0 Production</span>
+      </h1>
+      <p>Unified Architectural Matrix: REST &bull; GraphQL &bull; WebSocket &bull; SSE &bull; Webhooks</p>
+    </div>
+    <div class="protocol-status-pills">
+      <div class="status-pill"><span class="dot blue"></span> REST: 200 OK</div>
+      <div class="status-pill"><span class="dot pink"></span> GraphQL: Active</div>
+      <div class="status-pill" id="pill-ws"><span class="dot green"></span> WS: <span id="ws-status-text">Disconnected</span></div>
+      <div class="status-pill" id="pill-sse"><span class="dot amber"></span> SSE: <span id="sse-status-text">Disconnected</span></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-overview">📊 Overview & Matrix</button>
+      <button class="tab-btn" data-tab="tab-rest">🌐 REST API & Idempotency</button>
+      <button class="tab-btn" data-tab="tab-graphql">🔮 GraphQL Engine</button>
+      <button class="tab-btn" data-tab="tab-ws">⚡ WebSocket Pub/Sub</button>
+      <button class="tab-btn" data-tab="tab-sse">🌊 Server-Sent Events</button>
+      <button class="tab-btn" data-tab="tab-webhooks">🪝 HMAC Webhooks</button>
+    </nav>
+
+    <!-- 1. OVERVIEW & PROTOCOL MATRIX -->
+    <section id="tab-overview" class="panel active">
+      <div class="dashboard-grid">
+        <div class="card col-12">
+          <div class="card-header">
+            <h2 class="card-title">Architectural Protocol Decision Matrix</h2>
+            <span class="badge badge-rest">CheatSheet Tier-1 Reference</span>
+          </div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            Comprehensive comparative evaluation of communication paradigms across latency, transport layer, connection lifecycle, and production fit.
+          </p>
+          <div style="overflow-x: auto;">
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th>Protocol</th>
+                  <th>Transport Layer</th>
+                  <th>Directionality</th>
+                  <th>Overhead / Framing</th>
+                  <th>Caching & Proxies</th>
+                  <th>Reconnection Strategy</th>
+                  <th>Ideal Production Use Cases</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong style="color:#60a5fa">REST (HTTP/1.1 & 2)</strong></td>
+                  <td>TCP / TLS</td>
+                  <td>Half-Duplex (Req / Res)</td>
+                  <td>High (HTTP Headers on every call)</td>
+                  <td>Excellent (ETags, Max-Age, CDNs)</td>
+                  <td>Stateless / Native HTTP retry</td>
+                  <td>Public APIs, CRUD operations, static resources, CDN-cached reads.</td>
+                </tr>
+                <tr>
+                  <td><strong style="color:#fb7185">GraphQL</strong></td>
+                  <td>HTTP POST / GET</td>
+                  <td>Half-Duplex (Single Endpoint)</td>
+                  <td>Medium (Payload query body + parsing)</td>
+                  <td>Challenging (requires normalized client cache)</td>
+                  <td>Stateless request retries</td>
+                  <td>Aggregating microservices, complex multi-entity joins, mobile apps avoiding overfetching.</td>
+                </tr>
+                <tr>
+                  <td><strong style="color:#34d399">WebSocket</strong></td>
+                  <td>TCP (Upgraded from HTTP)</td>
+                  <td>Full-Duplex (Bidirectional)</td>
+                  <td>Extremely Low (2 to 10-byte binary/text frame)</td>
+                  <td>None (Bypasses HTTP cache)</td>
+                  <td>Client-side heartbeat (Ping/Pong) + Exponential Backoff</td>
+                  <td>Trading terminals, real-time collaborative docs, interactive gaming, chat apps.</td>
+                </tr>
+                <tr>
+                  <td><strong style="color:#fbbf24">Server-Sent Events (SSE)</strong></td>
+                  <td>HTTP/1.1 or HTTP/2</td>
+                  <td>Half-Duplex (Server Push Only)</td>
+                  <td>Low (Text stream with data: prefixes)</td>
+                  <td>Standard HTTP proxy support (requires no buffering)</td>
+                  <td>Native automatic browser reconnection via Last-Event-ID</td>
+                  <td>Live stock tickers, AI LLM streaming completions, notification centers, order status trackers.</td>
+                </tr>
+                <tr>
+                  <td><strong style="color:#a78bfa">Webhooks</strong></td>
+                  <td>HTTP POST (Server-to-Server)</td>
+                  <td>Push Notification (Asynchronous)</td>
+                  <td>Standard HTTP payload + HMAC Signature</td>
+                  <td>Non-cacheable (state mutations)</td>
+                  <td>Publisher retry queue with exponential backoff & DLQ</td>
+                  <td>Payment gateway settlements (Stripe, PayPal), CI/CD events, 3rd party B2B notifications.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card col-4">
+          <h3 class="card-title" style="margin-bottom:12px;">Unified Backend Store</h3>
+          <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:12px;">
+            Single source of truth in-memory database shared synchronously across all 5 protocols:
+          </p>
+          <ul style="color:var(--text-secondary); font-size:0.85rem; padding-left:18px; line-height:1.8;">
+            <li>Products inventory with stock tracking</li>
+            <li>Orders ledger with atomic deductions</li>
+            <li>Idempotency cache with TTL expiration</li>
+            <li>Outbound webhook delivery event log</li>
+          </ul>
+        </div>
+
+        <div class="card col-8">
+          <h3 class="card-title" style="margin-bottom:12px;">Live Architecture Health Probe</h3>
+          <div id="overview-health" class="console-output" style="height: 140px;">Probing http://localhost:4000/health ...</div>
+          <div class="btn-row">
+            <button id="btn-refresh-health" class="btn btn-secondary">⚡ Refresh Platform Telemetry</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. REST API STUDIO -->
+    <section id="tab-rest" class="panel">
+      <div class="dashboard-grid">
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">RESTful Order Placement</h2>
+            <span class="badge badge-rest">POST /api/v1/orders</span>
+          </div>
+          <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:16px;">
+            Features strict <code>Idempotency-Key</code> deduplication header and atomic inventory deduction.
+          </p>
+          <div class="form-group">
+            <label>Idempotency-Key Header</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="rest-idempotency-key" class="input" value="order_req_unique_001">
+              <button id="btn-gen-idempotency" class="btn btn-secondary" style="white-space:nowrap;">Regen UUID</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Product Selection</label>
+            <select id="rest-product-select" class="select">
+              <option value="prod_1">Ultra Gaming Laptop Pro ($1899.99)</option>
+              <option value="prod_2">Wireless Noise-Canceling Headphones ($299.99)</option>
+              <option value="prod_3">Mechanical Ergonomic Keyboard ($149.50)</option>
+              <option value="prod_4">4K UltraWide Monitor 34-inch ($699.00)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="rest-qty" class="input" value="1" min="1" max="10">
+          </div>
+          <div class="btn-row">
+            <button id="btn-rest-post-order" class="btn">🚀 Submit Order (POST)</button>
+            <button id="btn-rest-get-products" class="btn btn-secondary">📥 Fetch Products (ETag Test)</button>
+          </div>
+        </div>
+
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">HTTP Response & Headers Inspector</h2>
+            <span id="rest-status-badge" class="badge badge-rest">Ready</span>
+          </div>
+          <div id="rest-console" class="console-output">Click "Submit Order" or "Fetch Products" to test HTTP interactions...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. GRAPHQL ENGINE -->
+    <section id="tab-graphql" class="panel">
+      <div class="dashboard-grid">
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">GraphQL Document Query</h2>
+            <span class="badge badge-graphql">POST /graphql</span>
+          </div>
+          <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:12px;">
+            Execute queries and mutations. Note zero overfetching: only requested fields are returned.
+          </p>
+          <div class="form-group">
+            <label>Query / Mutation</label>
+            <textarea id="graphql-query-input" class="textarea" style="height: 180px;">query GetInventoryCatalog {
+  products {
+    id
+    name
+    price
+    stock
+    category
+  }
+}</textarea>
+          </div>
+          <div class="btn-row">
+            <button id="btn-graphql-run" class="btn" style="background:#e11d48;">⚡ Execute Query</button>
+            <button id="btn-graphql-preset-mutation" class="btn btn-secondary">Load Mutation Preset</button>
+            <button id="btn-graphql-preset-query" class="btn btn-secondary">Load Query Preset</button>
+          </div>
+        </div>
+
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">GraphQL JSON Response</h2>
+            <span class="badge badge-graphql">Data payload</span>
+          </div>
+          <div id="graphql-console" class="console-output">GraphQL execution result will appear here...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. WEBSOCKET PUB/SUB -->
+    <section id="tab-ws" class="panel">
+      <div class="dashboard-grid">
+        <div class="card col-5">
+          <div class="card-header">
+            <h2 class="card-title">WebSocket Controls</h2>
+            <span class="badge badge-ws">ws://localhost:4000/ws</span>
+          </div>
+          <div class="form-group">
+            <label>Connection Lifecycle</label>
+            <div class="btn-row" style="margin-top:0;">
+              <button id="btn-ws-connect" class="btn" style="background:#10b981;">Connect</button>
+              <button id="btn-ws-disconnect" class="btn btn-danger" disabled>Disconnect</button>
+              <button id="btn-ws-ping" class="btn btn-secondary" disabled>Send Ping</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Topic Subscription</label>
+            <div style="display:flex; gap:8px;">
+              <select id="ws-topic-select" class="select">
+                <option value="orders">orders (Order creation & updates)</option>
+                <option value="metrics">metrics (Live stock price ticks)</option>
+                <option value="inventory">inventory (Stock level changes)</option>
+                <option value="system">system (System announcements)</option>
+                <option value="all">all (Wildcard subscription)</option>
+              </select>
+              <button id="btn-ws-sub" class="btn btn-secondary" disabled>Subscribe</button>
+              <button id="btn-ws-unsub" class="btn btn-secondary" disabled>Unsub</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Broadcast Peer Message</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="ws-chat-input" class="input" placeholder="Enter message...">
+              <button id="btn-ws-send" class="btn btn-secondary" disabled>Broadcast</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card col-7">
+          <div class="card-header">
+            <h2 class="card-title">Realtime WebSocket Packet Stream</h2>
+            <button id="btn-clear-ws" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;">Clear</button>
+          </div>
+          <div id="ws-event-feed" class="event-feed">
+            <div class="feed-item ws">
+              <div class="feed-item-header"><span>Status</span><span>Now</span></div>
+              <div class="feed-item-body">Click "Connect" to establish full-duplex TCP WebSocket connection.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SERVER-SENT EVENTS -->
+    <section id="tab-sse" class="panel">
+      <div class="dashboard-grid">
+        <div class="card col-5">
+          <div class="card-header">
+            <h2 class="card-title">SSE EventSource Stream</h2>
+            <span class="badge badge-sse">GET /api/v1/events/stream</span>
+          </div>
+          <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:14px;">
+            Unidirectional server-push over HTTP/1.1 or HTTP/2. Features native browser reconnection & <code>Last-Event-ID</code> resumption.
+          </p>
+          <div class="btn-row">
+            <button id="btn-sse-connect" class="btn" style="background:#f59e0b;">Open SSE Stream</button>
+            <button id="btn-sse-disconnect" class="btn btn-danger" disabled>Close Stream</button>
+          </div>
+          <div style="margin-top:20px; font-size:0.8rem; color:var(--text-muted); line-height:1.7;">
+            <div>Connection State: <strong id="sse-state-val" style="color:#f59e0b">CLOSED</strong></div>
+            <div>Events Received: <strong id="sse-count-val" style="color:#fff">0</strong></div>
+            <div>Last Event ID: <strong id="sse-last-id" style="color:#a5f3fc">none</strong></div>
+          </div>
+        </div>
+
+        <div class="card col-7">
+          <div class="card-header">
+            <h2 class="card-title">Live Server-Push Stream</h2>
+            <button id="btn-clear-sse" class="btn btn-secondary" style="padding:4px 10px; font-size:0.75rem;">Clear</button>
+          </div>
+          <div id="sse-event-feed" class="event-feed">
+            <div class="feed-item sse">
+              <div class="feed-item-header"><span>SSE Listener</span><span>Now</span></div>
+              <div class="feed-item-body">Ready to connect to server event emitter.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. WEBHOOKS & HMAC -->
+    <section id="tab-webhooks" class="panel">
+      <div class="dashboard-grid">
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">HMAC Webhook Ingestion & Verification</h2>
+            <span class="badge badge-webhook">POST /api/v1/webhooks/incoming</span>
+          </div>
+          <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:12px;">
+            Test secure server-to-server webhook ingestion using SHA-256 HMAC signature calculation and replay-attack timestamp prevention.
+          </p>
+          <div class="form-group">
+            <label>Shared HMAC Secret Key</label>
+            <input type="text" id="webhook-secret" class="input" value="prod_webhook_shared_secret_secure_98765">
+          </div>
+          <div class="form-group">
+            <label>Payload (JSON)</label>
+            <textarea id="webhook-payload" class="textarea" style="height:110px;">{
+  "event": "payment.completed",
+  "data": {
+    "paymentId": "pay_998811",
+    "amount": 1899.99,
+    "currency": "USD",
+    "customer": "enterprise_corp"
+  }
+}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Simulate Tampering or Replay Attack</label>
+            <select id="webhook-tamper-select" class="select">
+              <option value="none">Valid Signature & Current Timestamp (Success)</option>
+              <option value="tamper_sig">Corrupt HMAC Signature (Expect 401 Invalid Signature)</option>
+              <option value="replay_expired">Expired Timestamp > 5 min (Expect 400 Replay Detected)</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button id="btn-send-webhook" class="btn" style="background:#8b5cf6;">🚀 Dispatch Inbound Webhook</button>
+            <button id="btn-get-outbound-deliveries" class="btn btn-secondary">Inspect Outbound Audit Log</button>
+          </div>
+        </div>
+
+        <div class="card col-6">
+          <div class="card-header">
+            <h2 class="card-title">Webhook Security Inspector Output</h2>
+            <span id="webhook-status-badge" class="badge badge-webhook">Ready</span>
+          </div>
+          <div id="webhook-console" class="console-output">Click "Dispatch Inbound Webhook" to execute HMAC verification...</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

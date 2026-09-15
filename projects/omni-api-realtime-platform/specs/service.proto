@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package enterprise.omni.v1;
+
+option java_multiple_files = true;
+option java_package = "com.enterprise.omni.v1";
+option go_package = "enterprise/omni/v1;omniv1";
+
+// Well-known types
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_PENDING = 1;
+  ORDER_STATUS_PROCESSING = 2;
+  ORDER_STATUS_COMPLETED = 3;
+  ORDER_STATUS_CANCELLED = 4;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  double unit_price = 3;
+}
+
+message Order {
+  string order_id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+  double total_amount = 4;
+  string currency = 5;
+  OrderStatus status = 6;
+  Timestamp created_at = 7;
+  int32 version = 8;
+}
+
+// 1. Unary RPC Request & Response
+message GetOrderRequest {
+  string order_id = 1;
+}
+
+// 2. Server Streaming RPC Request & Event
+message StreamOrderStatusRequest {
+  string order_id = 1;
+  int64 heartbeat_interval_seconds = 2;
+}
+
+message OrderStatusEvent {
+  string order_id = 1;
+  OrderStatus status = 2;
+  string update_reason = 3;
+  Timestamp event_timestamp = 4;
+}
+
+// 3. Client Streaming RPC: Batch telemetry / bulk upload
+message TelemetryEvent {
+  string device_id = 1;
+  int64 sequence_number = 2;
+  double cpu_usage = 3;
+  double memory_usage = 4;
+  Timestamp timestamp = 5;
+}
+
+message TelemetrySummary {
+  string device_id = 1;
+  int64 total_events_processed = 2;
+  double average_cpu_usage = 3;
+  int64 processing_duration_ms = 4;
+}
+
+// 4. Bidirectional Streaming RPC: Live support / collaborative negotiation
+message SupportMessage {
+  string session_id = 1;
+  string sender_id = 2;
+  string content = 3;
+  Timestamp sent_at = 4;
+}
+
+service OmniService {
+  // Pattern 1: Unary RPC
+  rpc GetOrder (GetOrderRequest) returns (Order);
+
+  // Pattern 2: Server-to-Client Streaming RPC
+  rpc StreamOrderStatus (StreamOrderStatusRequest) returns (stream OrderStatusEvent);
+
+  // Pattern 3: Client-to-Server Streaming RPC
+  rpc UploadTelemetry (stream TelemetryEvent) returns (TelemetrySummary);
+
+  // Pattern 4: Bidirectional Streaming RPC
+  rpc LiveSupportSession (stream SupportMessage) returns (stream SupportMessage);
+}

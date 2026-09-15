@@ -10,15 +10,15 @@
 | # | Category Domain | Total Files | Key Highlights |
 | :-: | :--- | :-: | :--- |
 | **1** | [Core Java, Concurrency & JVM Internals](#1-core-java-concurrency--jvm-internals) | 17 | Threads, JMM, Memory, JIT, I/O, Collections, Streams, GC |
-| **2** | [Spring Boot & Spring Framework Ecosystem](#2-spring-boot--spring-framework-ecosystem) | 15 | IoC, AOP, JPA, Security 6, WebFlux, Batch, Camel, Kafka |
+| **2** | [Spring Boot & Spring Framework Ecosystem](#2-spring-boot--spring-framework-ecosystem) | 17 | IoC, AOP, JPA, Security 6, WebFlux, Batch, Camel, Kafka, Tomcat Sockets |
 | **3** | [200+ & 50+ Production Scenarios Deep Dives](#3-200--50-production-scenarios-deep-dives) | 22 | Strict 4-Part & 5-Part War Room Scenario Interview Banks |
 | **4** | [Technical Terms & Zero-Jargon Encyclopedias](#4-technical-terms--zero-jargon-encyclopedias) | 6 | Plain-English definitions, mental models & trap breakdowns |
 | **5** | [Databases, Persistence & SQL Normalization](#5-databases-persistence--sql-normalization) | 6 | 1NF-6NF, ACID, MVCC, PostgreSQL, MongoDB, Spring SQL |
 | **6** | [Message Queues, Event Streaming & Distributed Systems](#6-message-queues-event-streaming--distributed-systems) | 6 | Kafka, RabbitMQ, Pulsar, Outbox Pattern, KRaft, EOS |
-| **7** | [Cloud Native, Containers & Infrastructure](#7-cloud-native-containers--infrastructure) | 16 | AWS, Azure, GCP, Kubernetes, Docker, Envoy, NGINX, Istio |
+| **7** | [Cloud Native, Containers & Infrastructure](#7-cloud-native-containers--infrastructure) | 17 | AWS, Azure, GCP, Kubernetes, Docker, Envoy, NGINX, Istio, Java K8s |
 | **8** | [DevOps, CI/CD, GitOps & Infrastructure-as-Code](#8-devops-cicd-gitops--infrastructure-as-code) | 11 | GitHub Actions, Jenkins, ArgoCD, Terraform, Ansible, Chef |
 | **9** | [Enterprise Security, Identity & Cryptography](#9-enterprise-security-identity--cryptography) | 7 | AES-GCM, RSA, Ed25519, OAuth2, OIDC, Vault, OPA Rego |
-| **10** | [Modern Web, Frontend & Cross-Platform Desktop](#10-modern-web-frontend--cross-platform-desktop) | 6 | React 19, Next.js RSC, Angular Signals, Tauri 2.0, GraphQL, gRPC |
+| **10** | [Modern Web, Frontend & Cross-Platform Desktop](#10-modern-web-frontend--cross-platform-desktop) | 16 | React 19, Next.js RSC, Angular Signals, Tauri 2.0, REST, GraphQL, gRPC, WebSockets, Socket.IO, SSE, Webhooks, WebRTC, WebTransport, TCP/UDP/TLS/HTTP |
 | **11** | [Systems Programming (Rust, Golang & C/C++)](#11-systems-programming-rust-golang--cc) | 6 | Ownership, Tokio, GMP Scheduler, brk/mmap, Cache Lines |
 | **12** | [Testing, QA & Test Automation](#12-testing-qa--test-automation) | 5 | Cucumber BDD, Selenium 4, Playwright, Testcontainers |
 | **13** | [Observability, Telemetry & SRE Troubleshooting](#13-observability-telemetry--sre-troubleshooting) | 7 | OpenTelemetry, LGTM Stack, Splunk, Chaos, Forensics |
@@ -75,6 +75,8 @@
 | **Spring Boot Testing Master Guide** | [`spring_testing.md`](spring-framework/spring_testing.md) | Sliced tests (`@WebMvcTest`, `@DataJpaTest`), Testcontainers `@ServiceConnection`, WireMock. | Senior / QA Lead |
 | **MongoDB Polyglot Guide (Java & Node.js)**| [`mongodb_master_guide.md`](databases-persistence/mongodb_master_guide.md) | BSON, WiredTiger Internals, Aggregations, Spring Data Mongo, Mongoose, Multi-Doc ACID. | Senior / Staff |
 | **Java Mastery Hub (Roadmap)** | [`new/Java_Mastery_Hub.md`](new/Java_Mastery_Hub.md) | Comprehensive high-level curriculum outline for Java backend mastery. | Learning Roadmap |
+| **Java Sockets to Spring Boot MVC Internals** | [`java_sockets_tomcat_spring_boot_mvc_internals_master_guide.md`](spring-framework/java_sockets_tomcat_spring_boot_mvc_internals_master_guide.md) | OS Sockets, File Descriptors, Tomcat `NioEndpoint` (Acceptor/Poller/Worker), Coyote Request, `RequestFacade`, `ApplicationFilterChain`, `DispatcherServlet`, Interceptors, `@RequestBody` Jackson Stream Deserialization, Post-Mortems. | Staff / Architect |
+| **Spring IoC, Security & JPA Internals** | [`spring_ioc_security_jpa_internals_master_guide.md`](spring-framework/spring_ioc_security_jpa_internals_master_guide.md) | BeanDefinition Registry, 12-Step Bean Lifecycle, Three-Level Cache, CGLIB/JDK Proxies, SecurityFilterChain, ProviderManager, PersistenceContext, Dirty Checking, ActionQueue. | Staff / Architect |
 
 ---
 
@@ -82,6 +84,15 @@
 
 | Document Title | File Link | Scenario Count | Domains Covered |
 | :--- | :--- | :--- | :--- |
+| **Microservices & Distributed Systems: 200+ Scenarios** | [`microservices_distributed_systems_scenarios_master_guide.md`](scenarios/microservices_distributed_systems_scenarios_master_guide.md) | **200+ Scenarios** | Distributed Sagas, 2PC, Eventual Consistency, Outbox Pattern, Raft Consensus, Distributed Locks. |
+| **PostgreSQL Internals: 200+ Scenarios** | [`postgresql_database_internals_scenarios_master_guide.md`](scenarios/postgresql_database_internals_scenarios_master_guide.md) | **200+ Scenarios** | MVCC xmin/xmax, WAL Flush, Checkpoints, Autovacuum Wrap, HOT Updates, PgBouncer Sizing. |
+| **API Protocols & Real-Time: 200+ Scenarios** | [`api_protocols_realtime_scenarios_master_guide.md`](scenarios/api_protocols_realtime_scenarios_master_guide.md) | **200+ Scenarios** | REST Idempotency Keys, GraphQL DataLoader N+1, gRPC HTTP/2 Multiplexing, WebSockets, SSE, Webhooks. |
+| **Zero-Trust Security & Identity: 200+ Scenarios** | [`oauth2_oidc_zero_trust_scenarios_master_guide.md`](scenarios/oauth2_oidc_zero_trust_scenarios_master_guide.md) | **200+ Scenarios** | OAuth 2.1 PKCE, Token Family Rotation, WebAuthn Passkeys, CSP Nonces, Timing Attacks, OPA Rego ABAC. |
+| **Cloud Native & K8s Observability: 200+ Scenarios** | [`cloud_kubernetes_observability_scenarios_master_guide.md`](scenarios/cloud_kubernetes_observability_scenarios_master_guide.md) | **200+ Scenarios** | Distroless Builds, Zero-Downtime preStop Drains, HPA Formulas, PDBs, OpenTelemetry Spans, Prometheus RED. |
+| **React & Modern Frontend: 200+ Scenarios** | [`react_scenarios_master_guide.md`](scenarios/react_scenarios_master_guide.md) | **200+ Scenarios** | Fiber Scheduler, useTransition, Stale Closures, Double-Buffering, Concurrent Suspense, Streaming SSR. |
+| **Node.js Internals: 200+ Scenarios** | [`nodejs_scenarios_master_guide.md`](scenarios/nodejs_scenarios_master_guide.md) | **200+ Scenarios** | Libuv Event Loop, Microtask Starvation, Threadpool Sizing, Cluster IPC, Buffer Overflows. |
+| **Next.js & Full-Stack: 200+ Scenarios** | [`nextjs_scenarios_master_guide.md`](scenarios/nextjs_scenarios_master_guide.md) | **200+ Scenarios** | RSC Flight Protocol, Server Actions CSRF, 4-Tier Cache, Partial Prerendering (PPR), Edge Runtime. |
+| **Angular Ivy & Signals: 200+ Scenarios** | [`angular_scenarios_master_guide.md`](scenarios/angular_scenarios_master_guide.md) | **200+ Scenarios** | Signal Push-Pull Graph, Zoneless Change Detection, Hierarchical DI, AOT Bytecode, Hydration. |
 | **Java Concurrency: 200 Scenarios** | [`java_threads_concurrency_200_scenarios_master_guide.md`](scenarios/java_threads_concurrency_200_scenarios_master_guide.md) | **200 Scenarios** | Virtual Threads, JMM, AQS, Lock-Free CAS, Executor Tuning, Deadlocks. |
 | **Java Collections & Streams: 200 Scenarios** | [`java_collections_streams_200_scenarios_master_guide.md`](scenarios/java_collections_streams_200_scenarios_master_guide.md) | **200 Scenarios** | HashMap Math, ConcurrentSkipList, Spliterators, Stream GC Optimization. |
 | **CompletableFuture: 200 Scenarios** | [`completable_future_200_scenarios_master_guide.md`](scenarios/completable_future_200_scenarios_master_guide.md) | **200 Scenarios** | Non-Blocking Pipelines, ForkJoinPool Traps, Distributed Aggregators, Async Stack Traces. |
@@ -172,6 +183,7 @@
 | **Bash, Batch & PowerShell Guide** | [`bash_batch_powershell_master_guide.md`](cloud-infrastructure/bash_batch_powershell_master_guide.md) | Cross-Platform Rosetta Stone, Strict Modes, Parameter Expansion, .NET Object Pipeline. | All Levels |
 | **PowerShell 7+ Automation Guide** | [`powershell_master_guide.md`](cloud-infrastructure/powershell_master_guide.md) | .NET CLR Pipeline, Advanced Toolmaking, Parallel Runspaces, WinRM, Pester 5 BDD. | Senior / SRE |
 | **Vagrant & Virtualization Guide** | [`vagrant_master_guide.md`](devops-cicd-iac/vagrant_master_guide.md) | VirtualBox/KVM, NFS/vboxsf Synced Folders, Multi-Node K8s Lab, Packer Golden Boxes. | Senior / DevOps |
+| **Java & Spring Boot Docker & K8s** | [`java_spring_boot_docker_kubernetes_master_guide.md`](cloud-infrastructure/java_spring_boot_docker_kubernetes_master_guide.md) | JVM cgroups v1/v2, MaxRAMPercentage, OOMKill 137, Layered JARs, Distroless, Zero-Downtime preStop, Health Probes, HPA. | Senior / Staff |
 
 ---
 
@@ -217,6 +229,16 @@
 | **Tauri 2.0 & Rust Desktop Guide** | [`tauri_rust_desktop_master_guide.md`](frontend-web/tauri_rust_desktop_master_guide.md) | IPC Protocol Mechanics, WRY Webview, Rust Invocations, CSP Sandboxing, Multi-Window. | Senior Engineer |
 | **GraphQL Polyglot Masterclass** | [`graphql_polyglot_master_guide.md`](frontend-web/graphql_polyglot_master_guide.md) | AST Execution, SDL, N+1 DataLoader, Node.js (Apollo 4), Go (`gqlgen`), Java (Spring). | Senior / Architect |
 | **gRPC Polyglot Masterclass** | [`grpc_polyglot_master_guide.md`](frontend-web/grpc_polyglot_master_guide.md) | Proto3 Varint Encoding, HTTP/2 Multiplexing, 4 RPC Patterns (Node, Go, Java), Deadlines. | Senior / Architect |
+| **REST API, OpenAPI 3.1 & Swagger Master Guide** | [`rest_api_openapi_swagger_master_guide.md`](frontend-web/rest_api_openapi_swagger_master_guide.md) | HTTP/1.1 vs HTTP/2/3, ETags, RFC 7807, Idempotency-Key, Keyset Paging, OpenAPI 3.1, Post-Mortems. | Senior / Staff Architect |
+| **Enterprise GraphQL Design & Generation Master Guide** | [`graphql_design_query_generation_master_guide.md`](frontend-web/graphql_design_query_generation_master_guide.md) | Relay Cursor Connections, Node Interface, DataLoader Batching, Cyclical DoS Defense, Post-Mortems. | Senior / Staff Architect |
+| **gRPC & Protobuf v3 Design & Generation Master Guide** | [`grpc_protobuf_design_generation_master_guide.md`](frontend-web/grpc_protobuf_design_generation_master_guide.md) | Proto3 Wire Format, 4 Streaming Patterns, L4 vs L7 Load Balancing, Buf CLI v2, Post-Mortems. | Senior / Staff Architect |
+| **Real-Time Systems, WebSockets, SSE & Socket.IO Master Guide** | [`realtime_websockets_sse_socketio_master_guide.md`](frontend-web/realtime_websockets_sse_socketio_master_guide.md) | RFC 6455 Binary Physics, SSE `Last-Event-ID`, Socket.IO State Machine, Redis Pub/Sub, Post-Mortems. | Senior / Staff Architect |
+| **Webhooks, Web Workers & WebRTC Master Guide** | [`webhooks_webworkers_webrtc_master_guide.md`](frontend-web/webhooks_webworkers_webrtc_master_guide.md) | HMAC-SHA256 Security, Browser Multi-Threading, Structured Clone & SharedArrayBuffer, SDP/ICE, Post-Mortems. | Senior / Staff Architect |
+| **WebRTC & P2P Real-Time Communication Master Guide** | [`webrtc_peer_to_peer_streaming_master_guide.md`](frontend-web/webrtc_peer_to_peer_streaming_master_guide.md) | NAT Physics, STUN/TURN/ICE, SDP Offer/Answer, Perfect Negotiation, MediaStream (SRTP) vs RTCDataChannel, Mesh vs SFU vs MCU, Post-Mortems. | Senior / Staff Architect |
+| **WebSocket (RFC 6455) & Socket.IO Master Guide** | [`websocket_rfc6455_socketio_master_guide.md`](frontend-web/websocket_rfc6455_socketio_master_guide.md) | HTTP 101 Handshake, SHA-1 Magic Key, 4-Byte Client XOR Masking, Opcode Framing, Zombie Sockets, Backpressure, Redis Pub/Sub, Post-Mortems. | Senior / Staff Architect |
+| **Server-Sent Events (SSE) Master Guide** | [`server_sent_events_sse_master_guide.md`](frontend-web/server_sent_events_sse_master_guide.md) | W3C `EventSource`, `text/event-stream`, `Last-Event-ID` Zero-Loss Resumption, HTTP/2 Multiplexing, AI LLM Token Streaming, Anti-Buffering Directives, Post-Mortems. | Senior / Staff Architect |
+| **WebTransport (QUIC & HTTP/3) Master Guide** | [`webtransport_quic_http3_master_guide.md`](frontend-web/webtransport_quic_http3_master_guide.md) | QUIC (RFC 9000), HTTP/3 Extended CONNECT (RFC 9297), Bidirectional/Unidirectional Streams, Unreliable Datagrams, HoL Blocking Elimination, 0-RTT, Post-Mortems. | Senior / Staff Architect |
+| **Network & Transport Protocols Master Guide** | [`network_transport_protocols_tcp_udp_tls_http1_2_3_master_guide.md`](frontend-web/network_transport_protocols_tcp_udp_tls_http1_2_3_master_guide.md) | L4/L7 Stack, UDP vs TCP (3-Way Handshake, Sliding Window, BBR), SSL/TLS (1.2 vs 1.3, mTLS, SNI/ALPN), HTTP/1.1 vs HTTP/2 (HPACK) vs HTTP/3 (QUIC), Post-Mortems. | Senior / Staff Architect |
 
 ---
 

@@ -43,6 +43,28 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Once `result` is set non-null, **it can NEVER transition to any other state**!
 - **Follow-Up Trap:** *"What happens if you call `future.complete(\"A\")` followed immediately by `future.complete(\"B\")`?"*
   - *Winning Answer:* "The second call returns `false` and is completely ignored. The future retains value `\"A\"` forever."
+- **Production Code Example:**
+  ```java
+  // 1. Initially Incomplete: result == null
+  CompletableFuture<String> orderStatus = new CompletableFuture<>();
+  System.out.println("isDone initially: " + orderStatus.isDone()); // false
+
+  // 2. First complete() sets volatile result = "PAID" via CAS
+  boolean firstComplete = orderStatus.complete("PAID");
+  System.out.println("First complete() succeeded: " + firstComplete); // true
+  System.out.println("Current Value: " + orderStatus.join());         // "PAID"
+
+  // 3. Second complete() attempt is permanently rejected
+  boolean secondComplete = orderStatus.complete("REFUNDED");
+  System.out.println("Second complete() succeeded: " + secondComplete); // false
+  System.out.println("Value remains immutable: " + orderStatus.join()); // Still "PAID"!
+
+  // 4. Null result sentinel handling: internally stores AltResult NIL
+  CompletableFuture<String> nullFuture = new CompletableFuture<>();
+  nullFuture.complete(null);
+  System.out.println("Null future isDone: " + nullFuture.isDone()); // true
+  System.out.println("Null future value: " + nullFuture.join());    // null (unboxed from NIL)
+  ```
 
 ---
 
@@ -60,6 +82,28 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Setting `result` triggers `postComplete()`: pops all registered dependent callbacks from the lock-free Treiber stack and invokes them.
 - **Follow-Up Trap:** *"Does `completeExceptionally()` wrap checked exceptions into ExecutionException immediately?"*
   - *Winning Answer:* "No! `AltResult` stores the raw `Throwable`. The wrapping into `ExecutionException` (for `get()`) or `CompletionException` (for `join()`) occurs on-demand when the result is retrieved."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<PaymentReceipt> paymentGateway = new CompletableFuture<>();
+
+  // Worker Thread completes with exception across memory barrier
+  new Thread(() -> {
+      try {
+          throw new IllegalStateException("Payment provider 503 Service Unavailable");
+      } catch (Exception ex) {
+          // Sets volatile result = new AltResult(ex) with Release Barrier
+          paymentGateway.completeExceptionally(ex);
+      }
+  }, "payment-worker").start();
+
+  // Consumer Thread performs Acquire Read
+  try {
+      PaymentReceipt receipt = paymentGateway.join(); // Throws unchecked CompletionException
+  } catch (CompletionException e) {
+      System.out.println("Wrapper: " + e.getClass().getSimpleName()); // CompletionException
+      System.out.println("Raw Root Cause: " + e.getCause().getMessage()); // Payment provider 503 Service Unavailable
+  }
+  ```
 
 ---
 
@@ -77,6 +121,29 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Hazard:** If the completing thread is an I/O thread (Netty event loop), executing heavy CPU work inside `thenApply` blocks the network event loop!
 - **Follow-Up Trap:** *"How do you guarantee that `fn` NEVER runs on either the calling or completing thread?"*
   - *Winning Answer:* "Use `thenApplyAsync(fn, customExecutor)`. This forces the callback to be scheduled onto the provided thread pool, completely decoupling it from both threads."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<String> future = new CompletableFuture<>();
+
+  // Case A: Future NOT yet complete -> Completing thread executes callback
+  future.thenApply(val -> {
+      System.out.println("Case A callback run by: " + Thread.currentThread().getName());
+      return val.toUpperCase();
+  });
+
+  new Thread(() -> {
+      future.complete("data"); // This completing worker runs the callback!
+  }, "Completing-Worker-1").start();
+  // Output: Case A callback run by: Completing-Worker-1
+
+  // Case B: Future ALREADY complete -> Calling thread executes synchronously
+  CompletableFuture<String> readyFuture = CompletableFuture.completedFuture("cached-token");
+  readyFuture.thenApply(val -> {
+      System.out.println("Case B callback run by: " + Thread.currentThread().getName());
+      return val.toLowerCase();
+  });
+  // Output: Case B callback run by: main (synchronously on the caller thread!)
+  ```
 
 ---
 
@@ -95,6 +162,26 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Guarantees isolation from the common pool and complete thread boundary protection.
 - **Follow-Up Trap:** *"If a future is already completed, does `thenApplyAsync()` execute synchronously?"*
   - *Winning Answer:* "NO! Even if the future is already complete, `thenApplyAsync()` ALWAYS submits the task to the executor queue, guaranteeing asynchronous execution on the target pool."
+- **Production Code Example:**
+  ```java
+  ExecutorService billingPool = Executors.newFixedThreadPool(4, r -> new Thread(r, "billing-pool"));
+  CompletableFuture<String> base = CompletableFuture.supplyAsync(() -> "INV-9901");
+
+  // 1. thenApply: Same-thread in-memory transformation (zero context switch)
+  CompletableFuture<String> stage1 = base.thenApply(inv -> inv.toLowerCase());
+
+  // 2. thenApplyAsync (Default Pool): Offloaded to ForkJoinPool.commonPool()
+  CompletableFuture<String> stage2 = base.thenApplyAsync(inv -> {
+      System.out.println("Default Async Thread: " + Thread.currentThread().getName());
+      return "AUDIT:" + inv;
+  });
+
+  // 3. thenApplyAsync (Custom Pool): Thread boundary isolation for heavy I/O
+  CompletableFuture<String> stage3 = base.thenApplyAsync(inv -> {
+      System.out.println("Custom Pool Thread: " + Thread.currentThread().getName()); // billing-pool
+      return "PAID:" + inv;
+  }, billingPool);
+  ```
 
 ---
 
@@ -115,6 +202,24 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - **Stream Pipeline Integration:** Can be called directly inside functional stream lambdas (`list.stream().map(CompletableFuture::join).toList()`) without try-catch boilerplates!
 - **Follow-Up Trap:** *"If a thread blocked on `join()` is interrupted, does it throw `InterruptedException`?"*
   - *Winning Answer:* "No! It ignores the interrupt flag and continues waiting until the future completes, though the thread's interrupt status will remain set."
+- **Production Code Example:**
+  ```java
+  List<CompletableFuture<String>> futures = List.of(
+      CompletableFuture.supplyAsync(() -> "Service A"),
+      CompletableFuture.supplyAsync(() -> "Service B"),
+      CompletableFuture.supplyAsync(() -> "Service C")
+  );
+
+  // ❌ Legacy get(): Cannot be used cleanly in functional streams without ugly wrapping
+  // List<String> results = futures.stream().map(f -> f.get()).toList(); // COMPILE ERROR!
+
+  // ✅ Modern join(): Clean functional stream aggregation with zero boilerplate
+  List<String> results = futures.stream()
+      .map(CompletableFuture::join) // Unchecked exception propagates automatically
+      .toList();
+  System.out.println("Aggregated: " + results); // [Service A, Service B, Service C]
+  ```
+
 
 ---
 
@@ -135,6 +240,17 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Violates the foundational immutability contract of futures, creating split-brain bugs in distributed workflows.
 - **Follow-Up Trap:** *"What was `obtrudeValue()` actually designed for?"*
   - *Winning Answer:* "Strictly for error recovery and diagnostic overrides in testing frameworks, never for business production workflows."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<String> configFuture = CompletableFuture.completedFuture("PRODUCTION_CONFIG");
+  System.out.println("Initial Value: " + configFuture.join()); // PRODUCTION_CONFIG
+
+  // ⚠️ DANGEROUS: Force-overwrites the completed immutable value
+  configFuture.obtrudeValue("OVERRIDDEN_TEST_MOCK");
+
+  // Callers joining now receive the overridden value, breaking immutable consistency!
+  System.out.println("After obtrudeValue(): " + configFuture.join()); // OVERRIDDEN_TEST_MOCK
+  ```
 
 ---
 
@@ -153,6 +269,27 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Consequence:** `cancel()` does NOT stop running CPU or I/O work in `CompletableFuture`!
 - **Follow-Up Trap:** *"How do you actually abort an in-flight HTTP call when a CompletableFuture is cancelled?"*
   - *Winning Answer:* "Register a cancellation hook using `whenComplete((res, ex) -> { if (future.isCancelled()) httpRequest.abort(); })`."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<String> networkTask = CompletableFuture.supplyAsync(() -> {
+      System.out.println("Task started on: " + Thread.currentThread().getName());
+      try {
+          Thread.sleep(3000); // Simulating slow socket read
+      } catch (InterruptedException e) {
+          System.out.println("Interrupted!"); // ⚠️ NEVER TRIGGERED!
+      }
+      System.out.println("Task finished running despite cancel(true)!"); // PRINTS!
+      return "response-data";
+  });
+
+  // Cancel the future with mayInterruptIfRunning = true (Ignored!)
+  boolean cancelled = networkTask.cancel(true);
+  System.out.println("cancel() returned: " + cancelled);      // true
+  System.out.println("isDone(): " + networkTask.isDone());           // true
+  System.out.println("isCancelled(): " + networkTask.isCancelled()); // true
+
+  // Trying to join throws CancellationException, but background thread runs to completion!
+  ```
 
 ---
 
@@ -178,6 +315,23 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
       ```
 - **Follow-Up Trap:** *"Does `completedFuture(null)` allocate a result object?"*
   - *Winning Answer:* "No! It points directly to the static pre-allocated `AltResult NIL` singleton."
+- **Production Code Example:**
+  ```java
+  public CompletableFuture<UserProfile> fetchUserProfile(String userId) {
+      // 1. Cache hit branch: Return already-completed future (Zero thread spawn overhead)
+      if (cache.containsKey(userId)) {
+          return CompletableFuture.completedFuture(cache.get(userId));
+      }
+
+      // 2. Early validation branch: Return already-failed future (Java 9+)
+      if (userId == null || userId.isBlank()) {
+          return CompletableFuture.failedFuture(new IllegalArgumentException("User ID is required"));
+      }
+
+      // 3. Cache miss branch: Dispatched asynchronously to dedicated database pool
+      return CompletableFuture.supplyAsync(() -> databaseClient.loadUser(userId), dbPool);
+  }
+  ```
 
 ---
 
@@ -204,6 +358,22 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - **The Exception Is Never Swallowed:** Calling `join()` re-throws it wrapped in `CompletionException`; calling `get()` re-throws it wrapped in `ExecutionException`.
 - **Follow-Up Trap:** *"What happens if an `OutOfMemoryError` is caught by `supplyAsync`?"*
   - *Winning Answer:* "It completes the future exceptionally with `OutOfMemoryError`, but the worker thread survives, which can leave the JVM in a corrupt, half-allocated state unless handled by an UncaughtExceptionHandler."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<Integer> failingTask = CompletableFuture.supplyAsync(() -> {
+      // Uncaught RuntimeException thrown inside lambda
+      throw new ArithmeticException("Division by zero in risk calculation");
+  });
+
+  // Exception is automatically captured and boxed into AltResult
+  failingTask.whenComplete((result, ex) -> {
+      if (ex != null) {
+          // ex is wrapped in CompletionException
+          System.out.println("Captured Exception: " + ex.getClass().getSimpleName()); // CompletionException
+          System.out.println("Root Cause: " + ex.getCause().getMessage());           // Division by zero in risk calculation
+      }
+  });
+  ```
 
 ---
 
@@ -219,6 +389,22 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - When `join()` is called on a `CompletableFuture<Void>`, it returns `null` once the runnable completes.
 - **Follow-Up Trap:** *"Can you chain a `thenApply()` onto a `CompletableFuture<Void>`?"*
   - *Winning Answer:* "Yes! The argument passed into `thenApply(Function<Void, R>)` will simply be `null`."
+- **Production Code Example:**
+  ```java
+  // 1. supplyAsync: Returns CompletableFuture<PaymentReceipt> (Produces Data)
+  CompletableFuture<PaymentReceipt> chargeFuture = CompletableFuture.supplyAsync(() -> {
+      return paymentGateway.chargeCreditCard(request);
+  }, paymentPool);
+
+  // 2. runAsync: Returns CompletableFuture<Void> (Fire-and-Forget Side Effect)
+  CompletableFuture<Void> auditLogFuture = CompletableFuture.runAsync(() -> {
+      auditLogger.emitKafkaAuditRecord("PAYMENT_ATTEMPT", request.accountId());
+  }, auditPool);
+
+  // Consuming Void future with thenRun:
+  auditLogFuture.thenRun(() -> System.out.println("Audit trail committed successfully."));
+  ```
+
 
 ---
 
@@ -345,6 +531,17 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Use Case:** Polling in ultra-low-latency game loops, financial tickers, or real-time state machines where blocking a thread for even 1 nanosecond is prohibited.
 - **Follow-Up Trap:** *"Does `getNow()` cancel the future if it is incomplete?"*
   - *Winning Answer:* "No! It merely polls the state. The future continues executing in the background."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<Double> liveStockPrice = CompletableFuture.supplyAsync(() -> {
+      simulateSlowNetwork(2000);
+      return 189.75;
+  });
+
+  // Non-blocking polling: If the live tick isn't ready yet, return last cached price immediately
+  Double currentPrice = liveStockPrice.getNow(185.50);
+  System.out.println("Display Price (Zero-Wait Polling): " + currentPrice); // 185.50 (fallback used!)
+  ```
 
 ---
 
@@ -363,6 +560,24 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Returns `false` if completed normally or still in-flight.
 - **Follow-Up Trap:** *"What does `future.isCancelled()` check under the hood?"*
   - *Winning Answer:* "It checks whether `result instanceof AltResult && ((AltResult)result).ex instanceof CancellationException`."
+- **Production Code Example:**
+  ```java
+  CompletableFuture<String> success = CompletableFuture.completedFuture("OK");
+  CompletableFuture<String> failure = CompletableFuture.failedFuture(new IllegalStateException("Out of memory"));
+  CompletableFuture<String> cancelled = new CompletableFuture<>();
+  cancelled.cancel(true);
+
+  System.out.println("Success isDone: " + success.isDone()); // true
+  System.out.println("Success isCompletedExceptionally: " + success.isCompletedExceptionally()); // false
+
+  System.out.println("Failure isDone: " + failure.isDone()); // true
+  System.out.println("Failure isCompletedExceptionally: " + failure.isCompletedExceptionally()); // true
+
+  System.out.println("Cancelled isDone: " + cancelled.isDone()); // true
+  System.out.println("Cancelled isCompletedExceptionally: " + cancelled.isCompletedExceptionally()); // true (Cancellation IS an AltResult!)
+  System.out.println("Cancelled isCancelled: " + cancelled.isCancelled()); // true
+  ```
+
 
 ---
 
@@ -455,6 +670,31 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Mnemonic:** Use `thenApply` for value mapping; use `thenCompose` when chaining dependent async operations.
 - **Follow-Up Trap:** *"Can `thenCompose` accept a null return from its function?"*
   - *Winning Answer:* "No! If the mapping function returns `null`, `thenCompose` throws a `NullPointerException` and completes the stage exceptionally."
+- **Production Code Example:**
+  ```java
+  // Mock async services
+  CompletableFuture<User> fetchUserAsync(String userId) {
+      return CompletableFuture.supplyAsync(() -> new User(userId, "Alice"));
+  }
+
+  CompletableFuture<List<Order>> fetchOrdersAsync(User user) {
+      return CompletableFuture.supplyAsync(() -> List.of(new Order("ORD-1"), new Order("ORD-2")));
+  }
+
+  // ❌ The Trap: thenApply creates an unwieldy nested CompletableFuture<CompletableFuture<List<Order>>>
+  CompletableFuture<CompletableFuture<List<Order>>> nested = 
+      fetchUserAsync("u100")
+          .thenApply(user -> fetchOrdersAsync(user));
+
+  // ✅ The Solution: thenCompose flattens it directly to CompletableFuture<List<Order>>
+  CompletableFuture<List<Order>> flattened = 
+      fetchUserAsync("u100")
+          .thenCompose(user -> fetchOrdersAsync(user));
+
+  List<Order> orders = flattened.join(); // Clean and flat!
+  System.out.println("Fetched orders: " + orders.size()); // 2
+  ```
+
 
 ---
 
@@ -570,6 +810,28 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
 - **Follow-Up Trap:** *"What happens if `f1` completes with an exception before `f2` finishes?"*
   - *Winning Answer:* "The `thenAcceptBoth` stage immediately fails with `f1`'s exception, without waiting for `f2` to complete."
 
+#### Production Code Example:
+```java
+// Scenario: Generate an order receipt by coordinating Customer Info and Order Total
+CompletableFuture<String> customerFuture = CompletableFuture.supplyAsync(() -> {
+    // Simulated remote microservice call (100ms)
+    return "Alice (Cust-ID: #8841)";
+});
+
+CompletableFuture<Double> orderTotalFuture = CompletableFuture.supplyAsync(() -> {
+    // Simulated pricing service call (150ms)
+    return 349.99;
+});
+
+// thenAcceptBoth waits for BOTH futures, passes results to BiConsumer, returns CompletableFuture<Void>
+CompletableFuture<Void> receiptPipeline = customerFuture.thenAcceptBoth(orderTotalFuture, (customer, total) -> {
+    System.out.printf("[Receipt Service] Generated invoice for %s with amount: $%.2f%n", customer, total);
+});
+
+receiptPipeline.join();
+// Output: [Receipt Service] Generated invoice for Alice (Cust-ID: #8841) with amount: $349.99
+```
+
 ---
 
 ### Q28: How does `runAfterBoth()` differ from `thenAcceptBoth()`?
@@ -585,6 +847,29 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
 - **Follow-Up Trap:** *"What happens if one future completes normally and the other is cancelled?"*
   - *Winning Answer:* "The stage fails with `CancellationException` and the runnable never executes."
 
+#### Production Code Example:
+```java
+// Scenario: System startup readiness barrier
+CompletableFuture<Void> dbMigration = CompletableFuture.runAsync(() -> {
+    System.out.println("Running database migrations...");
+});
+
+CompletableFuture<Void> cacheWarmup = CompletableFuture.runAsync(() -> {
+    System.out.println("Pre-loading Redis caches...");
+});
+
+// runAfterBoth waits for both to complete, ignoring results, and runs a Runnable
+CompletableFuture<Void> startupBarrier = dbMigration.runAfterBoth(cacheWarmup, () -> {
+    System.out.println(">> Both DB migration and Cache warmup finished. Marking service as HEALTHY!");
+});
+
+startupBarrier.join();
+// Output:
+// Running database migrations...
+// Pre-loading Redis caches...
+// >> Both DB migration and Cache warmup finished. Marking service as HEALTHY!
+```
+
 ---
 
 ### Q29: How does `runAfterEither()` coordinate the winner of two racing futures?
@@ -597,6 +882,30 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Whichever future loses the race has its result discarded.
 - **Follow-Up Trap:** *"If `f1` fails with an exception, does `runAfterEither` wait for `f2` to see if it succeeds?"*
   - *Winning Answer:* "NO! If the first future to finish completes exceptionally, the either stage immediately fails exceptionally without waiting for the second future."
+
+#### Production Code Example:
+```java
+// Scenario: Trigger downstream processing as soon as EITHER fast cache OR backup database notifies
+CompletableFuture<Void> cachePing = CompletableFuture.runAsync(() -> {
+    try { Thread.sleep(20); } catch (InterruptedException e) {}
+    System.out.println("Redis cache responded OK!");
+});
+
+CompletableFuture<Void> dbPing = CompletableFuture.runAsync(() -> {
+    try { Thread.sleep(200); } catch (InterruptedException e) {}
+    System.out.println("Database responded OK!");
+});
+
+// runAfterEither triggers the Runnable as soon as the FIRST future completes
+CompletableFuture<Void> firstHealthySignal = cachePing.runAfterEither(dbPing, () -> {
+    System.out.println(">> At least one datasource is alive! Unblocking request router.");
+});
+
+firstHealthySignal.join();
+// Output:
+// Redis cache responded OK!
+// >> At least one datasource is alive! Unblocking request router.
+```
 
 ---
 
@@ -616,6 +925,28 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Cuts tail latency ($p99$) by up to 50% across distributed microservices.
 - **Follow-Up Trap:** *"Does `acceptEither` cancel the losing future automatically?"*
   - *Winning Answer:* "No! The losing future continues executing in the background unless explicitly cancelled via callback hooks."
+
+#### Production Code Example:
+```java
+// Scenario: Hedged Read Request to two geo-distributed replica clusters (US-East vs EU-West)
+CompletableFuture<String> replicaUSEast = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(120); } catch (InterruptedException e) {}
+    return "StockQuote: AAPL = $195.50 (from US-East)";
+});
+
+CompletableFuture<String> replicaEUWest = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(40); } catch (InterruptedException e) {} // Faster network response
+    return "StockQuote: AAPL = $195.45 (from EU-West)";
+});
+
+// acceptEither consumes the result from whichever replica responds first
+CompletableFuture<Void> consumerStage = replicaUSEast.acceptEither(replicaEUWest, winningQuote -> {
+    System.out.println("[Live Ticker] Instant display: " + winningQuote);
+});
+
+consumerStage.join();
+// Output: [Live Ticker] Instant display: StockQuote: AAPL = $195.45 (from EU-West)
+```
 
 ---
 
@@ -691,6 +1022,34 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
 - **Follow-Up Trap:** *"If `handle()` returns a value after an exception, what state does the returned future have?"*
   - *Winning Answer:* "Completed NORMALLY with that returned value! Downstream stages will treat it as a success."
 
+#### Production Code Example
+
+```java
+// Simulated service that throws an exception
+CompletableFuture<String> failingService = CompletableFuture.supplyAsync(() -> {
+    throw new RuntimeException("Payment Gateway Timeout!");
+});
+
+// Case A: thenApply is bypassed completely when upstream fails
+CompletableFuture<String> applyPipeline = failingService
+    .thenApply(res -> "Formatted: " + res); // SKIPPED!
+
+// Case B: handle catches the failure and provides a safe fallback
+CompletableFuture<String> handlePipeline = failingService
+    .handle((result, error) -> {
+        if (error != null) {
+            System.err.println("[Audit Log] Caught failure: " + error.getMessage());
+            return "FALLBACK_OFFLINE_RECEIPT"; // Recovers normally!
+        }
+        return "SUCCESS: " + result;
+    });
+
+System.out.println("Recovered Result: " + handlePipeline.join());
+// Output:
+// [Audit Log] Caught failure: java.lang.RuntimeException: Payment Gateway Timeout!
+// Recovered Result: FALLBACK_OFFLINE_RECEIPT
+```
+
 ---
 
 ### Q34: What is the difference between `handle()` and `whenComplete()`?
@@ -705,6 +1064,28 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Ideal for logging, metrics, releasing locks, or closing file descriptors.
 - **Follow-Up Trap:** *"What happens if `whenComplete()`'s consumer itself throws an exception?"*
   - *Winning Answer:* "If the upstream completed normally, the returned future fails with the exception thrown inside `whenComplete`. If upstream already failed, the upstream exception is retained and the consumer's exception is suppressed."
+
+#### Production Code Example
+
+```java
+CompletableFuture<Double> orderFuture = CompletableFuture.supplyAsync(() -> 250.0);
+
+// Case A: handle transforms the result type from Double to String
+CompletableFuture<String> transformedFuture = orderFuture.handle((amount, err) -> {
+    if (err != null) return "Status: FAILED";
+    return String.format("Status: APPROVED (Charged $%.2f)", amount);
+});
+
+// Case B: whenComplete observes the result for metrics/logging without altering the Double value
+CompletableFuture<Double> auditedFuture = orderFuture.whenComplete((amount, err) -> {
+    if (err == null) {
+        System.out.printf("[Metrics] Emitted 'order_revenue_metric' with value: $%.2f%n", amount);
+    }
+});
+
+System.out.println("Transformed: " + transformedFuture.join()); // Returns String
+System.out.println("Audited Amount: " + auditedFuture.join());    // Preserves original Double 250.0
+```
 
 ---
 
@@ -723,6 +1104,42 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Represents **Sequential Pipelining**: $\text{Total Time} = t_1 + t_2$.
 - **Follow-Up Trap:** *"What happens if you accidentally use `thenCompose` when operations are independent?"*
   - *Winning Answer:* "You double the latency! Two 500ms operations that could have completed in 500ms in parallel will take 1,000ms sequentially."
+
+#### Production Code Example
+
+```java
+// --- Pattern 1: thenCombine (Parallel Independent Fan-Out) ---
+// Two external APIs called in parallel: Flight API (100ms) and Hotel API (100ms)
+// Total wall-clock time: ~100ms (max of both)
+long startCombine = System.currentTimeMillis();
+CompletableFuture<Double> flightCost = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(100); } catch (InterruptedException e) {}
+    return 450.0;
+});
+CompletableFuture<Double> hotelCost = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(100); } catch (InterruptedException e) {}
+    return 300.0;
+});
+
+CompletableFuture<Double> totalVacationCost = flightCost.thenCombine(hotelCost, (flight, hotel) -> flight + hotel);
+System.out.printf("Combined Vacation Total: $%.2f in %d ms%n", 
+    totalVacationCost.join(), (System.currentTimeMillis() - startCombine));
+
+// --- Pattern 2: thenCompose (Sequential Dependent Pipelining) ---
+// Stage 2 strictly depends on Stage 1's output: Token Auth -> Profile Load
+// Total wall-clock time: ~200ms (sum of both)
+long startCompose = System.currentTimeMillis();
+CompletableFuture<String> userProfile = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(100); } catch (InterruptedException e) {}
+    return "AUTH_TOKEN_XYZ_99"; // Stage 1
+}).thenCompose(token -> CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(100); } catch (InterruptedException e) {}
+    return "UserProfile[Token=" + token + ", Name=Bob]"; // Stage 2
+}));
+
+System.out.printf("Composed Profile: %s in %d ms%n", 
+    userProfile.join(), (System.currentTimeMillis() - startCompose));
+```
 
 ---
 
@@ -865,6 +1282,46 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Tree Depth:** Maximum tree height is bounded by $O(\log N)$, ensuring parallel completion signals propagate in logarithmic time with zero lock contention!
 - **Follow-Up Trap:** *"What happens if `allOf()` is passed an empty array?"*
   - *Winning Answer:* "It returns `CompletableFuture.completedFuture(null)` immediately in $O(1)$ without allocating any tree."
+
+#### Production Code Example - Q41: Non-Blocking Multi-Service Aggregation with allOf()
+
+```java
+// Scenario: Travel Booking Engine calls 3 microservices concurrently: Flight, Hotel, and Car Rental
+long startTime = System.currentTimeMillis();
+
+CompletableFuture<String> flightFuture = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(120); } catch (InterruptedException e) {}
+    return "Flight: AA-104 ($450.00)";
+});
+
+CompletableFuture<String> hotelFuture = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(150); } catch (InterruptedException e) {}
+    return "Hotel: Marriott Downtown ($320.00)";
+});
+
+CompletableFuture<String> carFuture = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(90); } catch (InterruptedException e) {}
+    return "Car: Hertz SUV ($110.00)";
+});
+
+// allOf acts as the completion barrier across all 3 futures
+CompletableFuture<Void> allBarrier = CompletableFuture.allOf(flightFuture, hotelFuture, carFuture);
+
+// Assemble results asynchronously without blocking any worker threads
+CompletableFuture<String> itineraryFuture = allBarrier.thenApply(v -> {
+    // Calling .join() here is 100% non-blocking because allOf guaranteed completion!
+    return String.format("=== ITINERARY ===%n- %s%n- %s%n- %s%nTotal elapsed: %d ms",
+        flightFuture.join(), hotelFuture.join(), carFuture.join(), (System.currentTimeMillis() - startTime));
+});
+
+System.out.println(itineraryFuture.join());
+// Output:
+// === ITINERARY ===
+// - Flight: AA-104 ($450.00)
+// - Hotel: Marriott Downtown ($320.00)
+// - Car: Hertz SUV ($110.00)
+// Total elapsed: ~155 ms (Parallel max, NOT 120+150+90=360ms!)
+```
 
 ---
 
@@ -1426,6 +1883,38 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Core Rule:** Use `exceptionally` for simple fallback values; use `handle` when transforming the entire response model; use `whenComplete` for logging and telemetry.
 - **Follow-Up Trap:** *"What happens if the function passed to `exceptionally()` itself throws a RuntimeException?"*
   - *Winning Answer:* "The returned future completes exceptionally with the NEW exception, replacing the original exception."
+- **Production Code Example:**
+  ```java
+  // Simulated failing database service
+  CompletableFuture<User> userFuture = CompletableFuture.supplyAsync(() -> {
+      throw new IllegalStateException("Primary database pool exhausted");
+  });
+
+  // 1. exceptionally(): Returns same type (User), triggers on failure only
+  CompletableFuture<User> recovered = userFuture.exceptionally(ex -> {
+      System.out.println("exceptionally caught: " + ex.getMessage());
+      return User.GUEST_FALLBACK; // Recover with default fallback User
+  });
+  System.out.println("Recovered User: " + recovered.join().getUsername()); // "guest"
+
+  // 2. handle(): Transforms result OR error into a unified envelope (ApiResponse<User>)
+  CompletableFuture<ApiResponse<User>> responseEnvelope = userFuture.handle((user, ex) -> {
+      if (ex != null) {
+          return ApiResponse.error(503, "Service degraded: " + ex.getMessage());
+      }
+      return ApiResponse.ok(user);
+  });
+  System.out.println("Envelope Status: " + responseEnvelope.join().getStatusCode()); // 503
+
+  // 3. whenComplete(): Pure side-effect (metrics / audit logging) - does NOT swallow errors!
+  CompletableFuture<User> monitoredFuture = userFuture.whenComplete((user, ex) -> {
+      if (ex != null) {
+          metricRegistry.counter("db.failure").increment();
+          logger.error("Async task failed with root cause", ex);
+      }
+  }); // monitoredFuture STILL completes exceptionally!
+  ```
+
 
 ---
 
@@ -1956,6 +2445,29 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
 - **Follow-Up Trap:** *"What happens if `join()` is called on a future that timed out via `orTimeout()`?"*
   - *Winning Answer:* "It throws `CompletionException` wrapping `java.util.concurrent.TimeoutException`."
 
+#### Production Code Example - Q81: Non-Blocking Timeout Enforcement with orTimeout()
+
+```java
+// Scenario: Strict 100ms SLA for payment authorization
+CompletableFuture<String> slowAuthService = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(500); } catch (InterruptedException e) {} // Simulates lagging network
+    return "AUTH_SUCCESS_TOKEN_99182";
+});
+
+// Enforce non-blocking timeout: completes exceptionally with TimeoutException after 100ms
+CompletableFuture<String> timeoutGuardedFuture = slowAuthService
+    .orTimeout(100, TimeUnit.MILLISECONDS)
+    .exceptionally(ex -> {
+        System.err.println("[SLA Alert] Request exceeded 100ms threshold: " + ex.getMessage());
+        return "AUTH_REJECTED_TIMEOUT";
+    });
+
+System.out.println("Result: " + timeoutGuardedFuture.join());
+// Output:
+// [SLA Alert] Request exceeded 100ms threshold: java.util.concurrent.TimeoutException
+// Result: AUTH_REJECTED_TIMEOUT
+```
+
 ---
 
 ### Q82: How does `completeOnTimeout(fallbackValue, timeout, unit)` provide graceful degradation?
@@ -1973,6 +2485,26 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
     - Downstream rendering stages continue without throwing errors or dropping frames.
 - **Follow-Up Trap:** *"What happens if the original recommendation call finishes at 250ms after timeout fired?"*
   - *Winning Answer:* "Its result is completely discarded because the future was already completed at 200ms by the timeout value."
+
+#### Production Code Example - Q82: Graceful Degradation with completeOnTimeout()
+
+```java
+// Scenario: E-Commerce Homepage Personalized Recommendations with Fast Fallback
+List<String> defaultTrendingProducts = List.of("Wireless Earbuds", "Smart Watch", "USB-C Charger");
+
+CompletableFuture<List<String>> mlRecommendationService = CompletableFuture.supplyAsync(() -> {
+    try { Thread.sleep(300); } catch (InterruptedException e) {} // ML model takes 300ms
+    return List.of("Running Shoes", "Hydration Vest", "Sports Socks");
+});
+
+// completeOnTimeout completes NORMALLY with fallback if timeout expires before ML returns
+CompletableFuture<List<String>> displayProducts = mlRecommendationService
+    .completeOnTimeout(defaultTrendingProducts, 100, TimeUnit.MILLISECONDS);
+
+System.out.println("Displaying Products: " + displayProducts.join());
+// Output (since 300ms > 100ms timeout):
+// Displaying Products: [Wireless Earbuds, Smart Watch, USB-C Charger]
+```
 
 ---
 
@@ -2516,6 +3048,35 @@ An exhaustive, battle-tested compilation of **200 production-grade interview sce
   - **Architectural Rule:** In production code, **NEVER omit the Executor argument** in `supplyAsync`, `runAsync`, or `*Async` methods! Always inject a dedicated, isolated thread pool.
 - **Follow-Up Trap:** *"What happens if `availableProcessors()` reports 1 core in a constrained container?"*
   - *Winning Answer:* "HotSpot sets common pool parallelism to 1, meaning a single blocked task completely freezes all parallel async execution for the entire application!"
+
+#### Production Code Example - Q101: CommonPool Starvation Hazard vs Custom Bulkhead Executor
+
+```java
+// ❌ ANTI-PATTERN: Omitting executor defaults to ForkJoinPool.commonPool()
+// If 8 slow HTTP calls run concurrently on an 8-core machine, commonPool is 100% frozen!
+CompletableFuture<String> dangerousFuture = CompletableFuture.supplyAsync(() -> {
+    // Blocking I/O inside commonPool starves unrelated JVM parallel streams!
+    return remoteHttpCall();
+});
+
+//  PRODUCTION BEST PRACTICE: Always supply a dedicated, bounded ThreadPoolExecutor
+ExecutorService paymentIoPool = new ThreadPoolExecutor(
+    16,                                    // Core pool size
+    32,                                    // Max pool size
+    60L, TimeUnit.SECONDS,                 // Keep-alive time
+    new LinkedBlockingQueue<>(500),        // Bounded queue
+    new NamedThreadFactory("payment-io"),  // Descriptive thread names
+    new ThreadPoolExecutor.CallerRunsPolicy() // Backpressure rejection strategy
+);
+
+CompletableFuture<String> safeFuture = CompletableFuture.supplyAsync(() -> {
+    return remoteHttpCall();
+}, paymentIoPool);
+
+safeFuture.thenAcceptAsync(result -> {
+    System.out.println("[Payment Processor] Handled on dedicated pool: " + Thread.currentThread().getName());
+}, paymentIoPool);
+```
 
 ---
 

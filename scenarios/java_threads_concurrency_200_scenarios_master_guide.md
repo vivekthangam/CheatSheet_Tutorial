@@ -36,6 +36,46 @@
 - **Follow-Up Trap:** *"Does a Java thread in state `RUNNABLE` always mean it is physically executing instructions on a CPU core?"*
   - *Winning Answer:* "No! HotSpot combines the OS states `READY` (waiting in the OS CFS runqueue for an available CPU time slice) and `RUNNING` (actively executing on silicon) into a single JVM enum state `Thread.State.RUNNABLE`. A Java thread can be `RUNNABLE` while completely starved of CPU time."
 
+#### Production Code Example - Q1: Observing RUNNABLE to BLOCKED Thread State Transition
+
+```java
+public class ThreadBlockedDemo {
+    private static final Object lock = new Object();
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread holder = new Thread(() -> {
+            synchronized (lock) {
+                try {
+                    // Holds the lock for 2 seconds
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }, "Lock-Holder-Thread");
+
+        Thread contender = new Thread(() -> {
+            // Contender attempts to acquire the lock held by holder
+            synchronized (lock) {
+                System.out.println("Contender finally acquired lock!");
+            }
+        }, "Lock-Contender-Thread");
+
+        holder.start();
+        Thread.sleep(50); // Ensure holder thread acquires lock first
+
+        contender.start();
+        Thread.sleep(50); // Allow contender to attempt lock acquisition
+
+        // Prints: Contender State: BLOCKED
+        System.out.println("Contender State: " + contender.getState());
+        
+        holder.join();
+        contender.join();
+    }
+}
+```
+
 ---
 
 ### Q2: Why does an OS thread context switch consume $1\text{--}5\mu\text{s}$, and how does CPU cache line pollution amplify this cost?
@@ -66,6 +106,31 @@
 - **Follow-Up Trap:** *"Why must you pass `-XX:-RestrictContended` on the command line to use `@Contended` in user applications prior to Java 9?"*
   - *Winning Answer:* "Because by default `@Contended` was restricted to core JVM classes (`java.util.concurrent`) to prevent developers from recklessly bloating heap memory by padding every field with 128 bytes."
 
+#### Production Code Example - Q3: Mitigating False Sharing with Padding / @Contended
+
+```java
+public class FalseSharingDemo {
+    // ❌ UNPADDED: valueA and valueB share the same 64-byte cache line
+    // Core 1 writes to valueA; invalidates Core 2's cache line containing valueB!
+    static class UnpaddedCounters {
+        volatile long valueA = 0L; // 8 bytes
+        volatile long valueB = 0L; // 8 bytes (shares cache line!)
+    }
+
+    //  PADDED: Manual cache line padding ensures 64-byte isolation
+    static class PaddedCounters {
+        volatile long valueA = 0L;
+        // 7 unused longs = 56 bytes padding + 8 bytes valueA = 64 bytes
+        long p1, p2, p3, p4, p5, p6, p7;
+        volatile long valueB = 0L; // Resides safely on the NEXT cache line!
+    }
+
+    // Modern Java alternative (requires -XX:-RestrictContended on Java 8):
+    // @jdk.internal.vm.annotation.Contended
+    // volatile long isolatedCounter = 0L;
+}
+```
+
 ---
 
 ### Q4: How does the Linux Completely Fair Scheduler (CFS) interact with `Thread.setPriority()` in HotSpot?
@@ -93,6 +158,33 @@
 - **Follow-Up Trap:** *"What should you use instead of `Thread.yield()` when implementing a spin-wait loop in Java 9+?"*
   - *Winning Answer:* "`Thread.onSpinWait()`. It issues the x86 `PAUSE` assembly instruction, which lowers CPU pipeline power consumption, avoids memory order violations upon exiting the loop, and yields execution resources inside the hyper-threaded core without kernel syscall overhead."
 
+#### Production Code Example - Q5: Low-Latency Busy-Wait with Thread.onSpinWait()
+
+```java
+public class SpinWaitQueueDemo {
+    private volatile boolean ready = false;
+    private int data = 0;
+
+    // Producer publishes data
+    public void produce(int value) {
+        this.data = value;
+        this.ready = true; // Volatile release
+    }
+
+    // Consumer spins until ready using Java 9+ Thread.onSpinWait()
+    public int consume() {
+        while (!ready) {
+            // Issues x86 PAUSE instruction:
+            // 1. Prevents pipeline memory order violations on exit
+            // 2. Reduces CPU power & thermal dissipation
+            // 3. Yields CPU execution slots to hyper-threaded sister cores
+            Thread.onSpinWait(); 
+        }
+        return data;
+    }
+}
+```
+
 ---
 
 ### Q6: What is the exact difference between `Thread.interrupt()`, `Thread.interrupted()`, and `thread.isInterrupted()`?
@@ -105,6 +197,30 @@
   - `Thread.interrupted()`: **Static method**. Returns the interrupt status of the *current calling thread* AND **clears the flag to `false`** as a side effect!
 - **Follow-Up Trap:** *"What catastrophic bug happens when a developer catches `InterruptedException` and does nothing (empty catch block)?"*
   - *Winning Answer:* "Swallowing the exception clears the thread's interrupt status flag! Upstream frameworks (like `ThreadPoolExecutor`, Spring batch jobs, or cancellation monitors) check `Thread.currentThread().isInterrupted()` to stop gracefully. Swallowing it turns an orderly shutdown into an unkillable zombie thread."
+
+#### Production Code Example - Q6: Correctly Handling InterruptedException without Swallowing
+
+```java
+public class GracefulWorker implements Runnable {
+    @Override
+    public void run() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                // Simulating blocking I/O or sleep
+                Thread.sleep(200);
+                System.out.println("Processing batch chunk...");
+            } catch (InterruptedException e) {
+                // ❌ ANTI-PATTERN: Catching and ignoring clears the flag, creating a zombie thread!
+                //  BEST PRACTICE: Re-assert the interrupt flag so callers/frameworks know to stop
+                System.err.println("Worker received interrupt during sleep! Restoring flag...");
+                Thread.currentThread().interrupt(); // Sets flag back to true!
+                break; // Exit loop cleanly
+            }
+        }
+        System.out.println("Worker safely exited. isInterrupted=" + Thread.currentThread().isInterrupted());
+    }
+}
+```
 
 ---
 
@@ -135,6 +251,42 @@
 - **Follow-Up Trap:** *"Are threads created by `Executors.defaultThreadFactory()` daemon or non-daemon by default?"*
   - *Winning Answer:* "Non-daemon! Unless you provide a custom `ThreadFactory`, standard `ThreadPoolExecutor` workers are non-daemon, which will keep the entire JVM process alive indefinitely even after `main()` completes if you forget to call `executor.shutdown()`."
 
+#### Production Code Example - Q8: Daemon Thread Abrupt Termination vs Shutdown Hook
+
+```java
+public class DaemonThreadHazardDemo {
+    public static void main(String[] args) {
+        // ❌ DANGEROUS: Daemon thread doing I/O
+        Thread daemonWriter = new Thread(() -> {
+            try {
+                System.out.println("[Daemon] Starting file write...");
+                Thread.sleep(1000);
+                System.out.println("[Daemon] Writing critical transaction log!");
+            } catch (InterruptedException e) {
+                // Interrupted
+            } finally {
+                //  WARNING: This finally block may NEVER execute if main finishes!
+                System.out.println("[Daemon] FLUSHING FILE BUFFERS!");
+            }
+        });
+        daemonWriter.setDaemon(true); // Marked as daemon!
+        daemonWriter.start();
+
+        //  PRODUCTION PATTERN: Register a JVM Shutdown Hook for guaranteed cleanup
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("[Shutdown Hook] Gracefully flushing metrics and transaction logs!");
+        }));
+
+        System.out.println("[Main] Main thread exiting immediately...");
+        // Output:
+        // [Daemon] Starting file write...
+        // [Main] Main thread exiting immediately...
+        // [Shutdown Hook] Gracefully flushing metrics and transaction logs!
+        // (Note: '[Daemon] FLUSHING FILE BUFFERS!' was abruptly terminated and never ran!)
+    }
+}
+```
+
 ---
 
 ### Q9: How does the JVM handle Thread Uncaught Exceptions, and what is the cascading fallback hierarchy?
@@ -147,6 +299,41 @@
     3. **Default Global Handler:** If no parent handles it, delegates to `Thread.getDefaultUncaughtExceptionHandler()`. If still null, prints the stack trace to `System.err`.
 - **Follow-Up Trap:** *"If you submit a crashing task to an `ExecutorService` via `executor.submit(runnable)`, does `UncaughtExceptionHandler` fire?"*
   - *Winning Answer:* "NO! Tasks submitted via `.submit()` wrap the runnable in a `FutureTask`. Any uncaught exception is caught internally and stored in the `FutureTask.outcome` field. It is completely silent until a caller explicitly invokes `future.get()`, which wraps it in an `ExecutionException`."
+
+#### Production Code Example - Q9: UncaughtExceptionHandler vs ExecutorService Silent Failures
+
+```java
+public class UncaughtExceptionDemo {
+    public static void main(String[] args) throws Exception {
+        // 1. Setting Default Global Handler
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            System.err.printf("[Global Crash Handler] Thread '%s' crashed with: %s%n",
+                thread.getName(), throwable.getMessage());
+        });
+
+        // Case A: Standalone Thread or executor.execute() triggers the handler
+        Thread crashingThread = new Thread(() -> {
+            throw new RuntimeException("Database connection dropped!");
+        }, "Worker-1");
+        crashingThread.start();
+        crashingThread.join();
+
+        // Case B: executor.submit() silently captures exceptions in FutureTask!
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        Future<?> future = pool.submit(() -> {
+            throw new RuntimeException("Silent crash inside submit()!");
+        });
+
+        // Handler does NOT fire above! The exception is swallowed until .get() is invoked:
+        try {
+            future.get();
+        } catch (ExecutionException ee) {
+            System.out.println("[Future.get() Caught] Real cause: " + ee.getCause().getMessage());
+        }
+        pool.shutdown();
+    }
+}
+```
 
 ---
 
@@ -164,6 +351,36 @@
   - **Critical Architectural Rule:** Never synchronize on a `Thread` instance in application code (`synchronized(threadInstance) { ... }`)! Doing so interferes with HotSpot's internal `join()` completion notifications, causing threads calling `.join()` to hang indefinitely or wake up prematurely.
 - **Follow-Up Trap:** *"Why does `join()` use a `while (isAlive())` loop instead of an `if (isAlive())` check?"*
   - *Winning Answer:* "To guard against **Spurious Wakeups**! POSIX OS threads and JVM monitors can wake up without any explicit `notify()` call due to internal OS signal interruptions."
+
+#### Production Code Example - Q10: Coordinating Worker Completion with Thread.join()
+
+```java
+public class ThreadJoinCoordinationDemo {
+    public static void main(String[] args) throws InterruptedException {
+        Thread databaseMigration = new Thread(() -> {
+            System.out.println("Starting Liquibase schema migration...");
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            System.out.println("Schema migration completed successfully!");
+        }, "DB-Migrator");
+
+        databaseMigration.start();
+
+        // Main thread waits up to 2 seconds for DB migration to finish
+        System.out.println("Main thread waiting on DB migrator...");
+        databaseMigration.join(2000); // Internally calls wait() on databaseMigration monitor
+
+        if (databaseMigration.isAlive()) {
+            System.err.println("Migration timed out! Aborting startup.");
+        } else {
+            System.out.println("Migration finished. Initializing Spring ApplicationContext!");
+        }
+    }
+}
+```
 
 ---
 
@@ -409,6 +626,47 @@
 - **Follow-Up Trap:** *"Is there an alternative Singleton pattern that provides lazy initialization, high concurrency, and thread safety without `volatile`?"*
   - *Winning Answer:* "Yes: The **Initialization-on-Demand Holder Pattern** (`Bill Pugh Singleton`). It leverages the JVM's class loader lock guarantees: a static nested class is only loaded and initialized when referenced, guaranteeing thread-safe, lazy initialization with zero synchronization overhead."
 
+#### Production Code Example - Q24: Thread-Safe Lazy Singleton (DCL with Volatile vs Bill Pugh Holder)
+
+```java
+// Pattern 1: Production-Grade Double-Checked Locking
+public class DoubleCheckedLockingRegistry {
+    //  MUST be volatile to prevent instruction reordering of constructor and reference assignment
+    private static volatile DoubleCheckedLockingRegistry instance;
+
+    private DoubleCheckedLockingRegistry() {
+        // Expensive resource initialization (e.g., connection pools)
+    }
+
+    public static DoubleCheckedLockingRegistry getInstance() {
+        DoubleCheckedLockingRegistry localRef = instance; // Single volatile read optimization
+        if (localRef == null) {
+            synchronized (DoubleCheckedLockingRegistry.class) {
+                localRef = instance;
+                if (localRef == null) {
+                    instance = localRef = new DoubleCheckedLockingRegistry();
+                }
+            }
+        }
+        return localRef;
+    }
+}
+
+// Pattern 2: Bill Pugh Holder (Zero synchronization overhead, fully lazy)
+class BillPughRegistry {
+    private BillPughRegistry() {}
+
+    private static class Holder {
+        // Loaded and initialized by JVM only on first call to getInstance()
+        private static final BillPughRegistry INSTANCE = new BillPughRegistry();
+    }
+
+    public static BillPughRegistry getInstance() {
+        return Holder.INSTANCE;
+    }
+}
+```
+
 ---
 
 ### Q25: Why does `volatile int count; count++;` fail to be thread-safe in a multi-threaded benchmark?
@@ -432,6 +690,40 @@
   - **The Fix:** Use `AtomicInteger.incrementAndGet()` (which uses hardware atomic CAS instructions `LOCK XADD` or `CMPXCHG`) or `LongAdder`.
 - **Follow-Up Trap:** *"When is `volatile` sufficient by itself without synchronization or atomic classes?"*
   - *Winning Answer:* "When writes do NOT depend on the previous value (e.g., a simple status flag `volatile boolean shutdownRequested = true;`), or when only a single thread ever writes to the variable while multiple threads read."
+
+#### Production Code Example - Q25: Demonstrating Lost Updates with volatile count++ vs AtomicInteger
+
+```java
+public class VolatileAtomicityDemo {
+    private static volatile int volatileCount = 0;
+    private static final AtomicInteger atomicCount = new AtomicInteger(0);
+
+    public static void main(String[] args) throws InterruptedException {
+        int threads = 10;
+        int incrementsPerThread = 10_000;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch latch = new CountDownLatch(threads);
+
+        for (int t = 0; t < threads; t++) {
+            pool.execute(() -> {
+                for (int i = 0; i < incrementsPerThread; i++) {
+                    volatileCount++; // ❌ NON-ATOMIC: getfield -> iadd -> putfield (Race condition!)
+                    atomicCount.incrementAndGet(); //  ATOMIC: Hardware CAS instruction (LOCK XADD)
+                }
+                latch.countDown();
+            });
+        }
+
+        latch.await();
+        pool.shutdown();
+
+        // Expected: 100,000 for both
+        System.out.println("Expected count: " + (threads * incrementsPerThread));
+        System.out.println("volatileCount result: " + volatileCount + " (LOST UPDATES!)");
+        System.out.println("atomicCount result:   " + atomicCount.get() + " (100% ACCURATE)");
+    }
+}
+```
 
 ---
 
@@ -722,6 +1014,37 @@
   - **Guaranteed Invariant:** An intrinsic `synchronized` lock is **always 100% guaranteed to be released**, even during `RuntimeException`, `Error`, or `ThreadDeath`.
 - **Follow-Up Trap:** *"Does `ReentrantLock.lock()` provide this same automatic unlock guarantee upon an uncaught exception?"*
   - *Winning Answer:* "NO! Explicit locks (`ReentrantLock`) are purely user-space objects. If a developer fails to wrap the critical section in a `try-finally` block (`try { ... } finally { lock.unlock(); }`), the lock will remain locked forever upon an unhandled exception, causing permanent deadlocks."
+
+#### Production Code Example - Q40: Synchronized Automatic Exception Unlocking vs Explicit Lock Leak Hazard
+
+```java
+public class LockExceptionSafetyDemo {
+    private static final Object intrinsicLock = new Object();
+    private static final ReentrantLock explicitLock = new ReentrantLock();
+
+    // 1. Synchronized: Bytecode exception table GUARANTEES monitorexit execution
+    public static void safeWithSynchronized() {
+        synchronized (intrinsicLock) {
+            System.out.println("Acquired intrinsic lock!");
+            throw new RuntimeException("Crash inside synchronized block!");
+            // Compiler emits exception table pointing to monitorexit -> Lock is 100% RELEASED!
+        }
+    }
+
+    // 2. ReentrantLock: Try-finally is MANDATORY to prevent permanent deadlocks
+    public static void explicitLockBestPractice() {
+        explicitLock.lock();
+        try {
+            System.out.println("Acquired ReentrantLock!");
+            throw new RuntimeException("Crash inside explicit lock!");
+        } finally {
+            //  MANDATORY: Without this finally block, the lock remains held FOREVER!
+            explicitLock.unlock();
+            System.out.println("ReentrantLock safely released via finally block.");
+        }
+    }
+}
+```
 
 ---
 
@@ -1240,6 +1563,43 @@
 - **Follow-Up Trap:** *"Why does `tryLock` use `System.nanoTime()` instead of `System.currentTimeMillis()`?"*
   - *Winning Answer:* "`System.currentTimeMillis()` reads the wall-clock time, which is subject to NTP clock skew, leap seconds, and manual time updates (can step backwards!). `System.nanoTime()` reads the CPU's monotonic hardware cycle counter (RDTSC), which is guaranteed to only move forward."
 
+#### Production Code Example - Q67: Deadlock-Free Transfer Pattern with tryLock(timeout)
+
+```java
+public class AccountTransferService {
+    public static boolean transferFunds(
+        ReentrantLock lockA, 
+        ReentrantLock lockB, 
+        Runnable transferAction, 
+        long timeoutMs
+    ) throws InterruptedException {
+        long stopTime = System.currentTimeMillis() + timeoutMs;
+
+        while (System.currentTimeMillis() < stopTime) {
+            // Attempt to acquire first lock with a bounded timeout
+            if (lockA.tryLock(50, TimeUnit.MILLISECONDS)) {
+                try {
+                    // Attempt to acquire second lock
+                    if (lockB.tryLock(50, TimeUnit.MILLISECONDS)) {
+                        try {
+                            transferAction.run(); // Critical section executed safely
+                            return true;
+                        } finally {
+                            lockB.unlock();
+                        }
+                    }
+                } finally {
+                    lockA.unlock(); // Release lockA so contending threads can proceed!
+                }
+            }
+            // Add randomized jitter to avoid lockstep livelocks
+            Thread.sleep(ThreadLocalRandom.current().nextInt(10, 30));
+        }
+        return false; // Timed out without risking deadlock
+    }
+}
+```
+
 ---
 
 ### Q68: How does `lockInterruptibly()` differ from standard `lock()` when an interrupt occurs while queued in AQS?
@@ -1257,6 +1617,27 @@
     - It immediately throws **`InterruptedException`**, allowing the calling thread to back out of deadlocks or shutdown cleanly.
 - **Follow-Up Trap:** *"Why is `lockInterruptibly()` essential for implementing deadlock recovery algorithms?"*
   - *Winning Answer:* "Because standard `synchronized` and `lock()` cannot be interrupted! If two threads are deadlocked on standard `lock()`, calling `interrupt()` does nothing. With `lockInterruptibly()`, an external supervisor thread can interrupt one thread to break the deadlock cycle."
+
+#### Production Code Example - Q68: Deadlock Recovery with lockInterruptibly()
+
+```java
+public class InterruptibleLockDemo {
+    private final ReentrantLock lock = new ReentrantLock();
+
+    public void executeCriticalTransaction() throws InterruptedException {
+        //  Immediately throws InterruptedException if interrupted while queued,
+        // rather than hanging indefinitely inside an un-abortable deadlock!
+        lock.lockInterruptibly();
+        try {
+            System.out.println(Thread.currentThread().getName() + " acquired lock interruptibly!");
+            Thread.sleep(2000); // Simulating database write
+        } finally {
+            lock.unlock();
+            System.out.println(Thread.currentThread().getName() + " released lock.");
+        }
+    }
+}
+```
 
 ---
 
@@ -1729,6 +2110,40 @@
 - **Follow-Up Trap:** *"Can `AtomicMarkableReference` prevent the ABA problem?"*
   - *Winning Answer:* "NO! Because a boolean only has two states (`true`/`false`). A reference can flip `true -> false -> true` or `A -> B -> A` with the same boolean mark, failing to detect an ABA sequence."
 
+#### Production Code Example - Q87: Defeating the ABA Problem with AtomicStampedReference
+
+```java
+public class AbaProblemDemo {
+    public static void main(String[] args) throws InterruptedException {
+        String initialRef = "A";
+        int initialStamp = 1;
+        AtomicStampedReference<String> stampedRef = 
+            new AtomicStampedReference<>(initialRef, initialStamp);
+
+        // Thread 1 observes initial state: "A", stamp 1
+        int[] stampHolder = new int[1];
+        String observedRef = stampedRef.get(stampHolder); // "A", stamp 1
+
+        // Thread 2 simulates an ABA modification: A -> B -> A with incrementing stamps
+        Thread thread2 = new Thread(() -> {
+            stampedRef.compareAndSet("A", "B", 1, 2); // Stamp becomes 2
+            stampedRef.compareAndSet("B", "A", 2, 3); // Stamp becomes 3
+            System.out.println("[Thread 2] Executed A -> B -> A. Current stamp: " + stampedRef.getStamp());
+        });
+        thread2.start();
+        thread2.join();
+
+        // Thread 1 attempts CAS: Value is "A", but stamp is 3 (expected 1)!
+        boolean casSuccess = stampedRef.compareAndSet(observedRef, "C", stampHolder[0], stampHolder[0] + 1);
+
+        System.out.println("[Thread 1] CAS success: " + casSuccess);
+        // Output:
+        // [Thread 2] Executed A -> B -> A. Current stamp: 3
+        // [Thread 1] CAS success: false (ABA detected and defeated!)
+    }
+}
+```
+
 ---
 
 ### Q88: How does the LMAX Disruptor pattern achieve 6 million ops/second using a Lock-Free RingBuffer?
@@ -2082,6 +2497,74 @@
   - **Rule:** Never use `newFixedThreadPool()`. Always create a custom `ThreadPoolExecutor` with a **strictly bounded queue** (e.g., `new ArrayBlockingQueue<>(1000)`).
 - **Follow-Up Trap:** *"Why does `newSingleThreadExecutor()` have the exact same vulnerability?"*
   - *Winning Answer:* "Because it also uses an unbounded `new LinkedBlockingQueue<Runnable>()` with capacity `Integer.MAX_VALUE`, guaranteeing OOM under sustained backpressure."
+
+#### Production Code Example - Q103: Building an Enterprise-Safe Bounded ThreadPoolExecutor
+
+```java
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class SafeThreadPoolFactory {
+
+    public static ThreadPoolExecutor createEnterprisePool(
+            String poolName,
+            int corePoolSize,
+            int maxPoolSize,
+            int queueCapacity) {
+
+        // Custom ThreadFactory with meaningful naming and uncaught exception handling
+        ThreadFactory customThreadFactory = new ThreadFactory() {
+            private final AtomicInteger threadSequence = new AtomicInteger(1);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread worker = new Thread(r, poolName + "-worker-" + threadSequence.getAndIncrement());
+                worker.setDaemon(false); // Non-daemon ensures in-flight tasks finish during graceful shutdown
+                worker.setUncaughtExceptionHandler((t, ex) -> {
+                    System.err.printf("[ALERT] Thread %s crashed with unhandled exception: %s%n",
+                            t.getName(), ex.getMessage());
+                });
+                return worker;
+            }
+        };
+
+        // 1. Strictly bounded queue to prevent OutOfMemoryError: Java heap space
+        BlockingQueue<Runnable> boundedQueue = new ArrayBlockingQueue<>(queueCapacity);
+
+        // 2. CallerRunsPolicy provides natural backpressure to slow down producers when saturated
+        RejectedExecutionHandler backpressureHandler = new ThreadPoolExecutor.CallerRunsPolicy();
+
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                60L,
+                TimeUnit.SECONDS,
+                boundedQueue,
+                customThreadFactory,
+                backpressureHandler
+        );
+
+        // Allow core threads to time out if idle for long periods (optional resource reclamation)
+        executor.allowCoreThreadTimeOut(true);
+
+        return executor;
+    }
+
+    public static void main(String[] args) {
+        ThreadPoolExecutor orderPool = createEnterprisePool("order-service", 4, 8, 100);
+
+        for (int i = 1; i <= 10; i++) {
+            final int taskId = i;
+            orderPool.execute(() -> {
+                System.out.printf("[%s] Processing order task #%d%n",
+                        Thread.currentThread().getName(), taskId);
+            });
+        }
+
+        orderPool.shutdown();
+    }
+}
+```
 
 ---
 
@@ -2475,6 +2958,53 @@
 - **Follow-Up Trap:** *"What happens if `countDown()` is called when `state` is already 0?"*
   - *Winning Answer:* "Nothing! The CAS loop checks `if (state == 0) return false;`. It does not decrement below zero, throws no exception, and triggers no wakeups."
 
+#### Production Code Example - Q121: Multi-Service Startup Synchronization with CountDownLatch
+
+```java
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class ServiceStartupCoordinator {
+
+    public static void main(String[] args) throws InterruptedException {
+        int serviceCount = 3;
+        // One-shot countdown latch initialized to the number of dependencies
+        CountDownLatch startupLatch = new CountDownLatch(serviceCount);
+        ExecutorService pool = Executors.newFixedThreadPool(serviceCount);
+
+        String[] services = {"DatabasePool", "KafkaConsumer", "CacheCluster"};
+
+        for (String service : services) {
+            pool.execute(() -> {
+                try {
+                    System.out.printf("[%s] Initializing...%n", service);
+                    Thread.sleep(500); // Simulate network connection & cache warm-up
+                    System.out.printf("[%s] Online and healthy!%n", service);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    startupLatch.countDown(); // Decrements shared AQS state
+                }
+            });
+        }
+
+        System.out.println("[Gateway] Waiting for all internal services to boot...");
+        // Block until count reaches 0, or abort after 5 seconds timeout
+        boolean allStarted = startupLatch.await(5, TimeUnit.SECONDS);
+
+        if (allStarted) {
+            System.out.println("[Gateway] ALL SERVICES READY -> Listening for incoming HTTP traffic on port 8080.");
+        } else {
+            System.err.println("[Gateway] STARTUP FAILED -> One or more dependencies timed out! Aborting.");
+        }
+
+        pool.shutdown();
+    }
+}
+```
+
 ---
 
 ### Q122: How does `CyclicBarrier` differ architecturally from `CountDownLatch` under the hood?
@@ -2501,6 +3031,52 @@
     - Once tripped, the generation advances, `count` resets to `parties`, and the exact same barrier instance can be reused across thousands of successive phases.
 - **Follow-Up Trap:** *"Which thread executes the optional `Runnable barrierAction` in `CyclicBarrier`?"*
   - *Winning Answer:* "The **last arriving thread** (the thread that decremented `count` to 0)! It executes the barrier action synchronously on its own thread before waking up the other waiting threads."
+
+#### Production Code Example - Q122: Multi-Phase Batch Processing with CyclicBarrier and Barrier Action
+
+```java
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class MultiPhaseBatchProcessing {
+
+    public static void main(String[] args) {
+        int workers = 3;
+        int totalPhases = 2;
+
+        // Reusable CyclicBarrier with a barrierAction executed by the last thread to arrive
+        CyclicBarrier barrier = new CyclicBarrier(workers, () -> {
+            System.out.println("\n>>> [BARRIER ACTION] Checkpoint reached: merging partial phase results <<<\n");
+        });
+
+        ExecutorService pool = Executors.newFixedThreadPool(workers);
+
+        for (int workerId = 1; workerId <= workers; workerId++) {
+            final int id = workerId;
+            pool.execute(() -> {
+                try {
+                    for (int phase = 1; phase <= totalPhases; phase++) {
+                        System.out.printf("[Worker %d] Executing computation phase %d...%n", id, phase);
+                        Thread.sleep((long) (Math.random() * 500));
+                        System.out.printf("[Worker %d] Arrived at barrier for phase %d.%n", id, phase);
+
+                        // Waits until all 'parties' have invoked await on this barrier
+                        barrier.await();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (BrokenBarrierException e) {
+                    System.err.printf("[Worker %d] Barrier was broken by another thread!%n", id);
+                }
+            });
+        }
+
+        pool.shutdown();
+    }
+}
+```
 
 ---
 
@@ -3379,6 +3955,43 @@
 - **Follow-Up Trap:** *"Does a Virtual Thread have its own native OS `pthread` or OS `task_struct`?"*
   - *Winning Answer:* "Zero! A Virtual Thread is a pure Java heap object. The OS kernel is completely oblivious to its existence; the OS only sees the few carrier threads."
 
+#### Production Code Example - Q161: Launching 10,000 Virtual Threads with newVirtualThreadPerTaskExecutor
+
+```java
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
+
+public class VirtualThreadScaleDemo {
+
+    public static void main(String[] args) {
+        Instant start = Instant.now();
+
+        // Java 21+: newVirtualThreadPerTaskExecutor() mounts virtual threads on carrier ForkJoinPool
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            IntStream.rangeClosed(1, 10_000).forEach(i -> {
+                executor.submit(() -> {
+                    try {
+                        // Blocking call: unmounts virtual thread continuation; carrier thread is released!
+                        Thread.sleep(Duration.ofMillis(100));
+                        return i;
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return -1;
+                    }
+                });
+            });
+        } // Auto-closeable executor awaits completion of all 10,000 tasks
+
+        Duration elapsed = Duration.between(start, Instant.now());
+        System.out.printf("Successfully executed 10,000 concurrent virtual thread tasks in %d ms!%n",
+                elapsed.toMillis());
+    }
+}
+```
+
 ---
 
 ### Q162: Walk through the step-by-step bytecode and JVM mechanics of `Continuation.yield()`.
@@ -3434,6 +4047,55 @@
        - The JVM cannot serialize or move native C-frames to the Java heap.
 - **Follow-Up Trap:** *"How do you verify if your application is suffering from Carrier Thread Pinning in production?"*
   - *Winning Answer:* "Launch the JVM with the system property **`-Djdk.tracePinnedThreads=full`** (or `short`). The JVM will print the full Java stack trace of every virtual thread that blocks while pinned, pinpointing the offending `synchronized` or native library calls."
+
+#### Production Code Example - Q164: Avoiding Carrier Thread Pinning with ReentrantLock
+
+```java
+import java.util.concurrent.locks.ReentrantLock;
+
+public class PinningPreventionDemo {
+
+    // ANTI-PATTERN in Java 21: synchronized blocks pin carrier threads during blocking I/O!
+    static class LegacyPinnedService {
+        private final Object lock = new Object();
+
+        public void performIoTask() {
+            synchronized (lock) {
+                try {
+                    // PINS CARRIER THREAD! HotSpot cannot unmount virtual thread from C-stack.
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+
+    // RECOMMENDED PATTERN: ReentrantLock unmounts cleanly, releasing carrier thread
+    static class ModernUnpinnedService {
+        private final ReentrantLock lock = new ReentrantLock();
+
+        public void performIoTask() {
+            lock.lock();
+            try {
+                // UNMOUNTS CLEANLY! Carrier thread immediately runs other virtual threads.
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        ModernUnpinnedService service = new ModernUnpinnedService();
+        Thread vThread = Thread.ofVirtual().name("safe-worker").start(service::performIoTask);
+        vThread.join();
+        System.out.println("Executed blocking task with ReentrantLock without carrier pinning.");
+    }
+}
+```
 
 ---
 

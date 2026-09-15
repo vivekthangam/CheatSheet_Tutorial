@@ -1,0 +1,112 @@
+"""
+Omni-Channel Enterprise GraphQL Schema
+Compliant with Relay Cursor Connection Specification & Enterprise Standards
+"""
+scalar DateTime
+scalar JSON
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+interface Node {
+  id: ID!
+}
+
+type Customer implements Node {
+  id: ID!
+  name: String!
+  email: String!
+  tier: String!
+}
+
+type Product implements Node {
+  id: ID!
+  sku: String!
+  name: String!
+  price: Float!
+  inventoryCount: Int!
+}
+
+type OrderItem {
+  product: Product!
+  quantity: Int!
+  unitPrice: Float!
+}
+
+type Order implements Node {
+  id: ID!
+  customer: Customer!
+  items: [OrderItem!]!
+  totalAmount: Float!
+  currency: String!
+  status: OrderStatus!
+  createdAt: DateTime!
+  version: Int!
+}
+
+# --- Relay Cursor Connections ---
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type OrderEdge {
+  cursor: String!
+  node: Order!
+}
+
+type OrderConnection {
+  edges: [OrderEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+# --- Inputs ---
+input OrderItemInput {
+  productId: ID!
+  quantity: Int!
+}
+
+input CreateOrderInput {
+  customerId: ID!
+  items: [OrderItemInput!]!
+  clientMutationId: String
+}
+
+# --- Mutations & Union Results ---
+type UserError {
+  field: String
+  message: String!
+  code: String!
+}
+
+type CreateOrderPayload {
+  order: Order
+  userErrors: [UserError!]!
+  clientMutationId: String
+}
+
+type Query {
+  node(id: ID!): Node
+  product(id: ID!): Product
+  products: [Product!]!
+  order(id: ID!): Order
+  orders(first: Int = 10, after: String, status: OrderStatus): OrderConnection!
+  customer(id: ID!): Customer
+}
+
+type Mutation {
+  createOrder(input: CreateOrderInput!): CreateOrderPayload!
+  updateOrderStatus(id: ID!, status: OrderStatus!): Order!
+}
+
+type Subscription {
+  orderStatusChanged(orderId: ID!): Order!
+  liveTelemetryStream: JSON!
+}

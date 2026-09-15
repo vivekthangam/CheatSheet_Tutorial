@@ -1,4 +1,4 @@
-[🏠 Back to Home](README.md) | [⚛️ React Master Guide](react_master_guide.md) | [🅰️ Angular Master Guide](angular_master_guide.md) | [🌐 Frontend Terms Encyclopedia](frontend_polyglot_technical_terms_master_guide.md)
+[🏠 Back to Home](README.md) | [⚛️ React Scenarios](react_scenarios_master_guide.md) | [🅰️ Angular Scenarios](angular_scenarios_master_guide.md) | [🟢 Node.js Scenarios](nodejs_scenarios_master_guide.md) | [▲ Next.js Scenarios](nextjs_scenarios_master_guide.md) | [🌐 Frontend Terms Encyclopedia](frontend_polyglot_technical_terms_master_guide.md)
 
 # 🌐 Frontend Polyglot: 50+ Real-World Production Interview Scenarios Master Guide (React, Angular, TypeScript & JavaScript)
 
