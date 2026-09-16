@@ -1,6 +1,9 @@
-[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [Tech Glossary](glossary.md)
+[Back to Home](../README.md) | [Interview Prep Guide](interview_prep.md) | [🧠 Cognitive & Memory Playbook](engineers_cognitive_master_playbook.md) | [Tech Glossary](glossary.md)
 
 # 🎯 Senior Architect: The Master Technical & System Design Interview Preparation Guide
+
+> [!TIP]
+> **Cognitive Performance & Memory Recall:** Struggling with mental fog, clumsy mind, freezing when asked questions, or forgetting technical concepts? Read **[The Engineer's Cognitive Operating System & Learning Playbook](engineers_cognitive_master_playbook.md)** for high-retention spaced retrieval and the 5-second interview stall & structure formula.
 
 A comprehensive, production-tested blueprint for Senior Software Engineers, Tech Leads, and Principal Architects preparing for Tier-1 Tech (FAANG, Fintech, High-Frequency Trading, Cloud Infrastructure) interviews.
 

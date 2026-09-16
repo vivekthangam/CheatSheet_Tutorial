@@ -327,8 +327,10 @@
 | Document Title | File Link | Focus Areas & Technical Depth | Target Level |
 | :--- | :--- | :--- | :--- |
 | **System Design Masterclass** | [`system_design.md`](ai-algorithms/system_design.md) | DSA in Distributed Systems, GoF (LLD), HLD (TinyURL, Chat, Netflix, Uber, Rate Limiter). | Senior to Staff |
+| **Problem-to-Pattern Blueprint Master Guide (100 Scenarios)** | [`system_design_problem_to_pattern_blueprint_master_guide.md`](ai-algorithms/system_design_problem_to_pattern_blueprint_master_guide.md) | The Ultimate Engineering Blueprint: Problem Statement to LLD (GoF) + HLD (Distributed Systems) Architecture across 10 Categories, Analytical Cognitive Thinking Framework, Runtime Sequence Mechanics, Full Code/Schemas, Pros & Cons, Edge Traps. | Senior, Staff & Principal Architect |
 | **Original System Design Reference** | [`original_system_design.md`](ai-algorithms/original_system_design.md) | Archive of foundational system design architectures and trade-off analyses. | Reference |
 | **Senior Architect Interview Guide** | [`topics/interview_prep.md`](topics/interview_prep.md) | System design rounds, Behavioral STAR methodology, Staff+ bar-raiser expectations. | Staff / Principal |
+| **The Engineer's Cognitive Operating System & Learning Playbook** | [`topics/engineers_cognitive_master_playbook.md`](topics/engineers_cognitive_master_playbook.md) | Conquering Mental Fog, Clumsy Mind, Poor Focus & Memory Decay, 3-Second Reflex Engine, Spaced Retrieval, 5 Distributed Archetypes, Interview Recall. | All Engineers & Architects |
 | **Regular Expressions Engineering** | [`regx.md`](ai-algorithms/regx.md) | Deterministic Finite Automata, Lookarounds, Captures, ReDoS protection, 110+ Recipes. | Intermediate to Senior |
 
 ---

@@ -19,6 +19,7 @@ Welcome to the comprehensive, production-grade engineering documentation and sce
 | **Java Master Guide: Core to Staff Architecture** | [java_master_guide.md](java-core/java_master_guide.md) | Flagship Guide: JVM Internals, Tiered JIT, ClassLoaders, Java 17/21 Records & Sealed Types, Generational GC, JCF, NIO.2, Virtual Threads Loom | 4 Production Blueprints, 4 War Room RCAs & 45 Senior/Staff Scenarios |
 | **Enterprise Java Technical Terms Encyclopedia** | [enterprise_java_technical_terms_master_guide.md](java-core/enterprise_java_technical_terms_master_guide.md) | Zero-Jargon Definitions, Mental Models, Code Blueprints & Pitfalls for 60+ Core Terms (CGLIB, Proxies, Dirty Checking, AEAD) | 60+ Foundational Deep Dives across AOP, JPA, Crypto, Kafka, Netty |
 | **JVM JIT Compiler Internals & Tiered Compilation Master Guide** | [jvm_jit_compiler_master_guide.md](java-core/jvm_jit_compiler_master_guide.md) | Template Interpreter, C1 Client, C2 Server / Opto, Graal, Tiered Levels 0-4, Escape Analysis & Scalar Replacement, Inlining, OSR, Deoptimization, Code Cache Architecture, hsdis Assembly | 4 Production War Room RCAs & 45 Senior/Staff Scenarios |
+| **Java Version Features Evolution & Release History Master Guide** | [java_version_features_master_guide.md](java-core/java_version_features_master_guide.md) | JEP, LTS, GA, STS, JCP, TCK Governance, Java 8 to Java 21 LTS & 25 Evolution, 25 Flagship 6-Part Deep Dives (Streams, Records, Loom, FFM API, Pattern Matching, Sealed Types), Migration Playbook | 50 Senior & Staff Architecture Scenarios & Migration Strategies |
 | **Java 200+ Scenarios & Deep Internals Master Guide** | [java_interview_master_guide.md](java-core/java_interview_master_guide.md) | Collections Internals, JMM, Singleton Masterclass, Generics, Reflection in Spring, AOP, Thread Safety, Flagship Programs | 200+ Deep Scenarios & Flagship Coding Challenges |
 | **Java Concurrency: 200 Scenarios Master Guide** | [java_threads_concurrency_200_scenarios_master_guide.md](scenarios/java_threads_concurrency_200_scenarios_master_guide.md) | Virtual Threads, JMM & Hardware Coherence, AQS, Lock-Free CAS, Executor Tuning, Thread Dumps & Outage Forensics | **200 Real-World Interview Scenarios** (Strict 4-Part Structure) |
 | **Java Collections & Streams: 200 Scenarios Master Guide** | [java_collections_streams_200_scenarios_master_guide.md](scenarios/java_collections_streams_200_scenarios_master_guide.md) | HashMap Bitwise Math, ConcurrentSkipList, Spliterators, Stream Pipeline Optimization, Memory Layouts, GC Pressure | **200 Real-World Interview Scenarios** (Strict 4-Part Structure) |
@@ -150,6 +151,7 @@ Welcome to the comprehensive, production-grade engineering documentation and sce
 | **Message Queues: 200 Production Scenarios Master Guide** | [message_queues_200_scenarios_master_guide.md](scenarios/message_queues_200_scenarios_master_guide.md) | Commit Logs, EOS, Consumer Groups & Rebalances, Wire Tuning, RabbitMQ & BEAM, Apache Pulsar & BookKeeper, Redis Streams, NATS JetStream, SQS/SNS, RocksDB Stateful Topologies, Multi-Region DR, 20 War Room Forensics | **200 Real-World Production Scenarios** (Strict 4-Part Structure) |
 | **Message Queues for Beginners (Zero-to-Hero)** | [message_queues_beginner_guide.md](messaging-distributed/message_queues_beginner_guide.md) | The Fast Food Analogy, 5 Core Building Blocks, Queue vs Topic, DLQ & ACKs, Beginner Traps | 10 Junior Interview Q&As (ELI5 + Technical) |
 | **Design Patterns & System Design Masterclass** | [system_design.md](ai-algorithms/system_design.md) | DSA in Distributed Systems, GoF (LLD), HLD, 5 Deep-Dives (TinyURL, Chat, Netflix, Uber, Rate Limiter) | 200+ Architecture Scenarios & FAANG Prep |
+| **Problem-to-Pattern Blueprint Master Guide (100 Scenarios)** | [system_design_problem_to_pattern_blueprint_master_guide.md](ai-algorithms/system_design_problem_to_pattern_blueprint_master_guide.md) | The Ultimate Engineering Blueprint: Problem Statement to LLD (GoF) + HLD (Distributed Systems) Architecture across 10 Categories, Analytical Cognitive Thinking Framework, Runtime Sequence Mechanics, Full Code/Schemas, Pros & Cons, Edge Traps | **100 End-to-End Enterprise Problem Statements & Architectural Blueprints** (Strict 8-Part Structure) |
 | **SQL & PL/SQL Master Reference** | [sql.md](databases-persistence/sql.md) | DDL, DML, Window functions, CTEs, Indexing, Execution plans | 50+ Real-World Query Recipes |
 | **SQL Normalization & ACID Engine Architecture Master Guide** | [sql_normalization_acid_master_guide.md](databases-persistence/sql_normalization_acid_master_guide.md) | 1NF-6NF, BCNF, DKNF, Anomalies, WAL, ARIES Recovery, fsync(), 6 Concurrency Phenomena, Strict 2PL, MVCC xmin/xmax, SSI | 4 Production Blueprints, 2 War Room RCAs & 50 Staff Interview Scenarios |
 | **MongoDB Polyglot Architecture Master Guide (Java & Node.js)** | [mongodb_master_guide.md](databases-persistence/mongodb_master_guide.md) | BSON, WiredTiger Internals, Aggregation Pipeline, Sharding, Replica Sets, Spring Data Mongo, Mongoose, Change Streams, Multi-Doc ACID | 5 Production Blueprints, 2 War Room RCAs & 50 Staff Interview Scenarios |
@@ -160,6 +162,7 @@ Welcome to the comprehensive, production-grade engineering documentation and sce
 | **Regular Expressions Engineering** | [regx.md](ai-algorithms/regx.md) | Automata, Lookarounds, Captures, ReDoS protection | 110+ Categorized RegEx Patterns |
 | **Technical Glossary (2026 Edition)** | [topics/glossary.md](topics/glossary.md) | Distributed Systems, Cloud Native & AI Glossary | Comprehensive Terminology Index |
 | **Senior Architect Interview Guide** | [topics/interview_prep.md](topics/interview_prep.md) | System design rounds, Behavioral STAR, Staff+ expectations | FAANG/FinTech Interview Blueprint |
+| **The Engineer's Cognitive Operating System & Learning Playbook** | [engineers_cognitive_master_playbook.md](topics/engineers_cognitive_master_playbook.md) | Conquering Mental Fog, Clumsy Mind, Poor Focus & Memory Decay, 3-Second Reflex Engine, Spaced Retrieval, 5 Distributed Archetypes, Interview Recall | Master Cognitive Playbook & Action Cards |
 
 ---
 
@@ -371,6 +374,8 @@ This documentation repository is built around three foundational tiers:
 - ⚡ **Mastering JVM JIT Compiler Internals, Tiered Levels 0–4, Inlining, Escape Analysis, or OSR?** Explore the [JVM JIT Compiler Internals & Tiered Compilation Master Guide](java-core/jvm_jit_compiler_master_guide.md)
 - 🧹 **Tuning memory and analyzing JVM garbage collection?** Explore [Java GC Mastery](topics/java_gc_mastery.md)
 - 🏛️ **Preparing for a System Design Interview?** Review the [200+ System Design Masterclass](ai-algorithms/system_design.md)
+- 🗺️ **Bridging Ambiguous Problem Statements to LLD Patterns & Distributed HLD Architecture?** Master the [Problem-to-Pattern Blueprint Master Guide (100 Scenarios)](ai-algorithms/system_design_problem_to_pattern_blueprint_master_guide.md)
+- 🧠 **Struggling with Mental Fog, Poor Focus, "Lazy Thinking" or Forgetting Technical Concepts?** Master the [Engineer's Cognitive Operating System & Learning Playbook](topics/engineers_cognitive_master_playbook.md)
 - 🗄️ **Mastering Relational Theory, Normalization (1NF–6NF, BCNF) & ACID Internals (WAL, ARIES, MVCC, SSI)?** Master database architecture with the [SQL Normalization & ACID Engine Master Guide](databases-persistence/sql_normalization_acid_master_guide.md)
 - 📚 **Looking for all 150+ repository markdown guides categorized across 20 disciplines?** Browse the [Complete Master Directory: All Markdown Guides Categorized](all_markdown_files_categorized.md)
 
@@ -488,17 +493,25 @@ Provide 4 real-world war-room incident post-mortems based on Sev-1 outages:
 
 ---
 
-# TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (50 PRODUCTION SCENARIOS)
-Generate a comprehensive bank of 50 technical interview questions across 3 distinct bands:
-- **Tier 1: Core Fundamentals & Runtime Mechanics** (Questions 1–16)
-- **Tier 2: Scale, Distributed Failures & Production Bottlenecks** (Questions 17–34)
-- **Tier 3: Staff/Principal Architecture, Consensus & Low-Level Systems Traps** (Questions 35–50)
+# TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (200 PRODUCTION SCENARIOS)
+Generate an exhaustive, battle-tested compilation of 200 production interview scenarios organized across 10 master categories (20 questions each):
+- **Category 1: Core Fundamentals & Runtime Mechanics** (Q1–Q20)
+- **Category 2: Protocol Specifics, Network Boundaries & Serialization** (Q21–Q40)
+- **Category 3: State Machines, Partitioning & Consensus Internals** (Q41–Q60)
+- **Category 4: Concurrency, Thread Models & Memory Pressure** (Q61–Q80)
+- **Category 5: Throughput Scaling, Batching & Zero-Copy I/O** (Q81–Q100)
+- **Category 6: Fault Tolerance, Quorums & Split-Brain Mitigation** (Q101–Q120)
+- **Category 7: Transactional Guarantees, Outbox & Exactly-Once Semantics** (Q121–Q140)
+- **Category 8: Multi-Tenant Isolation, Quotas & Backpressure** (Q141–Q160)
+- **Category 9: Disaster Recovery, Data Corruption & Storage Subsystems** (Q161–Q180)
+- **Category 10: Production War Room Incidents & Outage Forensics** (Q181–Q200)
 
 *For EVERY scenario, strictly follow this 4-part structure:*
 1. **Exact Scenario & Question:** A challenging, realistic scenario as framed by Tier-1 bar-raiser interviewers.
 2. **What the Interviewer Evaluates:** Specific competency signals, hidden criteria, and the exact difference between an average and an elite candidate.
 3. **Standout Technical Answer:** An articulate, deep technical response covering runtime mechanics, protocol specifics, and trade-offs.
-4. **Follow-Up Trap Question & Winning Answer:** The subtle edge-case question designed to test whether the candidate truly built these systems or merely memorized docs, paired with the battle-tested counter-response.```
+4. **Follow-Up Trap Question & Winning Answer:** The subtle edge-case question designed to test whether the candidate truly built these systems or merely memorized docs, paired with the battle-tested counter-response.
+```
 
 ---
 
