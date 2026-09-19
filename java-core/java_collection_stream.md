@@ -1,4 +1,4 @@
-[🏠 Back to Home](README.md) | [⚡ Quick Reference Cheat Sheet](java_collection.md) | [📚 Collections Reference](topics/java_collections_mastery.md) | [🔥 200 Collections & Streams Scenarios Guide](java_collections_streams_200_scenarios_master_guide.md)
+[🏠 Back to Home](README.md) | [⚡ Quick Reference Cheat Sheet](java_collection.md) | [🎯 Functional Interfaces & Streams (filter, map, forEach)](java_functional_interfaces_and_streams_master_guide.md) | [📚 Collections Reference](topics/java_collections_mastery.md) | [🔥 200 Collections & Streams Scenarios Guide](java_collections_streams_200_scenarios_master_guide.md)
 
 # 📚 Java Collections & Streams Polyglot Masterclass: 100+ Real-World Scenarios
 

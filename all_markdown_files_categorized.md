@@ -318,6 +318,7 @@
 | **IELTS 500 Academic Lexicon** | [`ielts_500_words_master_guide.md`](communication-english/ielts_500_words_master_guide.md) | Complete 500 Academic Word List (AWL) A-to-Z with Tamil Intuition and Sentences. | IELTS Band 9 Target |
 | **Business English & Corporate Words** | [`business_english_corporate_words_master_guide.md`](communication-english/business_english_corporate_words_master_guide.md) | 75 Corporate Strategy Terms, Top 25 Acronyms, 15 Diplomatic Email Rewrites. | Corporate Professionals |
 | **IT Technical Words Master Guide** | [`it_tech_words_master_guide.md`](communication-english/it_tech_words_master_guide.md) | 75 Core Architectural Terms, PR Review Debates, Sev-1 Outage Communication Scripts. | Software Engineers |
+| **Developer English Vocabulary Master Guide** | [`developer_english_vocabulary_master_guide.md`](communication-english/developer_english_vocabulary_master_guide.md) | Parts of Speech Academy (Verb/Noun/Adjective/Adverb), 30+ Deep Dives on confusing words (`invert`, `trivial`, `ephemeral`, `truncate`), CLI/Code snippets, Tamil intuition, A-Z Dictionary. | Tamil-Medium Engineers & Devs |
 | **English Root Words & Idioms (Combo)** | [`english_phrases_idioms_root_words_master_guide.md`](communication-english/english_phrases_idioms_root_words_master_guide.md) | Comprehensive combined compendium of roots, idioms, and workplace phrases. | Comprehensive Reference |
 
 ---

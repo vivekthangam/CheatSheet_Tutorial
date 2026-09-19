@@ -1,4 +1,4 @@
-﻿# 🗺️ The Master Learning Curriculum & Architecture Roadmap
+# 🗺️ The Master Learning Curriculum & Architecture Roadmap
 ### The Systematic Blueprint for Navigating 150+ Enterprise Engineering Guides
 
 > **Navigation Bar**:  
@@ -273,6 +273,7 @@ Step 6: System Design Masterclass  ◄── Step 5: Advanced Lexicon (IELTS) �
    * Overcome regional language transfer and Tanglish traps with [Spoken English & Professional Communication](communication-english/spoken_english_tamil_to_global_master_guide.md).
    * Practice real-world workplace conversations across 500 situations in [500 Spoken English Scenarios](communication-english/spoken_english_500_scenarios_master_guide.md).
 2. **Lexical Precision & Etymology**:
+   * Master software developer grammar families (Verb, Noun, Adjective, Adverb) and confusing technical terms (`invert`, `trivial`, `ephemeral`, `truncate`, `sanitize`) with [Developer English Vocabulary Master Guide](communication-english/developer_english_vocabulary_master_guide.md).
    * Expand vocabulary exponentially using 40 Greek/Latin roots with [English Root Words & Etymology](communication-english/english_root_words_master_guide.md).
    * Master natural conversational phrasing with [English Phrases & Phrasal Verbs](communication-english/english_phrases_master_guide.md) and [English Idioms & Metaphors](communication-english/english_idioms_master_guide.md).
    * Achieve Band 8.5–9.0 academic precision with [Advanced Vocabulary (IELTS & TOEFL)](communication-english/ielts_toefl_advanced_vocabulary_master_guide.md) and [IELTS 500 Words Master Guide](communication-english/ielts_500_words_master_guide.md).
