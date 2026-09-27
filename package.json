@@ -1,0 +1,13 @@
+{
+  "name": "cheat-sheet-tutorial",
+  "private": true,
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vue": "^3.5.0",
+    "vitepress": "^1.6.0"
+  }
+}

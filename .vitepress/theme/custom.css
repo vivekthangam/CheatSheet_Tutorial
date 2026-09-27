@@ -1,0 +1,63 @@
+/**
+ * =================================================================
+ * Full-Screen Layout Overrides for VitePress
+ * ================================================================= */
+
+:root {
+  /* Override VitePress default layout maximum width constraint */
+  --vp-layout-max-width: 100% !important;
+}
+
+/* Force the outer document layout to span full viewport width */
+.VPContent {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.VPDoc {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 32px 48px !important;
+}
+
+.VPDoc .container {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Widen the central markdown reading area and content columns */
+.VPDoc .content {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.VPDoc .content-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0 32px !important;
+}
+
+/* Expand top navigation bar to match edge-to-edge layout */
+.VPNavBar .content {
+  max-width: 100% !important;
+  padding: 0 32px !important;
+}
+
+.VPNav {
+  max-width: 100% !important;
+}
+
+/* Optional: Make wide tables and code blocks scale smoothly across full width */
+.vp-doc table {
+  display: table !important;
+  width: 100% !important;
+  overflow-x: auto;
+}
+
+.vp-doc div[class*='language-'] {
+  max-width: 100% !important;
+}
