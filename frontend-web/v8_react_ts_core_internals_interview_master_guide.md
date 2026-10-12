@@ -549,7 +549,7 @@ If type $A$ has all properties required by type $B$, then $A$ is a subtype of $B
 
 ### The 4 Types of Variance
 Let $S \le T$ ($S$ is a subtype of $T$, e.g., `Dog` extends `Animal`).
-How does a generic container $F<T>$ behave?
+How does a generic container `F<T>` behave?
 
 | Variance Type | Definition | TypeScript Rule | Real-World Example |
 |---|---|---|---|

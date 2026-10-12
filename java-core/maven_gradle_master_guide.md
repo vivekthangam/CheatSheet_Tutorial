@@ -1854,7 +1854,7 @@ flowchart TD
 5. **Main Build Configuration Phase**: Gradle evaluates `services/order-service/build.gradle.kts`. When it encounters `plugins { id("java-common-conventions") }`, the plugin resolver loads the synthesized class from the `build-logic` ClassLoader, applying toolchains, tasks, and configurations seamlessly.
 
 ##### 3. Low-Level JVM, ClassLoader Isolation & Kotlin DSL Compilation Mechanics
-- **ClassLoader Hierarchy & Class Isolation**: 
+- **ClassLoader Hierarchy & Class Isolation**:
   - `buildSrc` places its classes directly onto the root buildscript ClassLoader (`root Project.classLoader`), causing global classpath contamination where plugin dependencies can conflict with user dependencies.
   - `build-logic` (as an included composite build) compiles in a completely disjoint JVM ClassLoader sandbox (`RootClassLoader` -> `GradleApiClassLoader` -> `BuildLogicExportClassLoader`). Only exported plugin identifiers and public APIs are visible to consumer projects, strictly enforcing separation of concerns.
 - **Kotlin DSL Bytecode Generation**: Under the hood, the Kotlin compiler (`kotlinc`) translates declarative script blocks into synthetic Kotlin classes extending `org.gradle.kotlin.dsl.precompile.PrecompiledProjectScript`. Top-level calls (such as `java { ... }` or `tasks.withType<Test> { ... }`) are compiled into invocations against Gradle's type-safe schema accessors generated during script compilation.

@@ -197,7 +197,7 @@ include "/usr/share/nano/*.nanorc"
 > [!WARNING]
 > **The #1 Nano Incident in Production: Hard Wrapping (`-w` flag requirement)**
 > By default on older Linux distributions, `nano` enables **automatic line wrapping**. If you paste a long, unbroken string—such as an RSA private key, a JWT bearer token, or a base64 encoded secret in a Kubernetes ConfigMap—nano will silently insert a hard carriage return / newline character every 80 characters!
-> 
+>
 > **How to prevent this:**
 > Always launch nano with the `-w` (no wrap) flag when editing production configuration files:
 > ```bash

@@ -12,7 +12,7 @@ A battle-tested engineering handbook and architectural reference for mastering, 
 
 ### The Problem: The "It Works on My Machine" Curse
 Imagine a traveling sales team where every employee must furnish their own hotel room:
-1. **The Individual Drift Problem**: Alice buys an ergonomic desk from IKEA. Bob rents a waterbed. Charlie sleeps on the floor. 
+1. **The Individual Drift Problem**: Alice buys an ergonomic desk from IKEA. Bob rents a waterbed. Charlie sleeps on the floor.
 2. **The Toolchain Nightmare**: When corporate headquarters sends an electrical device requiring a 220V European plug, Alice’s room short-circuits, Bob’s outlet catches fire, and Charlie doesn't have electricity.
 3. **The Onboarding Time Sink**: Every time a new salesperson joins the company, they spend three weeks shopping for furniture, painting the walls, and calling plumbers before they can sell a single product.
 
@@ -821,7 +821,7 @@ vboxguest: version mismatch: kernel driver version 6.1.38 does not match host Vi
 ```
 
 ### 3. Deep Root Cause Analysis (RCA)
-The host computer had VirtualBox **7.0.14** installed. However, the base box (`ubuntu/jammy64`) was compiled months prior with VirtualBox Guest Additions **6.1.38**. Furthermore, during an earlier provisioning step, an engineer ran `apt-get upgrade -y`, which updated the guest Linux kernel from `5.15.0-80-generic` to `5.15.0-105-generic`. 
+The host computer had VirtualBox **7.0.14** installed. However, the base box (`ubuntu/jammy64`) was compiled months prior with VirtualBox Guest Additions **6.1.38**. Furthermore, during an earlier provisioning step, an engineer ran `apt-get upgrade -y`, which updated the guest Linux kernel from `5.15.0-80-generic` to `5.15.0-105-generic`.
 Because DKMS (Dynamic Kernel Module Support) failed to recompile the `vboxsf.ko` kernel module against the newly installed kernel headers, the filesystem driver was completely missing from `/lib/modules/$(uname -r)/`, causing all synced folder mounts to crash.
 
 ### 4. Immediate Mitigation & Permanent Architectural Fix

@@ -59,7 +59,7 @@ Every single term in this guide strictly follows the **6-Part Zero-Ambiguity Bre
 ### 1.1 The V8 Event Loop: Microtask Queue vs Macrotask Queue
 - **Plain-English Definition & Real-World Analogy:**
   JavaScript is **single-threaded**: it can only execute one line of code at any given millisecond. The **Event Loop** is a continuously running orchestrator that coordinates when synchronous code, microtasks, and macrotasks are pushed onto the Call Stack.
-  *Real-World Analogy:* Think of a bank teller (the Call Stack). 
+  *Real-World Analogy:* Think of a bank teller (the Call Stack).
   - **Synchronous code:** The customer currently standing at the counter.
   - **Microtasks (`Promise.then`, `queueMicrotask`):** VIP customers standing in an express line. The teller MUST serve *every single VIP customer* in line before calling anyone from the general waiting lobby!
   - **Macrotasks (`setTimeout`, `setInterval`, I/O events):** Regular ticket holders waiting in the lobby.
@@ -419,7 +419,7 @@ export default async function ProductPage({ params }) {
     <p>Count: {{ count() }}</p>
     <p>Double: {{ doubleCount() }}</p>
     <button (click)="increment()">+1</button>
-  `
+  ```
 })
 export class CounterComponent {
   count = signal(0); // Writable Signal
@@ -505,3 +505,4 @@ export class CounterComponent {
 
 ---
 [🏠 Back to Home](README.md) | [⚛️ React Master Guide](react_master_guide.md) | [🅰️ Angular Master Guide](angular_master_guide.md)
+```

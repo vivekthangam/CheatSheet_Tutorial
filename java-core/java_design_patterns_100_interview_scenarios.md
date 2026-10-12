@@ -513,7 +513,7 @@ public final class SecureTransferOrder {
 ### Q6: Prototype Pattern with Deep Cloning & Copy-on-Write Memory Optimization
 
 #### 1. Exact Scenario & Question
-"You are developing a real-time multiplayer warfare simulation. Spawning an enemy unit involves loading 200MB of 3D polygonal mesh data, loading textures, and calculating initial physics collision bounding boxes (taking 450ms per unit from disk). In battle, 5,000 units must spawn simultaneously. 
+"You are developing a real-time multiplayer warfare simulation. Spawning an enemy unit involves loading 200MB of 3D polygonal mesh data, loading textures, and calculating initial physics collision bounding boxes (taking 450ms per unit from disk). In battle, 5,000 units must spawn simultaneously.
 1. Explain why calling `new Unit()` causes unacceptable CPU/memory latency.
 2. How does the Prototype Pattern resolve this?
 3. What is the difference between Shallow Copy and Deep Copy in Java, why is `java.lang.Cloneable` considered broken by language architects (like Joshua Bloch), and how do you implement a clean Copy Constructor?"
@@ -591,7 +591,7 @@ public final class WarfareUnit {
 ### Q7: Object Pool Pattern & High-Throughput Resource Lifecycle Management
 
 #### 1. Exact Scenario & Question
-"Your team is building a low-latency gRPC trading connector. Establishing a secure TLS socket connection to NASDAQ takes 180ms of handshaking, but once connected, messages take 200 microseconds. Under peak market open, 10,000 threads execute trades. 
+"Your team is building a low-latency gRPC trading connector. Establishing a secure TLS socket connection to NASDAQ takes 180ms of handshaking, but once connected, messages take 200 microseconds. Under peak market open, 10,000 threads execute trades.
 1. Why does creating connections on-demand cause connection exhaustion and high latency?
 2. How do you design an `ObjectPool` using the GoF Creational principles?
 3. How do you handle resource validation, pool sizing, idle eviction, and thread starvation under heavy load?"
@@ -974,7 +974,7 @@ If you use standard inheritance, you need `ThalesLunaStandardSigner`, `UtimacoSt
 - **Elite Candidate**: Clearly identifies the Abstraction hierarchy (what the business wants to do) and the Implementation hierarchy (how the hardware executes it). Explains that Bridge is designed upfront to allow both hierarchies to grow independently without combinatorial explosion.
 
 #### 3. Standout Technical Answer
-The **Bridge Pattern** decouples an abstraction from its implementation so that the two can vary independently. 
+The **Bridge Pattern** decouples an abstraction from its implementation so that the two can vary independently.
 - The **Abstraction** (`CryptographicSigner`) defines high-level client operations and holds a reference to the **Implementor** (`HsmDriver`).
 - The **Implementor** provides primitive operations (`rawSign`, `openSession`).
 - New signer styles (`AuditSigner`) and new HSM vendors (`AzureDedicatedHsm`) can be added in parallel without modifying existing classes.
@@ -1060,7 +1060,7 @@ class AuditEnforcedSigner extends CryptographicSigner {
 - A `User` has specific permissions.
 - A `Team` contains users and sub-teams.
 - A `Department` contains multiple teams and regional offices.
-When evaluating `hasPermission(String permissionName)`, client code must not write fragile checks like `if (entity instanceof Department) { loopOverTeams(); } else if (entity instanceof Team) { ... }`. 
+When evaluating `hasPermission(String permissionName)`, client code must not write fragile checks like `if (entity instanceof Department) { loopOverTeams(); } else if (entity instanceof Team) { ... }`.
 Design a unified permission evaluation engine using the **Composite Pattern** that executes uniformly across leaf nodes and composite tree branches."
 
 #### 2. What the Interviewer Evaluates
@@ -2573,7 +2573,7 @@ public class ActiveOrderBookProxy {
 ### Q32: Balking Pattern in Smart Appliances & Auto-Save Systems
 
 #### 1. Exact Scenario & Question
-"You are programming the firmware controller for an industrial Smart Washing Machine. 
+"You are programming the firmware controller for an industrial Smart Washing Machine.
 - If a user presses the 'Start Wash' button while the machine is already washing clothes, the system must immediately abort/ignore the command (**Balk**) without waiting or queueing.
 - Similarly, in an IDE document auto-saver: if an auto-save task fires while an active save is already in progress, or if the document has no unsaved changes (`!isDirty`), the thread must instantly exit without performing disk I/O.
 How does the **Balking Pattern** work, and how does it fundamentally differ from the **Guarded Suspension Pattern**?"
@@ -2718,7 +2718,7 @@ public final class BulletproofDclFactory {
 ### Q34: Guarded Suspension Pattern & Spurious Wakeups
 
 #### 1. Exact Scenario & Question
-"You are implementing an in-memory thread-safe `BoundedQueue` without using `java.util.concurrent`. 
+"You are implementing an in-memory thread-safe `BoundedQueue` without using `java.util.concurrent`.
 - When the queue is empty, consumer threads attempting to `dequeue()` must suspend execution until items become available.
 - When the queue is full, producer threads must suspend execution until space is cleared.
 1. Why does Java mandate checking the guard condition inside a `while` loop (`while (isEmpty) wait();`) instead of an `if` statement (`if (isEmpty) wait();`)?
@@ -2785,7 +2785,7 @@ public class GuardedBoundedQueue<T> {
 ### Q35: Half-Sync/Half-Async Pattern in High-Throughput Network Servers
 
 #### 1. Exact Scenario & Question
-"In high-performance network frameworks like Netty or Node.js/Java hybrids, handling 100,000 concurrent network sockets with dedicated synchronous blocking threads causes the JVM to crash due to thread stack memory exhaustion (100,000 threads $\times$ 1MB stack = 100GB RAM). 
+"In high-performance network frameworks like Netty or Node.js/Java hybrids, handling 100,000 concurrent network sockets with dedicated synchronous blocking threads causes the JVM to crash due to thread stack memory exhaustion (100,000 threads $\times$ 1MB stack = 100GB RAM).
 1. How does the **Half-Sync/Half-Async Pattern** solve this by decoupling asynchronous I/O from synchronous business processing?
 2. How does Netty implement this with non-blocking `EventLoopGroup` (Async layer), a `Queue` buffer, and a synchronous worker `ThreadPoolExecutor` (Sync layer)?"
 
@@ -2862,7 +2862,7 @@ public class HalfSyncHalfAsyncServer {
 ### Q36: Leader Election Pattern in Distributed Consensus & High Availability
 
 #### 1. Exact Scenario & Question
-"You are deploying 10 replicas of a billing microservice in Kubernetes. At midnight, a scheduled job must run to invoice all corporate accounts. If all 10 pods execute the cron job, customers will be billed 10 times (disaster). 
+"You are deploying 10 replicas of a billing microservice in Kubernetes. At midnight, a scheduled job must run to invoice all corporate accounts. If all 10 pods execute the cron job, customers will be billed 10 times (disaster).
 1. How does the **Leader Election Pattern** guarantee that exactly one pod acts as the active Leader while the remaining 9 pods stay in warm standby?
 2. What is a **Split-Brain Scenario**, and how do consensus algorithms (Raft / Paxos / ZooKeeper ZAB) use Quorums ($N/2 + 1$) to prevent two leaders from coexisting during network partitions?"
 
@@ -3006,7 +3006,7 @@ public class LeaderFollowersThreadPool {
 ### Q38: Lockable Object Pattern in Fine-Grained Entity Concurrency
 
 #### 1. Exact Scenario & Question
-"In a multiplayer gaming engine or banking system, 50,000 user accounts exist in memory. 
+"In a multiplayer gaming engine or banking system, 50,000 user accounts exist in memory.
 - Locking the entire `AccountRepository` blocks all users when User A transfers money to User B.
 - Using coarse-grained locks causes severe thread bottlenecks.
 How do you implement the **Lockable Object Pattern** to provide explicit, fine-grained locking directly on individual domain entities, and how do you prevent **Deadlocks** when transferring money between two accounts concurrently?"
@@ -4502,7 +4502,7 @@ public class ReactivePipelineDemo {
 ### Q57: Fan-Out / Fan-In (Scatter-Gather) Pattern
 
 #### 1. Exact Scenario & Question
-"A travel booking meta-search engine receives a flight search request: `JFK -> LHR`. To find the best prices, it must concurrently query 6 airline APIs (`Delta`, `British Airways`, `United`, `Virgin`, `Lufthansa`, `American`). 
+"A travel booking meta-search engine receives a flight search request: `JFK -> LHR`. To find the best prices, it must concurrently query 6 airline APIs (`Delta`, `British Airways`, `United`, `Virgin`, `Lufthansa`, `American`).
 - If called sequentially, total response time is $6 \times 800\text{ms} = 4.8\text{ seconds}$ (unacceptable).
 - Some airline partners occasionally take 8 seconds or time out completely.
 1. How does the **Fan-Out / Fan-In Pattern** (Scatter-Gather) execute queries in parallel and aggregate results within a strict SLA (e.g., 1.5 seconds maximum)?
@@ -4588,7 +4588,7 @@ public class ScatterGatherDemo {
 ### Q58: Publish-Subscribe vs Polling Publisher Pattern
 
 #### 1. Exact Scenario & Question
-"A financial regulatory compliance service must track changes to customer account records made by legacy mainframe systems. 
+"A financial regulatory compliance service must track changes to customer account records made by legacy mainframe systems.
 - The legacy system lacks webhook capabilities and cannot publish directly to Kafka.
 - Querying `SELECT * FROM accounts WHERE updated_at > last_poll_time` every 5 seconds misses intermediate updates (an account changed twice within 5 seconds), generates high database load, and creates polling lag.
 1. When is the **Polling Publisher Pattern** preferred over direct **Publish-Subscribe**?
@@ -4667,7 +4667,7 @@ public class PollingPublisherDemo {
 ### Q59: Microservices Idempotent Consumer Pattern
 
 #### 1. Exact Scenario & Question
-"In a payment processing cluster, Kafka provides 'At-Least-Once' delivery semantics. When a network timeout occurs right as consumer A finishes processing a `$500` payment debit, Kafka does not receive the offset commit acknowledgment. 
+"In a payment processing cluster, Kafka provides 'At-Least-Once' delivery semantics. When a network timeout occurs right as consumer A finishes processing a `$500` payment debit, Kafka does not receive the offset commit acknowledgment.
 Kafka re-delivers the exact same message to consumer B 2 seconds later. Without protection, the customer is billed twice (`$1,000` total).
 1. How does the **Idempotent Consumer Pattern** guarantee that processing a message multiple times has the exact same side-effect as processing it once?
 2. What are the pros and cons of using an in-memory Redis cache vs a relational database `UNIQUE` constraint for idempotency?
@@ -4739,7 +4739,7 @@ public class IdempotentConsumerDemo {
 ### Q60: Poison Pill & Dead Letter Queue (DLQ) Pattern
 
 #### 1. Exact Scenario & Question
-"In a Kafka consumer group processing credit card applications, a malformed JSON message with an unexpected null character (`\0`) is published to topic partition 3. 
+"In a Kafka consumer group processing credit card applications, a malformed JSON message with an unexpected null character (`\0`) is published to topic partition 3.
 - The consumer throws an unhandled `DeserializationException`.
 - The consumer crashes, restarts, re-polls partition 3, encounters the same corrupt message, and crashes again in an infinite loop.
 - The entire partition stalls, blocking 150,000 valid customer applications behind it!
@@ -5121,7 +5121,7 @@ public class RichDomainModelDemo {
 ### Q64: Value Object & Money Pattern
 
 #### 1. Exact Scenario & Question
-"In a global financial checkout system, prices are represented as raw `double price = 19.99` and `String currency = 'USD'`. 
+"In a global financial checkout system, prices are represented as raw `double price = 19.99` and `String currency = 'USD'`.
 - An engineer writes `double total = 0.1 + 0.2;`, and the customer is billed `$0.30000000000000004`.
 - Another developer accidentally executes `double sum = usdPrice + eurPrice;`, adding US Dollars to Euros without currency conversion.
 1. How does the **Value Object Pattern** (coupled with the **Money Pattern**) prevent these multi-million dollar banking glitches?
@@ -5224,7 +5224,7 @@ public class MoneyPatternDemo {
 ### Q65: Specification Pattern (Composable Business Rules)
 
 #### 1. Exact Scenario & Question
-"An insurance underwriting platform evaluates applicant eligibility based on 30 different dynamic criteria: Age > 21, Credit Score > 650, No DUI convictions in 5 years, Annual Income > $40,000, etc. 
+"An insurance underwriting platform evaluates applicant eligibility based on 30 different dynamic criteria: Age > 21, Credit Score > 650, No DUI convictions in 5 years, Annual Income > $40,000, etc.
 - When rules are combined directly in service layer code, you get an unreadable 200-line conditional: `if (app.getAge() > 21 && (app.getCredit() > 650 || app.hasGuarantor()) && ...)`
 - Business analysts frequently change combinations (e.g., 'Promotion A requires Rule 1 AND (Rule 2 OR Rule 3)').
 1. How does the **Specification Pattern** encapsulate business predicates into standalone, reusable classes?
@@ -5585,7 +5585,7 @@ public class IdentityMapDemo {
 ### Q69: Data Mapper Pattern
 
 #### 1. Exact Scenario & Question
-"In an Active Record pattern (e.g., Ruby on Rails or certain Java libraries), domain entities inherit from a base `Model` class: `user.save()`, `order.delete()`. 
+"In an Active Record pattern (e.g., Ruby on Rails or certain Java libraries), domain entities inherit from a base `Model` class: `user.save()`, `order.delete()`.
 - Over time, the domain entity becomes polluted with database connection strings, SQL dialect quirks, table names, and foreign key IDs.
 - You cannot unit-test business logic without a live database connection.
 1. How does the **Data Mapper Pattern** (Martin Fowler) enforce complete separation between in-memory domain objects and the database schema?
@@ -5805,7 +5805,7 @@ public class AntiCorruptionLayerDemo {
 - **Winning Answer**: "Deploy the ACL as an **in-process package/module** if:
   1. Only a single microservice consumes the legacy feed (avoids an unnecessary network hop and operational complexity),
   2. Latency is ultra-sensitive (< 5ms).
-  
+
   Deploy the ACL as a **standalone microservice** if:
   1. Multiple distinct microservices must consume data from the same legacy system (centralizing the complex translation and protocol adaptation, e.g. converting COBOL EBCDIC/MQ to Kafka/JSON),
   2. The legacy system has aggressive connection limits (e.g. max 5 concurrent sockets on mainframe), requiring the ACL to act as a connection pool multiplexer."
@@ -5930,7 +5930,7 @@ public class DaoVsRepositoryDemo {
 ### Q72: Caching Patterns (Read-Through, Write-Behind, Cache Stampede)
 
 #### 1. Exact Scenario & Question
-"A high-traffic video streaming homepage caches trending movie metadata in Redis with a 1-hour TTL. At 8:00 PM, the cache key expires. 
+"A high-traffic video streaming homepage caches trending movie metadata in Redis with a 1-hour TTL. At 8:00 PM, the cache key expires.
 - Within 20 milliseconds, 50,000 concurrent user requests encounter a cache miss simultaneously.
 - All 50,000 threads immediately query the primary PostgreSQL database for the exact same query (`SELECT * FROM movies WHERE trending = true`).
 - PostgreSQL connections exhaust instantly, CPU reaches 100%, and the database crashes in a classic **Cache Stampede (Thundering Herd)** disaster.
@@ -6031,7 +6031,7 @@ public class CacheStampedeShieldDemo {
 ### Q73: Optimistic Offline Lock & Version Number Pattern
 
 #### 1. Exact Scenario & Question
-"Two customer service representatives (Alice and Bob) simultaneously open the same support ticket (#4002) in their web browsers. 
+"Two customer service representatives (Alice and Bob) simultaneously open the same support ticket (#4002) in their web browsers.
 - Alice reviews the ticket for 5 minutes and updates the status to 'WAITING_ON_CUSTOMER'.
 - Bob reviews the ticket for 6 minutes and updates the status to 'ESCALATED_TO_TIER_2'.
 - If the application executes standard SQL `UPDATE tickets SET status = ? WHERE id = 4002`, Bob's update silently overwrites Alice's changes.
@@ -6123,7 +6123,7 @@ public class OptimisticLockingDemo {
 ### Q74: Dirty Flag Pattern
 
 #### 1. Exact Scenario & Question
-"In a 3D graphics rendering engine or complex spreadsheet calculation grid, an `AccountPortfolio` object aggregates 50,000 stocks and derivatives. 
+"In a 3D graphics rendering engine or complex spreadsheet calculation grid, an `AccountPortfolio` object aggregates 50,000 stocks and derivatives.
 - Calculating the portfolio's Risk Value at Risk (VaR) is a CPU-heavy mathematical simulation taking 350ms.
 - 95% of user interactions only change UI preferences (e.g. toggling dark mode, resizing columns) without modifying any stock prices.
 - If the system recalculates VaR and updates the database on every frame or user interaction, the CPU is saturated with redundant computations.
@@ -6309,7 +6309,7 @@ public class VirtualProxyDemo {
 ### Q76: Database Sharding Pattern
 
 #### 1. Exact Scenario & Question
-"A social media application's `UserPosts` table reaches 500 million rows and 8 Terabytes in size. 
+"A social media application's `UserPosts` table reaches 500 million rows and 8 Terabytes in size.
 - Single-node NVMe SSD storage is exhausted.
 - B-Tree indexes no longer fit in RAM, causing disk thrashing and query latency to spike from 5ms to 1,200ms.
 - Vertical scaling (upgrading to a 128-core, 1TB RAM server) has reached its absolute hardware and economic ceiling.
@@ -6550,7 +6550,7 @@ public class TableModuleDemo {
 ### Q79: Metadata Mapping & Serialized LOB / Serialized Entity Pattern
 
 #### 1. Exact Scenario & Question
-"A medical device monitoring application collects health metrics from 200 different sensor models. 
+"A medical device monitoring application collects health metrics from 200 different sensor models.
 - Each sensor model outputs completely different JSON diagnostic properties (e.g., Blood Oxygen, Heart Rate Variability, Battery Voltage, Laser Calibration).
 - If developers alter the relational database schema by adding 150 new columns to the `patient_readings` table, schema migrations (DDL locks) bring down the production database.
 - Furthermore, 90% of columns are `NULL` for any given sensor.
@@ -7298,7 +7298,7 @@ public class SessionFacadeDemo {
 ### Q87: Client Session vs Server Session Patterns
 
 #### 1. Exact Scenario & Question
-"A high-growth SaaS platform scales from 1 web server to 40 load-balanced nodes. 
+"A high-growth SaaS platform scales from 1 web server to 40 load-balanced nodes.
 - When users log in, their authentication state is stored in Tomcat's default `HttpSession` in local JVM RAM.
 - When the load balancer routes a user's second request to Server B, Server B does not have their session, prompting: 'Please Log In Again'.
 - If the DevOps team enables **Sticky Sessions (Session Affinity)** on the load balancer, traffic becomes severely unbalanced, and rebooting Server A logs out 2,500 active paying users.

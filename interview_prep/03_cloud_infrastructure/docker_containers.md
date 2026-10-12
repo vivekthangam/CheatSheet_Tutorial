@@ -1,8 +1,8 @@
 # Docker & Container Technology: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 03 — Cloud Infrastructure  
-> **Topic Coverage**: Linux Kernel Primitives (Namespaces, cgroups v1/v2, OverlayFS), Docker Engine Architecture (`dockerd`, `containerd`, `containerd-shim`, `runc`), Image Layering & Multi-Stage Builds, BuildKit (Secret & Cache Mounts), Networking (`bridge`, `host`, `overlay`, `macvlan`, `ipvlan`), Storage (Volumes, Bind Mounts, `tmpfs`), Resource Limits & CFS Bandwidth Quotas, Security (Capabilities, Seccomp, AppArmor, User Namespaces, Rootless Containers), PID 1 & Zombie Process Reaping, Java in Containers, Health Checks, Podman vs Docker, and Production Hardening.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, DevOps/Platform/SRE Engineers.  
+> **Curriculum Milestone**: Module 03 — Cloud Infrastructure
+> **Topic Coverage**: Linux Kernel Primitives (Namespaces, cgroups v1/v2, OverlayFS), Docker Engine Architecture (`dockerd`, `containerd`, `containerd-shim`, `runc`), Image Layering & Multi-Stage Builds, BuildKit (Secret & Cache Mounts), Networking (`bridge`, `host`, `overlay`, `macvlan`, `ipvlan`), Storage (Volumes, Bind Mounts, `tmpfs`), Resource Limits & CFS Bandwidth Quotas, Security (Capabilities, Seccomp, AppArmor, User Namespaces, Rootless Containers), PID 1 & Zombie Process Reaping, Java in Containers, Health Checks, Podman vs Docker, and Production Hardening.
+> **Target Audience**: Senior Software Engineers, Lead Architects, DevOps/Platform/SRE Engineers.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World War-Room Outages, and Rapid-Fire Interview Matrix.
 
 ---
@@ -222,7 +222,7 @@ Linux file permissions are based purely on numerical **UIDs**, not usernames. If
   ```
 
 **The macOS / Windows Performance Problem:**
-On macOS and Windows, Docker runs inside a lightweight Linux hypervisor. Bind-mounting a folder requires cross-VM filesystem synchronization protocols (VirtioFS, gRPC-FUSE). When Node.js scans 50,000 files in `node_modules`, every `stat()` syscall traverses the VM boundary, causing a **10x–20x performance drop**. 
+On macOS and Windows, Docker runs inside a lightweight Linux hypervisor. Bind-mounting a folder requires cross-VM filesystem synchronization protocols (VirtioFS, gRPC-FUSE). When Node.js scans 50,000 files in `node_modules`, every `stat()` syscall traverses the VM boundary, causing a **10x–20x performance drop**.
 - *Solution*: Store `node_modules` inside a named Docker volume rather than a bind mount.
 
 ##### 4. Follow-Up Trap Question & Winning Answer

@@ -1,15 +1,66 @@
-# Spring WebFlux & Reactive Systems: Enterprise Interview Guide
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-non-blocking-market-data-ingestion)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Engineering  
-> **Topic Coverage**: Project Reactor (`Mono`/`Flux`), Netty EventLoop Architecture, Backpressure, Thread Schedulers (`boundedElastic`/`parallel`/`single`), `WebClient`, R2DBC, Server-Sent Events (SSE), Reactive Security, `BlockHound`, `StepVerifier`, Functional Endpoints, and the `.block()` anti-pattern.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, Staff & Principal Engineers.  
-> **Target Depth**: 50 Progressive Technical Scenarios with Runtime Mechanics, Production Code Walkthroughs, Beginner Traps, and Real-World Outage Post-Mortems.
+# Spring WebFlux, Project Reactor & Non-Blocking Systems: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_webflux_reactive.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_webflux_reactive.md)  
+> **Topic Domain:** Project Reactor Core (`Mono` / `Flux`), Netty Non-Blocking EventLoop Model (epoll/kqueue), Reactive Streams Specification & Backpressure (`request(n)`), Thread Schedulers (`publishOn` vs `subscribeOn`), Asynchronous WebClient, R2DBC Relational Streaming, Server-Sent Events (SSE), BlockHound Runtime Guarding, and the Fatal `.block()` Anti-Pattern (`S04`)  
+> **Target Framework / Runtime:** Spring Boot 3.3+, Spring WebFlux 6.1+, Project Reactor 3.6+, Netty 4.1+, OpenJDK HotSpot JVM 17/21 LTS  
+> **Architecture Level:** Principal / Staff+ Distributed Systems Architect & High-Throughput Event-Driven Systems Engineer  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Reactive Outage Post-Mortems, Netty Epoll Socket Internals, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Market Data Reactive Ingestion Cheatsheet](#-real-world-production-project--code-cheatsheet-non-blocking-market-data-ingestion) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_webflux_reactive/)
 
 ---
 
-## Architecture Blueprint: The Spring WebFlux & Reactor Stack
+## 1. Foundational Primer: What, Why & Where? (The "Head")
 
-> **Spring WebFlux Reactive Pipeline**:  
+*Before diving into Netty epoll event loop task queues, Project Reactor assembly vs subscription phase decoupling, reactive backpressure buffer drop overflow strategies, and R2DBC non-blocking binary socket decoding, here is the essential high-level context: what Spring WebFlux represents, why reactive programming became critical for high-connection systems, what deadly pitfalls it introduces, and where reactive engines anchor high-throughput architectures.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Spring WebFlux** is Spring's fully asynchronous, non-blocking reactive web framework built on the **Reactive Streams Specification** and **Project Reactor** (`Mono` and `Flux`). Running on top of **Netty** by default, WebFlux abandons the traditional "one thread per HTTP request" model. Instead, it processes thousands of concurrent network connections using an ultra-lean group of worker threads (typically equal to the number of CPU cores) that handle events as they arrive without ever blocking waiting for database queries or downstream HTTP calls.
+* **Everyday Analogy**: Imagine a busy postal sorting facility:
+  - **Traditional Thread-Per-Request (Spring MVC / Tomcat)**: Every time a letter arrives, the post office hires a full-time human courier to carry that single letter. If the recipient isn’t home to sign for the package, the courier sits on the recipient’s front porch for 3 days doing nothing (**Thread Blocked on I/O**). If 200 letters are in transit, all 200 couriers are stuck waiting, and the post office runs out of employees, rejecting new mail with HTTP 503.
+  - **Spring WebFlux (Netty EventLoop & Reactive Streams)**: The post office operates with just 8 super-fast automated conveyor belts (**Netty Worker EventLoops**).
+    - When a letter arrives, the conveyor scans the barcode in 50 microseconds and registers a callback.
+    - If the recipient isn’t home, the letter is placed into a temporary holding buffer, freeing the conveyor immediately to sort 10,000 other letters.
+    - When the recipient finally calls to confirm they are home (**I/O Completion Signal**), the conveyor immediately delivers the package.
+    - **Backpressure (`request(n)`)**: If the downstream delivery truck is full, the driver signals the conveyor belt to slow down intake, preventing the warehouse from overflowing and crashing (**Preventing OOM**).
+* **Architectural Tier Placement**: Operates at the **Edge Gateway, Ingestion & Real-Time Streaming Tier**. Positioned within API gateways (Spring Cloud Gateway), real-time financial market data feeds, IoT telemetry ingestion pipelines, and WebSocket/SSE broadcast hubs.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The "C10K" Problem & Thread Scalability Limits**: In traditional servlet containers (Tomcat), each concurrent connection consumes one OS platform thread. Because each platform thread reserves 1MB of stack memory and incurs expensive kernel context-switching overhead, a server capped at 200–500 threads quickly exhausted memory or froze under high concurrent connection counts.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The Gateway Thread Exhaustion Freeze**: In microservice architectures, when a downstream payment provider slowed down from 20ms to 2,000ms, all 200 Tomcat worker threads in the upstream gateway blocked simultaneously, causing total cascade failure across unrelated services.
+  - 💥 **Headache 2: The Uncontrolled Fast-Producer Memory Overflow**: In streaming systems, if a Kafka producer or database pushed 100,000 events/sec into a slow consumer that could only process 5,000 events/sec, the consumer's memory buffer exploded, resulting in `OutOfMemoryError: Java heap space`.
+  - 💥 **Headache 3: The Fatal `.block()` EventLoop Deadlock**: In reactive systems, if an engineer accidentally invoked `.block()` or called a legacy blocking JDBC driver on a Netty EventLoop thread, the entire EventLoop froze. In an 8-core server, a single blocking call frozen 12.5% of all active user traffic.
+* **The Turning Point**: The Reactive Streams Initiative (Netflix, Pivotal, Lightbend) standardized non-blocking backpressure protocols in 2015, which Spring embraced in Spring 5 with WebFlux and Project Reactor.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Handling 50,000+ Concurrent Idle Connections) ➔ Solution 1**: Because Netty decouples open TCP socket channels from threads using OS `epoll` / `kqueue` selectors, a single WebFlux instance sustains 50,000+ simultaneous open connections (e.g., SSE, WebSockets, long polling) using just 16 threads and 250MB of RAM.
+* **Problem 2 (Flow Control Across Heterogeneous Services) ➔ Solution 2**: Native Reactive Streams backpressure propagates demand upstream: subscribers explicitly request items (`request(n)`). If a client is slow, the upstream database driver throttles query execution automatically.
+* **Problem 3 (Preventing Accidental EventLoop Blocking) ➔ Solution 3**: Integrating **`BlockHound`** into JVM test suites instruments bytecode at runtime, instantly throwing an error if any blocking call (`Thread.sleep`, socket read, file I/O) executes on an EventLoop thread.
+* **Quantifiable Enterprise Metrics**:
+  - **10x Memory Efficiency**: Sustaining 10,000 active SSE streaming connections consumes only 180MB RAM on WebFlux, compared to 10GB+ on traditional thread-per-request Tomcat.
+  - **Zero Cascading Thread Exhaustion**: High-latency downstream services only increase in-flight `Mono` callback counts, never starving the worker thread pool.
+  - **Sub-5ms Event Dispatch**: Netty zero-copy `ByteBuf` handling slices message serialization latencies down to microseconds.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Powers cloud edge routers (Spring Cloud Gateway), real-time stock and cryptocurrency order feeds, live sports scoreboards, chat backends, and telemetry ingestion gateways.
+* **Developer Workflow & SRE Synergy**: SREs monitor Netty direct memory (`jvm_buffer_memory_used_bytes`) and EventLoop pending tasks. Developers write composable functional pipelines using rich operators (`flatMap`, `zip`, `retryWhen`).
+* **Scalability & Evolutionary Runway**: Non-blocking foundations allow a service to handle 10x traffic spikes during flash sales without autoscaling pod counts, dramatically reducing cloud infrastructure costs.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Paradigm | Concurrency Substrate | Learning Curve | Best Enterprise Fit | Primary Production Risk |
+| :--- | :--- | :--- | :--- | :--- |
+| **Spring WebFlux (Reactor)** | Non-Blocking EventLoops (epoll) | High (Assembly vs Subscription, Monads) | Streaming APIs, SSE, WebSockets, API Gateways | Accidental `.block()` freezing EventLoop threads |
+| **Spring MVC + Virtual Threads (Java 21 Loom)** | Lightweight User-Space Continuations | Low (Standard synchronous imperative code) | Standard CRUD, high-concurrency REST APIs | Pinning carrier threads on `synchronized` blocks |
+| **Traditional Spring MVC (Tomcat)** | 1:1 OS Platform Threads | Minimal (Standard sequential Java) | Simple internal enterprise apps, low concurrency | Thread starvation during slow downstream I/O calls |
+
+---
+
+## 2. Architecture Blueprint: The Spring WebFlux & Reactor Stack
+
+> **Spring WebFlux Reactive Pipeline**:
 > `[HTTP Request (TCP Socket)]` ──► `[Netty Boss/Worker EventLoops (epoll/kqueue)]` ──► `[DispatcherHandler (ServerHttpRequest)]` ──► `[Project Reactor: Mono<T> / Flux<T>]` ──► `[Reactive Drivers: R2DBC / WebClient / Reactive Redis]`
 
 | Reactive Subsystem Layer | Core Primitives & Classes | Wire Protocol & Runtime Invariants | Concurrency & Threading Constraints |
@@ -19,6 +70,408 @@
 | **Reactive Streams Engine (Project Reactor)** | `Mono<T>` ($0..1$ item), `Flux<T>` ($0..N$ items), `Publisher<T>`, `Subscriber<T>` | Asynchronous push/pull stream model enforcing Reactive Streams Specification with native backpressure signals (`request(n)`). | Strict distinction between **Assembly Time** (pipeline building) and **Subscription Time** (`subscribe()`). |
 | **Thread Schedulers (`Schedulers`)** | `parallel()`, `boundedElastic()`, `single()`, `fromExecutorService()` | Offloads execution context across thread pool archetypes via `publishOn` and `subscribeOn`. | `parallel()` capped at CPU cores (CPU-bound); `boundedElastic()` capped at $10 \times \text{Cores}$ (legacy blocking I/O). |
 | **Reactive Data & Egress Drivers** | R2DBC (`DatabaseClient`), `WebClient`, `ReactiveRedisTemplate`, Reactive Kafka | Asynchronous wire protocols for relational databases (PostgreSQL/MySQL), external HTTP/2 APIs, and distributed event streams. | End-to-end backpressure-aware; zero JDBC thread blocking; socket memory managed via Netty `ByteBuf` allocators. |
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Non-Blocking Market Data Ingestion
+
+> **Attached Domain Project:** `Ultra-High-Throughput Reactive Market Data Ingestion Engine` (`com.cheatsheet.webflux`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring WebFlux 6.1+ | Project Reactor 3.6+ | Netty 4.1+ | R2DBC PostgreSQL  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_webflux_reactive/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_webflux_reactive/)  
+> **Key Technologies Demonstrated:** `Flux` / `Mono` Composition, Custom Backpressure Strategies, Netty `ConnectionProvider` Pool Sizing, R2DBC Non-Blocking Persistence, Server-Sent Events (SSE) Streaming, Resilient Retry with Exponential Jitter, `BlockHound` Assertion Harness.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Market Data Ingestion)
+
+The following production-grade reactive pipeline continuously streams tick-by-tick cryptocurrency and forex order books, handles slow consumer backpressure without heap exhaustion, persists snapshots via non-blocking R2DBC, and broadcasts live Server-Sent Events (SSE):
+
+```java
+package com.cheatsheet.webflux.engine;
+
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.handler.timeout.WriteTimeoutHandler;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.BufferOverflowStrategy;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
+import reactor.util.retry.Retry;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+// ============================================================================
+// 1. REACTIVE DOMAIN MODELS & R2DBC ENTITY
+// ============================================================================
+@Table("market_ticks")
+public record MarketTick(
+    @Id Long id,
+    String symbol,
+    BigDecimal bidPrice,
+    BigDecimal askPrice,
+    BigDecimal volume,
+    Instant timestamp
+) {
+    public static MarketTick of(String symbol, BigDecimal bid, BigDecimal ask, BigDecimal vol) {
+        return new MarketTick(null, symbol, bid, ask, vol, Instant.now());
+    }
+}
+
+public record MarketSummary(String symbol, BigDecimal averagePrice, long tickCount, Instant windowEnd) {}
+
+// ============================================================================
+// 2. R2DBC REACTIVE REPOSITORY
+// ============================================================================
+@Repository
+public interface ReactiveMarketTickRepository extends ReactiveCrudRepository<MarketTick, Long> {
+    Flux<MarketTick> findBySymbolOrderByTimestampDesc(String symbol);
+}
+
+// ============================================================================
+// 3. NETTY-TUNED HIGH-THROUGHPUT WEBCLIENT CONFIGURATION
+// ============================================================================
+@Configuration
+public class ReactiveNettyClientConfig {
+
+    @Bean
+    public WebClient marketFeedWebClient() {
+        // Production ConnectionProvider tuning: max 500 connections, zero idle leak
+        ConnectionProvider provider = ConnectionProvider.builder("market-feed-pool")
+                .maxConnections(500)
+                .pendingAcquireMaxCount(2000)
+                .pendingAcquireTimeout(Duration.ofSeconds(5))
+                .maxIdleTime(Duration.ofSeconds(30))
+                .maxLifeTime(Duration.ofMinutes(5))
+                .evictInBackground(Duration.ofSeconds(60))
+                .build();
+
+        HttpClient httpClient = HttpClient.create(provider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .doOnConnected(conn -> conn
+                        .addHandlerLast(new ReadTimeoutHandler(5000, TimeUnit.MILLISECONDS))
+                        .addHandlerLast(new WriteTimeoutHandler(5000, TimeUnit.MILLISECONDS)))
+                .compress(true);
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .codecs(config -> config.defaultCodecs().maxInMemorySize(2 * 1024 * 1024)) // 2 MB buffer guard
+                .build();
+    }
+}
+
+// ============================================================================
+// 4. REACTIVE STREAM INGESTION & BROADCAST SERVICE
+// ============================================================================
+@Service
+public class MarketDataStreamingService {
+
+    private final WebClient webClient;
+    private final ReactiveMarketTickRepository repository;
+    private final DatabaseClient databaseClient;
+    
+    // Multicast Sinks: Broadcasts tick events to all concurrent active SSE subscribers
+    private final Sinks.Many<MarketTick> tickBroadcastSink = 
+            Sinks.many().multicast().onBackpressureBuffer(10_000, false);
+
+    public MarketDataStreamingService(WebClient webClient, 
+                                     ReactiveMarketTickRepository repository,
+                                     DatabaseClient databaseClient) {
+        this.webClient = webClient;
+        this.repository = repository;
+        this.databaseClient = databaseClient;
+    }
+
+    /**
+     * Infinite, non-blocking ingestion stream with backpressure buffering and automatic retry.
+     */
+    public Flux<MarketTick> startMarketFeedIngestion(String symbol) {
+        return Flux.interval(Duration.ofMillis(50)) // Simulates high-frequency market tick stream
+                .onBackpressureDrop(droppedIndex -> 
+                    System.err.println("Slow consumer dropped tick sequence: " + droppedIndex))
+                .map(i -> MarketTick.of(
+                        symbol,
+                        BigDecimal.valueOf(50000.00 + (Math.random() * 20.0 - 10.0)),
+                        BigDecimal.valueOf(50001.00 + (Math.random() * 20.0 - 10.0)),
+                        BigDecimal.valueOf(Math.random() * 5.0)
+                ))
+                // Offload CPU calculations to parallel thread pool
+                .publishOn(Schedulers.parallel())
+                // Prevent slow consumer from overwhelming Netty EventLoops
+                .onBackpressureBuffer(
+                        5000,
+                        dropped -> System.err.println("Buffer overflow! Dropping tick for: " + dropped.symbol()),
+                        BufferOverflowStrategy.DROP_OLDEST
+                )
+                // Persist asynchronously via non-blocking R2DBC in batches
+                .flatMap(tick -> repository.save(tick).subscribeOn(Schedulers.boundedElastic()), 64)
+                .doOnNext(savedTick -> tickBroadcastSink.tryEmitNext(savedTick))
+                // Resilient exponential backoff with jitter on any network socket hiccup
+                .retryWhen(Retry.backoff(10, Duration.ofMillis(100))
+                        .maxBackoff(Duration.ofSeconds(2))
+                        .jitter(0.5)
+                        .doBeforeRetry(retrySignal -> 
+                            System.out.println("Transient feed error, retrying attempt #" + retrySignal.totalRetries())))
+                .share(); // Converts Cold Flux into Hot Shared Publisher for multiple consumers
+    }
+
+    public Flux<MarketTick> getLiveBroadcastingFeed(String symbol) {
+        return tickBroadcastSink.asFlux()
+                .filter(tick -> tick.symbol().equalsIgnoreCase(symbol));
+    }
+}
+
+// ============================================================================
+// 5. SERVER-SENT EVENTS (SSE) & REACTIVE CONTROLLER
+// ============================================================================
+@RestController
+@RequestMapping("/api/v1/market")
+public class MarketDataReactiveController {
+
+    private final MarketDataStreamingService streamingService;
+
+    public MarketDataReactiveController(MarketDataStreamingService streamingService) {
+        this.streamingService = streamingService;
+    }
+
+    /**
+     * Non-blocking SSE stream. Pushes live ticks as HTTP text/event-stream chunks.
+     * Consumes zero Tomcat threads; held open by Netty event loop channels.
+     */
+    @GetMapping(value = "/feed/{symbol}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<MarketTick> streamMarketTicks(@PathVariable String symbol) {
+        return streamingService.getLiveBroadcastingFeed(symbol)
+                .mergeWith(streamingService.startMarketFeedIngestion(symbol))
+                .sample(Duration.ofMillis(100)); // Rate-limiting emissions to protect browser DOM rendering
+    }
+
+    /**
+     * Non-blocking rolling window aggregation over reactive streams.
+     */
+    @GetMapping(value = "/summary/{symbol}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<MarketSummary> getWindowSummary(@PathVariable String symbol) {
+        return streamingService.getLiveBroadcastingFeed(symbol)
+                .take(Duration.ofSeconds(5))
+                .collectList()
+                .map(ticks -> {
+                    BigDecimal avg = ticks.isEmpty() ? BigDecimal.ZERO :
+                            BigDecimal.valueOf(ticks.stream()
+                                    .mapToDouble(t -> t.bidPrice().doubleValue())
+                                    .average().orElse(0.0));
+                    return new MarketSummary(symbol, avg, ticks.size(), Instant.now());
+                });
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Ingestion Stage | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **EventLoop Ingress** | Netty Worker EventLoop dispatches socket frame without blocking in $< 50\mu\text{s}$. | Developer calls `Thread.sleep()` or blocking JDBC call on EventLoop thread. | `BlockHound` detects blocked thread instantly; throws `BlockingOperationError`; Netty isolates thread. |
+| **Consumer Backpressure** | Slow client receives ticks at throttled pace using Reactive Streams `request(n)`. | Client stalls processing; publisher pushes 100k events/sec into unbounded buffer. | `onBackpressureBuffer` with `BufferOverflowStrategy.DROP_OLDEST` caps queue at 5,000; drops stale frames cleanly. |
+| **Connection Pooling** | Netty `ConnectionProvider` reuses leased HTTP/2 channels under high concurrency. | Downstream market gateway hangs; 2,000 pending requests exhaust acquire pool. | `pendingAcquireTimeout(5s)` throws `PoolAcquireTimeoutException`; CircuitBreaker trips to fallback feed. |
+| **Upstream Network Drop** | Temporary TCP socket reset detected during tick ingestion. | Stream terminates abruptly with `IOException: Connection reset by peer`. | `Retry.backoff(10, 100ms).jitter(0.5)` resumes ingestion stream automatically with zero data loss. |
+| **Memory Buffer Allocation** | Netty pooled `ByteBufAllocator` releases off-heap buffers upon downstream delivery. | Subscriptions abandoned by client without calling `dispose()`. | Netty leak detector (`-Dio.netty.leakDetection.level=PARANOID`) identifies abandoned reference count buffers. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Calling `.block()` Inside FlatMap Stalling the Netty EventLoop
+* **Outage Incident**: Under load testing, a service capable of 50,000 req/sec suddenly froze completely and timed out on all requests at only 12 concurrent users.
+* **Root Cause**: An engineer called `.block()` inside a reactive `flatMap` to fetch a configuration parameter. Since Netty defaults to only $2 \times \text{cores}$ (16 threads), 16 concurrent requests blocked all 16 EventLoop threads, halting the entire server.
+
+```java
+// ❌ BUG: Calling .block() on a Netty EventLoop freezes the entire application
+public Mono<PriceResponse> fetchPrice(String symbol) {
+    return marketFeedClient.get()
+            .uri("/ticks/" + symbol)
+            .retrieve()
+            .bodyToMono(MarketTick.class)
+            .flatMap(tick -> {
+                // 💥 FATAL: Blocks the Netty EventLoop worker thread!
+                Config config = configClient.get().retrieve().bodyToMono(Config.class).block();
+                return Mono.just(calculateAdjustedPrice(tick, config));
+            });
+}
+
+// ✅ REFACTORED: Compose reactively with flatMap without ever blocking
+public Mono<PriceResponse> fetchPrice(String symbol) {
+    return marketFeedClient.get()
+            .uri("/ticks/" + symbol)
+            .retrieve()
+            .bodyToMono(MarketTick.class)
+            .flatMap(tick -> configClient.get()
+                    .retrieve()
+                    .bodyToMono(Config.class)
+                    .map(config -> calculateAdjustedPrice(tick, config)) // Completely non-blocking!
+            );
+}
+```
+
+#### Bug 2: Missing Backpressure Buffer Strategy Causing OOM / `OverflowException`
+* **Outage Incident**: During peak market volatility, the trade ingestion engine threw `reactor.core.Exceptions$OverflowException: The receiver is unable to handle incoming requests` and crashed with JVM OutOfMemoryError.
+* **Root Cause**: The upstream WebSocket emitted 25,000 ticks/sec while the downstream R2DBC database could only write 5,000 ticks/sec. Without backpressure bounds, the internal queue accumulated millions of objects on the heap.
+
+```java
+// ❌ BUG: Unbounded default buffer causes heap exhaustion under high-throughput burst
+public Flux<MarketTick> ingestUnbounded(Flux<MarketTick> upstreamTicks) {
+    return upstreamTicks
+            .publishOn(Schedulers.parallel()) // Default queue size 256; throws OverflowException when saturated
+            .flatMap(repository::save);
+}
+
+// ✅ REFACTORED: Explicit backpressure buffering with rate-limiting and drop strategy
+public Flux<MarketTick> ingestHardened(Flux<MarketTick> upstreamTicks) {
+    return upstreamTicks
+            .onBackpressureBuffer(
+                    10_000, // Strict memory ceiling
+                    dropped -> Metrics.counter("market.ticks.dropped").increment(),
+                    BufferOverflowStrategy.DROP_OLDEST // Drop stale market quotes in favor of fresh prices
+            )
+            .publishOn(Schedulers.parallel(), 1024)
+            .flatMap(repository::save, 64); // Strict concurrency limit of 64 concurrent DB writes
+}
+```
+
+#### Bug 3: Assembly Time Trap — Evaluating Dynamic Values Outside `Mono.defer()`
+* **Outage Incident**: An audit service generated identical trace timestamps and UUIDs for every single HTTP request over a 24-hour period.
+* **Root Cause**: `Instant.now()` and `UUID.randomUUID()` were evaluated at **Assembly Time** (when the Spring bean was initialized), rather than at **Subscription Time** (when the HTTP request was actually received).
+
+```java
+// ❌ BUG: Assembly Time evaluation — Instant.now() is evaluated ONCE when pipeline is built!
+public Mono<AuditLog> createAuditLog(String action) {
+    // 💥 Instant.now() is calculated at server boot, not per HTTP request!
+    return Mono.just(new AuditLog(action, UUID.randomUUID().toString(), Instant.now()));
+}
+
+// ✅ REFACTORED: Mono.defer() defers evaluation until subscription time (per request)
+public Mono<AuditLog> createAuditLog(String action) {
+    return Mono.defer(() -> {
+        // Fresh evaluation on every incoming subscriber execution
+        return Mono.just(new AuditLog(action, UUID.randomUUID().toString(), Instant.now()));
+    });
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Unbounded In-Memory WebClient Buffer Denial of Service (DoS)
+* **Vulnerability Vector**: An attacker connects to a market data ingestion endpoint and feeds an unexpected 500 MB JSON payload, exhausting heap memory and crashing the pod.
+
+```java
+// 🚨 VULNERABILITY: Unlimited WebClient buffer size exposes container to heap exhaustion
+@Bean
+public WebClient vulnerableWebClient() {
+    return WebClient.builder()
+            .codecs(config -> config.defaultCodecs().maxInMemorySize(-1)) // 💥 Unlimited memory allocation!
+            .build();
+}
+
+// 🛡️ MITIGATION: Enforce strict byte buffer limits and stream large payloads with DataBuffer
+@Bean
+public WebClient secureWebClient() {
+    return WebClient.builder()
+            .codecs(config -> config.defaultCodecs().maxInMemorySize(256 * 1024)) // Strict 256 KB limit
+            .build();
+}
+```
+
+#### Sec 2: Reactive SecurityContext Loss Across `publishOn()` Worker Threads
+* **Vulnerability Vector**: When a reactive controller dispatches to `Schedulers.parallel()` or `boundedElastic()`, the `SecurityContext` stored in Reactor's Subscriber Context can be lost if not explicitly bridged, bypassing method-level security checks.
+
+```java
+// 🚨 VULNERABILITY: Thread switching clears ThreadLocal security, causing authentication bypass
+public Mono<Void> executeTrade(TradeOrder order) {
+    return Mono.just(order)
+            .publishOn(Schedulers.parallel()) // 💥 Loses ThreadLocal SecurityContext!
+            .flatMap(o -> securityAuditService.verifyAdmin()); // Fails or evaluates against null principal
+}
+
+// 🛡️ MITIGATION: Enable Reactive SecurityContext Context-Propagation in Project Reactor
+@Configuration
+public class ReactiveSecurityPipelineConfig {
+    @PostConstruct
+    public void setupContextPropagation() {
+        // Bridges SecurityContext between Reactor Context and ThreadLocal across thread hops
+        Hooks.enableAutomaticContextPropagation();
+    }
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Mixing Blocking JDBC Inside Reactive WebFlux Pipelines
+* **Anti-Pattern**: Using standard Spring Data JPA / Hibernate (`JpaRepository`) inside WebFlux controllers.
+
+```java
+// ⚠️ ANTI-PATTERN: Blocking JPA repository called directly in Reactive pipeline
+@GetMapping("/ticks/{id}")
+public Mono<MarketTick> getTick(@PathVariable Long id) {
+    // 💥 Blocks Netty worker thread on blocking JDBC socket!
+    return Mono.justOrEmpty(blockingJpaRepo.findById(id));
+}
+
+// 🏗️ REFACTOR: Use R2DBC Reactive Relational Database Driver or offload to boundedElastic
+@GetMapping("/ticks/{id}")
+public Mono<MarketTick> getTickReactive(@PathVariable Long id) {
+    // Pure non-blocking asynchronous PostgreSQL wire protocol via R2DBC
+    return r2dbcRepo.findById(id);
+}
+```
+
+#### Arch 2: Leaking Hot Publishers Spawning Redundant Backend Connections
+* **Anti-Pattern**: Subscribing multiple downstream SSE clients to a Cold Publisher, forcing a new upstream WebSocket connection for each connected browser.
+
+```java
+// ⚠️ ANTI-PATTERN: Cold Flux creates a new physical WebSocket connection for EVERY client
+public Flux<MarketTick> getFeed() {
+    return connectToCryptoExchangeWebSocket(); // 1,000 users = 1,000 separate TCP connections!
+}
+
+// 🏗️ REFACTOR: Use .share() or .publish().refCount() to multicast a single upstream connection
+@Service
+public class SharedMarketFeed {
+    private final Flux<MarketTick> hotMulticastFeed;
+
+    public SharedMarketFeed() {
+        // 1 single physical connection shared across all 10,000 concurrent consumers
+        this.hotMulticastFeed = connectToCryptoExchangeWebSocket().share();
+    }
+
+    public Flux<MarketTick> getSharedFeed() {
+        return this.hotMulticastFeed;
+    }
+}
+```
 
 ---
 
@@ -38,7 +491,7 @@ Your team is evaluating whether to rewrite a high-concurrency notification servi
 - **Average vs. Elite**: Average says "WebFlux is faster." Elite explains Netty's `NioEventLoop`, `Selector`, and why the EventLoop thread must never block.
 
 ##### 3. Standout Technical Answer
-In Spring MVC (Servlet model), each incoming HTTP request is assigned a dedicated OS/JVM platform thread (default 200 in Tomcat). That thread remains blocked while waiting for database queries, external REST calls, or disk I/O. 
+In Spring MVC (Servlet model), each incoming HTTP request is assigned a dedicated OS/JVM platform thread (default 200 in Tomcat). That thread remains blocked while waiting for database queries, external REST calls, or disk I/O.
 
 In Spring WebFlux (Reactor/Netty model), a small pool of worker threads (typically `2 × CPU cores`) runs an event loop backed by OS-level I/O multiplexing (`epoll` on Linux, `kqueue` on macOS). When an I/O operation starts, the EventLoop registers the socket with the OS kernel `Selector` and immediately returns to process other incoming requests. When the OS signals data availability, the EventLoop wakes up, resumes processing, and streams the response.
 
@@ -163,7 +616,7 @@ Under a synthetic load test of 50 concurrent requests, the service completely st
 - Proficiency in using `BlockHound` for automated compile/test-time blocking detection.
 
 ##### 3. Standout Technical Answer
-In a system with 8 CPU cores, Netty creates exactly 16 EventLoop threads. When `getUser()` calls `.block()`, that EventLoop thread halts and waits for the external HTTP response. If 16 concurrent requests arrive simultaneously, all 16 EventLoop threads are parked in a blocked state. 
+In a system with 8 CPU cores, Netty creates exactly 16 EventLoop threads. When `getUser()` calls `.block()`, that EventLoop thread halts and waits for the external HTTP response. If 16 concurrent requests arrive simultaneously, all 16 EventLoop threads are parked in a blocked state.
 
 At this point, Netty has **zero remaining threads** to run the socket selector loop. Even when the external downstream service finishes and sends the response back over the TCP socket, there is no active EventLoop thread to read the bytes off the network card! The application enters a self-inflicted distributed deadlock.
 
@@ -478,7 +931,7 @@ You are tasked with building a collaborative whiteboard server where 5,000 clien
 - Understanding how WebSocket framing interacts with Reactive Streams backpressure.
 
 ##### 3. Standout Technical Answer
-In Spring MVC, WebSockets commonly use STOMP over SockJS with a shared message broker, relying on thread pools per connection or task executors. 
+In Spring MVC, WebSockets commonly use STOMP over SockJS with a shared message broker, relying on thread pools per connection or task executors.
 
 In Spring WebFlux, WebSockets operate at the raw frame level via `WebSocketHandler`. A single `WebSocketSession` provides both an inbound `Flux<WebSocketMessage>` (client to server) and an outbound `Publisher<WebSocketMessage>` (server to client). Full backpressure is preserved: if the server is slow at persisting cursor updates, it reduces `request(n)` to Netty, which stops reading TCP frames from the client socket.
 
@@ -542,7 +995,7 @@ A security engineer reviews a WebFlux service and discovers that `SecurityContex
 - Mastery of Reactor `ContextView` and `ReactiveSecurityContextHolder`.
 
 ##### 3. Standout Technical Answer
-In Spring MVC, each request is tied to a single thread, allowing `SecurityContextHolder` to store the authenticated `Authentication` object inside a `ThreadLocal`. 
+In Spring MVC, each request is tied to a single thread, allowing `SecurityContextHolder` to store the authenticated `Authentication` object inside a `ThreadLocal`.
 
 In Spring WebFlux, an asynchronous request may start on `nioEventLoopGroup-2-1`, perform non-blocking I/O, and resume on `nioEventLoopGroup-2-3` or `boundedElastic-1`. Because threads change constantly throughout a pipeline, `ThreadLocal` storage loses its context. Spring Security Reactive solves this by storing the security context inside the immutable **Reactor `Context`**, which flows with the subscriber upwards and downwards through the reactive stream.
 
@@ -834,7 +1287,7 @@ During a security audit, it is found that `paymentService.pay(order)` is execute
 - Correct usage of `Mono.defer()`.
 
 ##### 3. Standout Technical Answer
-In Java, method arguments are evaluated **eagerly** before the enclosing method is called. 
+In Java, method arguments are evaluated **eagerly** before the enclosing method is called.
 
 When you write `Mono.just(expensiveComputation())`, Java executes `expensiveComputation()` immediately at **assembly time**, long before any subscriber calls `.subscribe()`. If `expensiveComputation()` performs an I/O operation or updates state, it runs unconditionally even if the `Mono` is never subscribed to!
 
@@ -1256,7 +1709,7 @@ A reporting service must export 2 million database audit rows to a client via an
 - Demonstrating constant memory footprint regardless of total record count.
 
 ##### 3. Standout Technical Answer
-In traditional REST, a JSON response must be formatted as an array: `[ {"id": 1}, {"id": 2} ]`. The framework must hold all objects in memory to close the bracket `]`. 
+In traditional REST, a JSON response must be formatted as an array: `[ {"id": 1}, {"id": 2} ]`. The framework must hold all objects in memory to close the bracket `]`.
 
 With **NDJSON** (`application/x-ndjson` or `application/stream+json`), each JSON object is serialized independently followed by a newline `\n`. Spring WebFlux streams rows off the database socket via R2DBC directly into the Netty socket buffer with zero in-memory accumulation:
 
@@ -1537,7 +1990,7 @@ You are forced to integrate an outdated legacy billing SDK that only provides sy
 - Understanding the future transition to Java 21 Virtual Threads (`Executors.newVirtualThreadPerTaskExecutor()`).
 
 ##### 3. Standout Technical Answer
-When integrating an unavoidably blocking library, you must wrap the blocking call in `Mono.fromCallable()` and explicitly hand off execution to a dedicated thread pool via `subscribeOn(Schedulers.boundedElastic())`. 
+When integrating an unavoidably blocking library, you must wrap the blocking call in `Mono.fromCallable()` and explicitly hand off execution to a dedicated thread pool via `subscribeOn(Schedulers.boundedElastic())`.
 
 ```java
 @Service
@@ -2012,7 +2465,7 @@ A high-throughput WebFlux API gateway crashes every 12 hours with `java.lang.Out
 - Diagnosing off-heap leaks using Netty's built-in ResourceLeakDetector.
 
 ##### 3. Standout Technical Answer
-Netty allocates network socket buffers in off-heap direct memory via `sun.misc.Unsafe.allocateMemory()` to achieve zero-copy socket transfers (avoiding copying bytes from OS kernel space into the JVM garbage-collected heap). 
+Netty allocates network socket buffers in off-heap direct memory via `sun.misc.Unsafe.allocateMemory()` to achieve zero-copy socket transfers (avoiding copying bytes from OS kernel space into the JVM garbage-collected heap).
 
 Because the JVM GC cannot reliably detect when an off-heap buffer is done being transmitted across the network card, Netty uses **reference counting**:
 - When created: `refCnt = 1`.
@@ -2322,7 +2775,7 @@ You are building an ultra-low latency algorithmic trading communication bridge b
 - Bi-directional streaming flow control mechanics.
 
 ##### 3. Standout Technical Answer
-Standard gRPC in Java uses callback-based `StreamObserver`, which lacks native Reactive Streams composition and makes backpressure complex. 
+Standard gRPC in Java uses callback-based `StreamObserver`, which lacks native Reactive Streams composition and makes backpressure complex.
 
 Using **Reactive-gRPC** (Salesforce `reactor-grpc`), gRPC protobuf stubs are generated directly as `Mono` and `Flux` methods. Under the hood, gRPC's HTTP/2 flow control (`WINDOW_UPDATE` frames) is bi-directionally mapped to Reactive Streams `request(n)`.
 
@@ -3232,7 +3685,7 @@ There is no reference to your application code in the stack trace. Why are react
 - Configuring `ReactorDebugAgent.init()` for zero-overhead production debugging.
 
 ##### 3. Standout Technical Answer
-In imperative code, when method `A()` calls `B()`, which calls `C()`, the OS stack frame maintains the entire historical execution path. 
+In imperative code, when method `A()` calls `B()`, which calls `C()`, the OS stack frame maintains the entire historical execution path.
 
 In Project Reactor, operator assembly occurs in thread 1, but execution occurs in thread 2 inside Netty's event loop. When an exception occurs, the JVM stack trace only shows internal Netty and Reactor machinery (`FluxMap`, `FluxFilter`), with zero trace of your business code.
 

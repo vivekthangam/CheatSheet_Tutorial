@@ -55,7 +55,7 @@ When an incident occurs, systematically isolate which layer is failing rather th
 | **`125`** | Docker CLI Error | `docker run` failed (e.g. invalid flag or syntax). | Check `docker run` arguments and syntax. |
 | **`126`** | Permission Denied | Container command cannot be invoked (missing `+x` executable permission). | Add `RUN chmod +x /entrypoint.sh` in Dockerfile. |
 | **`127`** | Command Not Found | Executable specified in `ENTRYPOINT` or `CMD` does not exist. | Check binary path inside base image (`/bin/sh` vs `/bin/bash`). |
-| **`137`** | **SIGKILL / OOMKilled** | Linux kernel killed container because memory exceeded container limit. | `docker inspect <container> | grep OOMKilled`<br>Increase `-m 2g` or tune JVM heap `-XX:MaxRAMPercentage=75.0`. |
+| **`137`** | **SIGKILL / OOMKilled** | Linux kernel killed container because memory exceeded container limit. | `docker inspect <container>` | grep OOMKilled`<br>Increase `-m 2g` or tune JVM heap `-XX:MaxRAMPercentage=75.0`. |
 | **`139`** | **Segmentation Fault** | Native C/C++ library memory corruption (JNI, SQLite, CGo). | Inspect core dump with `gdb` or update native library. |
 | **`143`** | **SIGTERM** | Container received graceful termination signal from Docker / K8s. | Normal during container shutdown or rolling restart. |
 

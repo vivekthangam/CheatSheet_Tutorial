@@ -1,0 +1,306 @@
+[
+  {
+    "file": "ai-algorithms/leetcode_patterns.md",
+    "message": "Duplicate attribute.",
+    "loc": {
+      "start": {
+        "column": 84,
+        "line": 15594,
+        "offset": 899751
+      },
+      "end": {
+        "column": 84,
+        "line": 15594,
+        "offset": 899751
+      }
+    }
+  },
+  {
+    "file": "ai-algorithms/rag_vector_search_master_guide.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 204,
+        "line": 394,
+        "offset": 40652
+      },
+      "end": {
+        "column": 204,
+        "line": 394,
+        "offset": 40652
+      }
+    }
+  },
+  {
+    "file": "ai-algorithms/regx.md",
+    "message": "Invalid end tag.",
+    "loc": {
+      "start": {
+        "column": 113,
+        "line": 1021,
+        "offset": 67567
+      },
+      "end": {
+        "column": 113,
+        "line": 1021,
+        "offset": 67567
+      }
+    }
+  },
+  {
+    "file": "cloud-infrastructure/azure_master_guide.md",
+    "message": "Invalid end tag.",
+    "loc": {
+      "start": {
+        "column": 7,
+        "line": 1077,
+        "offset": 88619
+      },
+      "end": {
+        "column": 7,
+        "line": 1077,
+        "offset": 88619
+      }
+    }
+  },
+  {
+    "file": "cloud-infrastructure/kubernetes.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 49,
+        "line": 546,
+        "offset": 51097
+      },
+      "end": {
+        "column": 49,
+        "line": 546,
+        "offset": 51097
+      }
+    }
+  },
+  {
+    "file": "frontend-web/v8_react_ts_core_internals_interview_master_guide.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 32,
+        "line": 534,
+        "offset": 50024
+      },
+      "end": {
+        "column": 32,
+        "line": 534,
+        "offset": 50024
+      }
+    }
+  },
+  {
+    "file": "interview_prep/07_security_identity/security_identity_owasp.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 39,
+        "line": 166,
+        "offset": 20459
+      },
+      "end": {
+        "column": 39,
+        "line": 166,
+        "offset": 20459
+      }
+    }
+  },
+  {
+    "file": "interview_prep/10_systems_languages/rust_systems.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 66,
+        "line": 607,
+        "offset": 69339
+      },
+      "end": {
+        "column": 66,
+        "line": 607,
+        "offset": 69339
+      }
+    }
+  },
+  {
+    "file": "java-core/completable_future.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 89,
+        "line": 298,
+        "offset": 29113
+      },
+      "end": {
+        "column": 89,
+        "line": 298,
+        "offset": 29113
+      }
+    }
+  },
+  {
+    "file": "java-core/java_collection.md",
+    "message": "Invalid end tag.",
+    "loc": {
+      "start": {
+        "column": 7,
+        "line": 405,
+        "offset": 42648
+      },
+      "end": {
+        "column": 7,
+        "line": 405,
+        "offset": 42648
+      }
+    }
+  },
+  {
+    "file": "java-core/java_collection_stream.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 4,
+        "line": 189,
+        "offset": 24721
+      },
+      "end": {
+        "column": 4,
+        "line": 189,
+        "offset": 24721
+      }
+    }
+  },
+  {
+    "file": "java-core/java_functional_interfaces_and_streams_master_guide.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 57,
+        "line": 25,
+        "offset": 2424
+      },
+      "end": {
+        "column": 57,
+        "line": 25,
+        "offset": 2424
+      }
+    }
+  },
+  {
+    "file": "java-core/java_version_features_master_guide.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 46,
+        "line": 34,
+        "offset": 4855
+      },
+      "end": {
+        "column": 46,
+        "line": 34,
+        "offset": 4855
+      }
+    }
+  },
+  {
+    "file": "new/_Docker Roadmap_ From Scratch to Advanced .md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 62,
+        "line": 7074,
+        "offset": 463534
+      },
+      "end": {
+        "column": 62,
+        "line": 7074,
+        "offset": 463534
+      }
+    }
+  },
+  {
+    "file": "new/_Kubernetes Zero to Hero Guide .md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 25,
+        "line": 1641,
+        "offset": 133692
+      },
+      "end": {
+        "column": 25,
+        "line": 1641,
+        "offset": 133692
+      }
+    }
+  },
+  {
+    "file": "scenarios/jackson_scenarios_master_guide.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 108,
+        "line": 4525,
+        "offset": 347471
+      },
+      "end": {
+        "column": 108,
+        "line": 4525,
+        "offset": 347471
+      }
+    }
+  },
+  {
+    "file": "spring-framework/spring_webflux_reactive.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 206,
+        "line": 243,
+        "offset": 24258
+      },
+      "end": {
+        "column": 206,
+        "line": 243,
+        "offset": 24258
+      }
+    }
+  },
+  {
+    "file": "topics/glossary.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 52,
+        "line": 296,
+        "offset": 14774
+      },
+      "end": {
+        "column": 52,
+        "line": 296,
+        "offset": 14774
+      }
+    }
+  },
+  {
+    "file": "topics/troubleshooting_mastery.md",
+    "message": "Element is missing end tag.",
+    "loc": {
+      "start": {
+        "column": 45,
+        "line": 91,
+        "offset": 6943
+      },
+      "end": {
+        "column": 45,
+        "line": 91,
+        "offset": 6943
+      }
+    }
+  }
+]

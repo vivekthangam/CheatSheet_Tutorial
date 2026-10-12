@@ -311,7 +311,7 @@ service:
 
 ### Q8: What is a Trace ID and a Span ID in distributed tracing?
 - **ELI5 Analogy:** The Trace ID is the Tracking Number for an entire Amazon order. The Span IDs are the individual barcode scans at the local warehouse, airport freight carrier, and delivery truck.
-- **Senior Technical Answer:** 
+- **Senior Technical Answer:**
   - **Trace ID:** A globally unique 16-byte (128-bit) cryptographic hex string assigned to an incoming request at the edge gateway and propagated downstream across all microservices via HTTP/gRPC headers (W3C `traceparent`).
   - **Span ID:** An 8-byte (64-bit) hex string representing a single contiguous unit of work or execution phase within a single microservice (e.g., an HTTP handler, a database query, or a Redis get). Spans reference their `parent_span_id` to form a Directed Acyclic Graph (DAG).
 

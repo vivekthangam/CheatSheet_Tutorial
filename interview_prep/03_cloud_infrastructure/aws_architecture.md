@@ -1,6 +1,6 @@
 # AWS Master Certification & Staff Cloud Architect Interview Guide (100 Comprehensive Scenarios)
 
-> **Certification & Architecture Alignment**: 
+> **Certification & Architecture Alignment**:
 > - **AWS Certified Solutions Architect – Professional (SAP-C02)**
 > - **AWS Certified DevOps Engineer – Professional (DOP-C02)**
 > - **AWS Certified Security – Specialty (SCS-C02)**

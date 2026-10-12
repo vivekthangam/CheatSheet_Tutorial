@@ -1,6 +1,6 @@
 ﻿# 🚀 Enterprise Deployment Strategies Master Guide: Zero-Downtime Architecture from Scratch to Advanced
 
-> **Target Audience**: Software Engineers, DevOps/SRE Practitioners, Cloud Architects, and Technical Leads.  
+> **Target Audience**: Software Engineers, DevOps/SRE Practitioners, Cloud Architects, and Technical Leads.
 > **Prerequisites**: Zero prior knowledge of deployment patterns required. We begin with intuitive real-world analogies (the airport runway, twin bridges, and canary birds) and systematically progress to traffic shifting physics, Kubernetes primitives, database expand-and-contract migrations, progressive delivery, and real-world outage post-mortems.
 
 ---
@@ -72,7 +72,7 @@ If you have never deployed an application to production before, ignore the compl
 
 Imagine an airline running commercial flights:
 
-- **The Naive Way (Recreate)**: The pilot announces over the intercom: *"Passengers, we need to upgrade the engine to version 2.0. We are turning off the engines right now in mid-air. Please wait 10 minutes while our technicians replace the parts, then we will restart!"*  
+- **The Naive Way (Recreate)**: The pilot announces over the intercom: *"Passengers, we need to upgrade the engine to version 2.0. We are turning off the engines right now in mid-air. Please wait 10 minutes while our technicians replace the parts, then we will restart!"*
   👉 **Result**: Catastrophic crash. In software, this means customer transactions drop, carts are lost, API requests return `HTTP 502/503`, and your company loses revenue and trust.
 - **The Modern Way (Zero-Downtime Deployment)**: Modern engineering designs planes with multiple redundant engines. Technicians service one engine while the remaining engines maintain airspeed. Or, the airline lands plane A at the gate, while an already-upgraded, fully-tested plane B takes off seamlessly from the adjacent runway without passengers ever missing a beat!
 
@@ -444,7 +444,7 @@ export async function calculateShipping(cart: Cart, user: User): Promise<number>
 
 ## Track 4: The Database Migration Dilemma (The #1 Deployment Killer)
 
-> ⚠️ **The Golden Rule of Real-Time Systems**:  
+> ⚠️ **The Golden Rule of Real-Time Systems**:
 > **Your deployment strategy is only as zero-downtime as your database migration.**
 
 ### 4.1 The Problem: Why Blue-Green Breaks When Schema Changes
@@ -659,7 +659,7 @@ spec:
 - **The Setup**: A fast-growing retail company used Blue-Green deployment to deploy version 3.4.
 - **The Trigger**: The Green environment's automated startup migration script executed:
   `ALTER TABLE orders ADD COLUMN loyalty_points INT DEFAULT 0;`
-- **Root Cause**: On a PostgreSQL table with 80 million rows, setting a default value in older database engines forced a complete table rewrite while holding an `ACCESS EXCLUSIVE lock.
+- **Root Cause**: On a PostgreSQL table with 80 million rows, setting a default value in older database engines forced a complete table rewrite while holding an `ACCESS EXCLUSIVE` lock.
 - **The Failure**: Even though Green wasn't serving traffic yet, the shared database locked the `orders` table. Blue (serving live customers) was blocked from writing any new purchases. Every single checkout attempt stalled and timed out.
 - **The Fix**: Rewrote all migration standards to follow the **Expand and Contract** pattern. Made new columns nullable first, backfilled asynchronously in batches of 5,000 records, and banned table locks in CD pipelines.
 
@@ -701,7 +701,7 @@ An exhaustive, categorized reference encyclopedia explaining the terminology, ru
 
 #### 1.3 Deployment vs. Release
 
-- **Plain-English Analogy**: 
+- **Plain-English Analogy**:
   - **Deployment**: The delivery truck parks outside your store, unloads boxes of new shoes into the stockroom, and workers arrange them on shelves. (Zero customer impact).
   - **Release**: You unlock the front doors, turn on the neon sign, and invite shoppers inside to purchase the shoes. (Live customer impact).
 - **Technical Mechanics**:

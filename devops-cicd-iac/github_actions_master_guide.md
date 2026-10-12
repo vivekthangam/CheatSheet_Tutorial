@@ -270,7 +270,7 @@ Step 5: Notify Slack       ──> [SKIPPED] (Unless hooked!) ◄┘
   ```
 
 #### Pitfall 3: Exporting Environment Variables via Shell Subshells
-- **The Failure**: 
+- **The Failure**:
   ```yaml
   - name: Set Token
     run: export APP_ENV="production"
@@ -1285,7 +1285,7 @@ Not authorized to perform sts:AssumeRoleWithWebIdentity
 ```
 
 ### 3. Deep Root Cause Analysis (RCA)
-During a corporate reorganization, the GitHub organization was renamed from `enterprise-fintech` to `fintech-corp`. 
+During a corporate reorganization, the GitHub organization was renamed from `enterprise-fintech` to `fintech-corp`.
 
 In AWS IAM, the trust policy on the production deployment role was configured with hardcoded string matching on the repository subject claim (`sub`):
 ```json

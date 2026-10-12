@@ -2,7 +2,7 @@
 
 # ⚡ gRPC Polyglot Masterclass: Architecture, Complete Setups in Java, Node.js & Go, Pros & Cons, and 100 Production Scenarios
 
-> **Target Audience:** Software Engineers, Backend Developers, Distributed Systems Architects, and Technical Leads.  
+> **Target Audience:** Software Engineers, Backend Developers, Distributed Systems Architects, and Technical Leads.
 > **Prerequisites:** **Zero.** We start from raw binary wire mechanics and HTTP/2 framing, build working from-scratch services across **Java**, **Node.js**, and **Golang** covering all 4 RPC patterns (Unary, Server Streaming, Client Streaming, Bidirectional Streaming), analyze architectural trade-offs, and solve **100 categorized real-world production scenarios**.
 
 ---
@@ -253,7 +253,7 @@ In high-throughput microservice architectures, REST over HTTP/1.1 with JSON intr
 Protocol Buffers serialize structured data into compact binary streams using **Field Tags** and **Varint Encoding**:
 
 ### How Varints Work Under the Hood
-In standard integers, the number `1` takes 4 full bytes (`00000000 00000000 00000000 00000001`).  
+In standard integers, the number `1` takes 4 full bytes (`00000000 00000000 00000000 00000001`).
 Protobuf uses **Varints (Variable-Length Quantities)**:
 - Each byte uses 7 bits for the actual number and 1 **Most Significant Bit (MSB)** as a continuation flag.
 - The number `1` consumes **only 1 byte** (`00000001`).
@@ -328,7 +328,7 @@ A classic trap when deploying gRPC behind traditional load balancers:
 
 ## 1.6 Rich Error Handling with `google.rpc.Status`
 
-Standard gRPC returns simple integer status codes (`OK`, `NOT_FOUND`, `UNAVAILABLE`).  
+Standard gRPC returns simple integer status codes (`OK`, `NOT_FOUND`, `UNAVAILABLE`).
 In enterprise production, services use **Rich Error Models** via `google.rpc.Status`, which allows attaching strongly-typed Protobuf error details (`BadRequest.FieldViolation`, `RetryInfo`, `PreconditionFailure`) directly into trailing metadata headers.
 
 ---

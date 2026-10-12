@@ -349,7 +349,7 @@ export class StockTickerComponent {
 - **Sample Input & Output:**
 ```text
 Parent pushes 500 WebSocket updates/second across 500 stocks:
-Stock #42 mutates object in-place (ticker.price = 105): 
+Stock #42 mutates object in-place (ticker.price = 105):
 Result: Zero component re-renders! Screen displays stale data!
 
 Parent pushes immutable update: this.stocks[42] = { ...this.stocks[42], price: 105 }:
@@ -734,10 +734,10 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR, FormControl, ReactiveFormsModu
   ],
   template: `
     <div style="display: flex; gap: 5px;">
-      <input 
-        type="text" 
-        maxlength="6" 
-        [value]="value" 
+      <input
+        type="text"
+        maxlength="6"
+        [value]="value"
         [disabled]="disabled"
         (input)="handleInput($event)"
         (blur)="handleBlur()"
@@ -827,3 +827,4 @@ Custom component functions identically to native input with 100% reactive form c
 ---
 
 [🏠 Back to Home](README.md) | [🌐 Frontend Terms Encyclopedia](frontend_polyglot_technical_terms_master_guide.md) | [⚛️ React Scenarios](react_scenarios_master_guide.md) | [🟢 Node.js Scenarios](nodejs_scenarios_master_guide.md) | [▲ Next.js Scenarios](nextjs_scenarios_master_guide.md)
+```

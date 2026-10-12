@@ -197,43 +197,43 @@ export const App = () => {
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: What makes Tauri apps drastically smaller in bundle size than Electron apps?
-> **ELI5**: Electron packs a whole new Chrome browser and Node.js engine in the suitcase of every app. Tauri packs only your clothes and uses the television and bathroom already built into the hotel room (the OS's built-in browser).  
+> **ELI5**: Electron packs a whole new Chrome browser and Node.js engine in the suitcase of every app. Tauri packs only your clothes and uses the television and bathroom already built into the hotel room (the OS's built-in browser).
 > **Technical**: Tauri links against the host operating system's native webview (WebView2 via COM on Windows, WebKitGTK on Linux, WebKit via Cocoa on macOS) and compiles native Rust code to machine instructions, shedding 150MB+ of bundled Chromium and Node.js binaries.
 
 #### Q2: What is the role of `tao` and `wry` in Tauri?
-> **ELI5**: `tao` builds the picture frame (the window), and `wry` paints the canvas inside the frame.  
+> **ELI5**: `tao` builds the picture frame (the window), and `wry` paints the canvas inside the frame.
 > **Technical**: `tao` is Tauri's cross-platform window management library (a fork of `winit`), handling window creation, menus, DPI scaling, and OS events. `wry` is the cross-platform webview rendering library that embeds and controls the OS web engine within a `tao` window.
 
 #### Q3: How does JavaScript communicate with Rust in Tauri?
-> **ELI5**: Like sending a post letter through a mail slot: JS sends a JSON envelope with an address (`invoke`), and Rust reads it and mails back a reply.  
+> **ELI5**: Like sending a post letter through a mail slot: JS sends a JSON envelope with an address (`invoke`), and Rust reads it and mails back a reply.
 > **Technical**: The `@tauri-apps/api/core` client injects a custom postMessage / custom URI IPC bridge (`window.__TAURI_INTERNALS__`). Tauri routes this message to the registered Rust command via dynamic macro handlers (`generate_handler![]`), deserializing parameters using `serde_json` and resolving the Promise.
 
 #### Q4: Why is memory safety guaranteed in Tauri's core process?
-> **ELI5**: Rust has a strict grammar referee (the borrow checker) who inspects every pass before the play begins, guaranteeing nobody drops the ball.  
+> **ELI5**: Rust has a strict grammar referee (the borrow checker) who inspects every pass before the play begins, guaranteeing nobody drops the ball.
 > **Technical**: Rust enforces compile-time ownership, borrowing, and lifetimes. It eliminates use-after-free, double-free, null pointer dereferences, and data races at compile time without relying on a Garbage Collector.
 
 #### Q5: What is the Tauri 2.0 Capability System?
-> **ELI5**: A security checklist for each room in your house specifying who is allowed to touch the stove or open the front door.  
+> **ELI5**: A security checklist for each room in your house specifying who is allowed to touch the stove or open the front door.
 > **Technical**: Tauri 2.0 introduces a granular, declarative permission model. Instead of blanket access, capabilities define which windows can invoke specific plugin actions or custom commands across development and production environments.
 
 #### Q6: What happens if a command in Rust panics?
-> **ELI5**: The entire house loses power immediately.  
+> **ELI5**: The entire house loses power immediately.
 > **Technical**: Unless wrapped in `std::panic::catch_unwind`, an unhandled Rust panic unwinds the stack and terminates the host operating system process, killing both the native backend and all associated webview windows.
 
 #### Q7: How do you handle long-running background tasks without freezing the UI?
-> **ELI5**: Hand the job to a helper in the back office so the front receptionist can keep answering phones.  
+> **ELI5**: Hand the job to a helper in the back office so the front receptionist can keep answering phones.
 > **Technical**: Mark commands as `async` using Tokio, or offload heavy compute jobs to `tokio::task::spawn_blocking` or dedicated OS worker threads (`std::thread::spawn`), emitting incremental progress back to the frontend via `app_handle.emit()`.
 
 #### Q8: Can you use React, Svelte, or Vue with Tauri?
-> **ELI5**: Yes, any web framework works because Tauri only cares about the final HTML and JS files.  
+> **ELI5**: Yes, any web framework works because Tauri only cares about the final HTML and JS files.
 > **Technical**: Tauri is completely frontend-agnostic. Any framework that can compile down to static HTML, CSS, and JavaScript assets (via Vite, Webpack, Next.js static export) can be loaded into Tauri's webview.
 
 #### Q9: What is the difference between `x86_64-pc-windows-msvc` and `x86_64-pc-windows-gnu`?
-> **ELI5**: One relies on Microsoft Visual Studio's toolkit; the other uses the open-source MinGW GCC compiler.  
+> **ELI5**: One relies on Microsoft Visual Studio's toolkit; the other uses the open-source MinGW GCC compiler.
 > **Technical**: `msvc` links against the Microsoft C Runtime (`msvcrt`/`ucrt`) using Visual C++ build tools. `gnu` links against MinGW-w64 GCC libraries, enabling Windows binaries to be compiled without Visual Studio licenses or cross-compiled from Linux runners.
 
 #### Q10: How does Tauri handle Content Security Policy (CSP)?
-> **ELI5**: It puts a bouncer at the door who checks the ID of every script trying to enter the webpage.  
+> **ELI5**: It puts a bouncer at the door who checks the ID of every script trying to enter the webpage.
 > **Technical**: Tauri allows developers to configure a strict CSP header in `tauri.conf.json`, disallowing unapproved external script injection, inline `eval()`, and unsafe styles to protect the IPC bridge from XSS exploits.
 
 ---
@@ -391,7 +391,7 @@ In Tauri 2.0, permissions are declared inside `src-tauri/capabilities/default.js
 
 ## Blueprint 1: High-Throughput Streaming Binary IPC Bridge
 
-**Problem**: Transferring high-frequency telemetry or binary files over standard JSON `invoke()` causes excessive JSON escaping and CPU serialization overhead.  
+**Problem**: Transferring high-frequency telemetry or binary files over standard JSON `invoke()` causes excessive JSON escaping and CPU serialization overhead.
 **Solution**: Stream raw chunks using Tauri Channels directly into frontend typed arrays (`Uint8Array`).
 
 ```rust
@@ -521,25 +521,25 @@ pub async fn compute_dir_hash(path: String) -> Result<String, String> {
 # TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (50 PRODUCTION SCENARIOS)
 
 #### Q1: What is the architectural role of Wry in Tauri?
-> **Interviewer Evaluates**: Deep understanding of Tauri's multi-crate modularity.  
-> **Standout Answer**: Wry is Tauri's cross-platform webview rendering engine crate. It wraps Microsoft Edge WebView2 on Windows, WebKitGTK on Linux, and WKWebView on macOS behind a unified Rust interface. It bridges the native window (provided by Tao) with the web page and provides the low-level FFI message-passing hooks.  
-> **Trap Follow-Up**: Does Wry compile Chromium on Linux?  
+> **Interviewer Evaluates**: Deep understanding of Tauri's multi-crate modularity.
+> **Standout Answer**: Wry is Tauri's cross-platform webview rendering engine crate. It wraps Microsoft Edge WebView2 on Windows, WebKitGTK on Linux, and WKWebView on macOS behind a unified Rust interface. It bridges the native window (provided by Tao) with the web page and provides the low-level FFI message-passing hooks.
+> **Trap Follow-Up**: Does Wry compile Chromium on Linux?
 > **Winning Answer**: No. On Linux, Wry binds to system-installed WebKitGTK (`libwebkit2gtk-4.1`), keeping the binary small and offloading browser engine updates to the OS package manager.
 
 #### Q2: How does Tauri 2.0 prevent malicious XSS attacks from executing arbitrary Rust code?
-> **Interviewer Evaluates**: Security architecture and permission isolation.  
-> **Standout Answer**: Tauri 2.0 enforces a Zero-Trust Capability System. First, IPC commands are not exposed globally; only commands explicitly declared in `generate_handler![]` exist. Second, capabilities JSON files explicitly whitelist which window labels have permission to call which commands. Third, a strict Content Security Policy (CSP) prevents unauthorized external domains from invoking `window.__TAURI_INTERNALS__`.  
-> **Trap Follow-Up**: What if an attacker manages to bypass CSP and execute `window.__TAURI_INTERNALS__.invoke('unwhitelisted_cmd')`?  
+> **Interviewer Evaluates**: Security architecture and permission isolation.
+> **Standout Answer**: Tauri 2.0 enforces a Zero-Trust Capability System. First, IPC commands are not exposed globally; only commands explicitly declared in `generate_handler![]` exist. Second, capabilities JSON files explicitly whitelist which window labels have permission to call which commands. Third, a strict Content Security Policy (CSP) prevents unauthorized external domains from invoking `window.__TAURI_INTERNALS__`.
+> **Trap Follow-Up**: What if an attacker manages to bypass CSP and execute `window.__TAURI_INTERNALS__.invoke('unwhitelisted_cmd')`?
 > **Winning Answer**: The Rust core rejects the invocation at runtime because the command fails capability ACL resolution, throwing an authorization error before command parameters are even deserialized.
 
 #### Q3: How does Tauri's binary size and RAM footprint compare to Electron, and what is the technical reason?
-> **Interviewer Evaluates**: Systems architecture trade-offs and runtime footprint analysis.  
+> **Interviewer Evaluates**: Systems architecture trade-offs and runtime footprint analysis.
 > **Standout Answer**:
 > - **Binary Size**: Electron bundles an entire Chromium browser engine and Node.js runtime inside every application installer, resulting in base installer sizes of 80MB to 150MB. Tauri reuses the operating system's pre-installed webview (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS) and compiles native Rust machine code, producing release binaries as small as 3MB to 10MB.
 > - **RAM Usage**: Electron initializes a dedicated Chromium GPU and render process plus Node.js V8 heap per window, consuming 150MB to 300MB idle RAM. Tauri runs the OS webview with a lightweight Rust backend, typically idling at 30MB to 50MB RAM.
 
 #### Q4: How do you stream multi-gigabyte binary files from Rust backend to webview frontend without base64 or memory bloat?
-> **Interviewer Evaluates**: IPC serialization limits, zero-copy memory pipelines, and custom asset protocols.  
+> **Interviewer Evaluates**: IPC serialization limits, zero-copy memory pipelines, and custom asset protocols.
 > **Standout Answer**: Passing large binary files through JSON IPC using base64 strings inflates payload size by 33% and forces full buffer allocation in both V8/JavaScript and Rust heaps. The production-grade solution is to register a **Custom Asset Protocol** (`tauri::protocol::register`) in Rust:
 > ```rust
 > app.register_asynchronous_uri_scheme_protocol("stream", |ctx, req, resp| {
@@ -551,18 +551,18 @@ pub async fn compute_dir_hash(path: String) -> Result<String, String> {
 > In the frontend, the webview consumes it as a native standard HTTP stream (`<video src="stream://video.mp4">` or `fetch('stream://...')`), bypassing JSON IPC entirely with kernel-buffered zero-copy streaming.
 
 #### Q5: What is Tao and how does it interface with Wry and the OS windowing manager?
-> **Interviewer Evaluates**: Tauri core crate decoupling and native OS windowing event loops.  
+> **Interviewer Evaluates**: Tauri core crate decoupling and native OS windowing event loops.
 > **Standout Answer**: **Tao** is a Rust cross-platform window creation and event loop library (a fork of `winit`). It communicates directly with native OS windowing APIs (Win32/CreateWindowEx on Windows, Cocoa/NSWindow on macOS, X11/Wayland on Linux). Tao creates the native OS window frame, listens to hardware keyboard/mouse events, and handles system tray events. Once Tao creates the window handle, **Wry** embeds the native webview inside that window canvas.
 
 #### Q6: How do you handle Deep Linking (custom URL schemes like `myapp://auth?token=...`) in Tauri 2.0?
-> **Interviewer Evaluates**: Single-instance desktop routing, OAuth redirects, and OS IPC signaling.  
+> **Interviewer Evaluates**: Single-instance desktop routing, OAuth redirects, and OS IPC signaling.
 > **Standout Answer**:
 > 1. In `tauri.conf.json`, register the custom scheme in the `bundle > iOS/macOS/Windows` scheme configurations.
 > 2. Use the official `@tauri-apps/plugin-deep-link` plugin.
 > 3. Enforce the **Single Instance Plugin** (`tauri-plugin-single-instance`). When an external browser redirects to `myapp://auth?code=123`, the OS launches a second instance. The single-instance plugin intercepts this launch, extracts the deep-link URL arguments, forwards them over a local named pipe/socket to the already running primary instance, and terminates the second process.
 
 #### Q7: How does Tauri's cryptographic auto-updater verify application update packages before execution?
-> **Interviewer Evaluates**: Supply-chain security, binary integrity, and cryptographic code signing.  
+> **Interviewer Evaluates**: Supply-chain security, binary integrity, and cryptographic code signing.
 > **Standout Answer**: Tauri's auto-updater uses **Minisign** asymmetric cryptography (Ed25519 public-key signature system).
 > 1. The developer generates a keypair: `tauri signer generate`. The private key is securely kept in CI/CD secrets.
 > 2. The public key is compiled directly into the application's `tauri.conf.json`.
@@ -570,18 +570,18 @@ pub async fn compute_dir_hash(path: String) -> Result<String, String> {
 > 4. Before installing an update, the running client downloads both the archive and `.sig`, validates the Ed25519 signature against its embedded public key, and aborts immediately if a single byte was altered or tampered with.
 
 #### Q8: Why must heavy synchronous computations never be run directly inside an `async fn` `#[tauri::command]`?
-> **Interviewer Evaluates**: Tokio runtime mechanics, worker thread starvation, and UI responsiveness.  
+> **Interviewer Evaluates**: Tokio runtime mechanics, worker thread starvation, and UI responsiveness.
 > **Standout Answer**: Tauri's async commands execute on a shared Tokio async runtime. If a command performs heavy synchronous CPU work (e.g. image encoding, heavy cryptographic hashing, or large array sorting) inside an `async` function without an `.await` suspension point, it monopolizes the underlying Tokio worker thread. If enough long-running CPU commands execute concurrently, all Tokio worker threads become blocked, freezing all asynchronous IPC communication and causing the UI to become completely unresponsive. Solution: wrap synchronous CPU work in `tokio::task::spawn_blocking(move || { ... })`.
 
 #### Q9: How does Tauri 2.0 handle multi-window state synchronization between isolated webviews?
-> **Interviewer Evaluates**: Cross-window communication and distributed state synchronization.  
+> **Interviewer Evaluates**: Cross-window communication and distributed state synchronization.
 > **Standout Answer**: In Tauri, each window is an isolated webview process with its own JavaScript context and DOM. Cross-window state synchronization is implemented via:
 > 1. **Tauri Event System**: `emit_to("window-label", "event-name", payload)` broadcasts typed events through the Rust backend.
 > 2. **Rust-Managed State (`tauri::State<Mutex<T>>`)**: Centralize state in the Rust backend. Windows invoke commands to mutate or fetch shared state.
 > 3. **Tauri Plugin Store**: Uses an encrypted, thread-safe on-disk key-value store synchronized across all windows with automatic file-watch reloads.
 
 #### Q10: How does Tauri 2.0 support cross-platform mobile targets (iOS and Android)?
-> **Interviewer Evaluates**: Mobile architecture and native platform FFI bridges.  
+> **Interviewer Evaluates**: Mobile architecture and native platform FFI bridges.
 > **Standout Answer**: Tauri 2.0 re-architected its core into a plugin-based system that abstracts both desktop and mobile platforms:
 > - On **Android**, Tauri compiles Rust into a JNI shared library (`.so`) packaged within a native Kotlin Gradle project. The frontend renders inside Android's native `WebView`.
 > - On **iOS**, Tauri compiles Rust into a static C library (`.a`) embedded inside an Xcode project. The frontend renders inside `WKWebView`.

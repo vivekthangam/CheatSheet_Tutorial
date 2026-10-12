@@ -2,8 +2,8 @@
 
 # 🌐 Microservices, API Gateways & Enterprise Infrastructure Architecture: The Complete Production Handbook
 
-> **Target Audience:** Software Engineers, DevOps Engineers, Cloud Architects, and Systems Practitioners.  
-> **Prerequisites:** **Zero.** This guide assumes you know nothing about networking, proxies, or cloud infrastructure. Every concept is taught from fundamental first principles using relatable real-world analogies, historical evolution, step-by-step mechanics, architecture diagrams, production configurations, and trade-off matrices.  
+> **Target Audience:** Software Engineers, DevOps Engineers, Cloud Architects, and Systems Practitioners.
+> **Prerequisites:** **Zero.** This guide assumes you know nothing about networking, proxies, or cloud infrastructure. Every concept is taught from fundamental first principles using relatable real-world analogies, historical evolution, step-by-step mechanics, architecture diagrams, production configurations, and trade-off matrices.
 > **Pedagogical Standard:** Every concept strictly answers:
 > 1. **What is it?** (Plain-English definition + Real-world analogy)
 > 2. **What did we have before?** (The historical legacy approach)
@@ -200,7 +200,7 @@ ASYNCHRONOUS EVENT-DRIVEN COMMUNICATION (Non-Blocking Fire-and-Forget):
 ## 1.5 Distributed Data Management: Database-per-Service, Saga & Outbox Patterns
 
 ### 1. The Cardinal Rule: Database-Per-Service
-In a microservices architecture, **services MUST NEVER share a database**. 
+In a microservices architecture, **services MUST NEVER share a database**.
 - *Why?* If Service A reads tables owned by Service B, Service B can never alter its database schema without breaking Service A. Sharing a database re-creates the monolith at the data tier!
 
 ```

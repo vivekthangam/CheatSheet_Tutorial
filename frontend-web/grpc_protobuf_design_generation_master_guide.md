@@ -2,7 +2,7 @@
 
 ![gRPC & Protocol Buffers v3 High-Performance Architecture](../assets/images/protocols/grpc_protobuf_architecture.jpg)
 
-> **Target Audience**: Backend Engineers, Systems Programmers, Cloud Architects, and Infrastructure Specialists.  
+> **Target Audience**: Backend Engineers, Systems Programmers, Cloud Architects, and Infrastructure Specialists.
 > **Prerequisites**: Zero. We begin with intuitive real-world mental models (The Pneumatic Tube Analogy vs JSON Postcards) and progress systematically through HTTP/2 multiplexing frame physics, Protocol Buffers v3 binary wire serialization (Varints, ZigZag, Wire Types), all four RPC streaming archetypes, Google's Rich Error Model, and the modern `buf` CLI build system.
 
 ---
@@ -706,3 +706,4 @@ Impact: All inventory synchronization jobs failed across 400 retail stores
 - [ ] 29. gRPC Server Reflection is enabled in non-production environments to allow `grpcurl` and `grpcui` debugging.
 - [ ] 30. Mutual TLS (mTLS) with SPIFFE/SPIRE certificates encrypts East-West inter-pod microservice traffic.
 
+```

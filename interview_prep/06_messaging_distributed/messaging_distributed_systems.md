@@ -1,8 +1,8 @@
 # Message Queues, Distributed Systems & Microservices: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 06 — Messaging & Distributed Systems  
-> **Topic Coverage**: CAP & PACELC Theorems, Apache Kafka Internals (Broker, Partitions, Segments, Zero-Copy `sendfile()`, ISR, KRaft Consensus, Exactly-Once Semantics, Rebalance Protocols), RabbitMQ (AMQP, Exchanges, Quorum Queues), AWS SQS/SNS, Distributed Transactions (2PC vs Saga Choreography/Orchestration), Transactional Outbox Pattern + Debezium CDC, Idempotency Keys, Event Sourcing & CQRS, gRPC vs REST, Distributed Locking (Redlock vs etcd), Consistent Hashing, Distributed Tracing (OpenTelemetry), Resilience Patterns (Circuit Breakers, Bulkheads, Rate Limiting), and Chaos Engineering.  
-> **Target Audience**: Senior Software Engineers, Distributed Systems Architects, Staff Platform Engineers, SREs.  
+> **Curriculum Milestone**: Module 06 — Messaging & Distributed Systems
+> **Topic Coverage**: CAP & PACELC Theorems, Apache Kafka Internals (Broker, Partitions, Segments, Zero-Copy `sendfile()`, ISR, KRaft Consensus, Exactly-Once Semantics, Rebalance Protocols), RabbitMQ (AMQP, Exchanges, Quorum Queues), AWS SQS/SNS, Distributed Transactions (2PC vs Saga Choreography/Orchestration), Transactional Outbox Pattern + Debezium CDC, Idempotency Keys, Event Sourcing & CQRS, gRPC vs REST, Distributed Locking (Redlock vs etcd), Consistent Hashing, Distributed Tracing (OpenTelemetry), Resilience Patterns (Circuit Breakers, Bulkheads, Rate Limiting), and Chaos Engineering.
+> **Target Audience**: Senior Software Engineers, Distributed Systems Architects, Staff Platform Engineers, SREs.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World War-Room Outages, and Rapid-Fire Interview Matrix.
 
 ---

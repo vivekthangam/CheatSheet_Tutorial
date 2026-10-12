@@ -944,7 +944,7 @@ sec-node-12 : ok=14   changed=1    unreachable=0    failed=1    skipped=0
 ```
 
 ### 3. Deep Root Cause Analysis (RCA)
-By default, Ansible queues notified handlers and executes them **only after all tasks in the play complete successfully**. 
+By default, Ansible queues notified handlers and executes them **only after all tasks in the play complete successfully**.
 In this incident, Task 1 modified `sshd_config` and queued the `Restart SSHD` handler. However, Task 2 (firewall setup) threw a fatal error. When a fatal error occurs on a host, Ansible immediately ejects that host from the play. The queued handlers are **discarded**, meaning the SSH daemon was never restarted with the new configuration. The server remained running with vulnerable parameters active in memory.
 
 ### 4. Immediate Mitigation & Permanent Architectural Fix

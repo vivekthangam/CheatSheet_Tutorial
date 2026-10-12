@@ -2,7 +2,7 @@
 
 ![Enterprise GraphQL Execution Engine & Federated Architecture](../assets/images/protocols/graphql_engine_architecture.jpg)
 
-> **Target Audience**: Full-Stack Developers, Frontend Architects, Backend Engineers, and API Platform Specialists.  
+> **Target Audience**: Full-Stack Developers, Frontend Architects, Backend Engineers, and API Platform Specialists.
 > **Prerequisites**: Zero. We start with junior-friendly mental models (The Buffet vs Fixed-Course Meal Analogy) and systematically build through GraphQL execution internals (AST parsing and resolver trees), the Schema Definition Language (SDL), Relay Cursor Connections, DataLoader batching physics, Apollo Federation v2, and automated client/server code generation pipelines.
 
 ---
@@ -881,7 +881,7 @@ const server = new ApolloServer({
 ## 5.5 Mutation Execution Ordering: Serial Mutations vs Parallel Field Children
 
 > [!IMPORTANT]
-> The official GraphQL Specification guarantees that **root mutation fields execute serially (one after another in sequence)**, whereas **queries execute in parallel**.  
+> The official GraphQL Specification guarantees that **root mutation fields execute serially (one after another in sequence)**, whereas **queries execute in parallel**.
 > However, **child field resolvers under a mutation execute in parallel**!
 
 ```graphql

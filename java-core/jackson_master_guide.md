@@ -606,7 +606,7 @@ public class JacksonConfig {
 
 ## 2.11 Jackson Converter Architecture: High-Level Two-Way Data Transformation (`Converter<IN, OUT>` & `StdConverter`)
 
-While low-level `JsonSerializer<T>` and `JsonDeserializer<T>` manipulate raw streaming tokens via `JsonGenerator` and `JsonParser`, Jackson provides a higher-level, declarative abstraction: **`com.fasterxml.jackson.databind.util.Converter<IN, OUT>`**. 
+While low-level `JsonSerializer<T>` and `JsonDeserializer<T>` manipulate raw streaming tokens via `JsonGenerator` and `JsonParser`, Jackson provides a higher-level, declarative abstraction: **`com.fasterxml.jackson.databind.util.Converter<IN, OUT>`**.
 
 Instead of generating raw JSON syntax manually, a Converter maps a source Java object (`IN`) to an intermediate Java object (`OUT`) that Jackson already knows how to serialize (such as `String`, `Map`, `Long`, or an intermediate DTO), or vice-versa during deserialization.
 

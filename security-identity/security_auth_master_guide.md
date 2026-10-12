@@ -2,8 +2,8 @@
 
 # 🛡️ Enterprise Security, Authentication & Authorization: The Architect's Zero-to-Hero Masterclass
 
-> **Target Audience:** Software Engineers, Tech Leads, Security Architects, and Cloud Practitioners.  
-> **Prerequisites:** **Zero.** This guide assumes you know nothing about identity, cryptography, or security. Every topic is taught from fundamental first principles using relatable real-world analogies, historical evolution, step-by-step mechanics, architecture diagrams, production configurations, and trade-off matrices.  
+> **Target Audience:** Software Engineers, Tech Leads, Security Architects, and Cloud Practitioners.
+> **Prerequisites:** **Zero.** This guide assumes you know nothing about identity, cryptography, or security. Every topic is taught from fundamental first principles using relatable real-world analogies, historical evolution, step-by-step mechanics, architecture diagrams, production configurations, and trade-off matrices.
 > **Pedagogical Standard:** Every concept strictly answers:
 > 1. **What is it?** (Plain-English definition + Real-world analogy)
 > 2. **What did we have before?** (The historical legacy approach)
@@ -738,7 +738,7 @@ RRA97 manages changes to the **Role Hierarchy Graph** itself:
 
 ## 2.9 The XACML Reference Architecture: PEP, PDP, PAP, PIP, PRP
 
-Whenever modern authorization engines (like **OPA**, **AWS Cedar**, **Cerbos**, or **Permit.io**) are discussed, you will see the acronyms **PEP**, **PDP**, **PAP**, **PIP**, and **PRP**. 
+Whenever modern authorization engines (like **OPA**, **AWS Cedar**, **Cerbos**, or **Permit.io**) are discussed, you will see the acronyms **PEP**, **PDP**, **PAP**, **PIP**, and **PRP**.
 
 These are not individual products—they are the canonical architectural components defined in the **XACML (eXtensible Access Control Markup Language)** standard by OASIS. Every enterprise authorization system implements this exact architectural pattern.
 
@@ -1696,7 +1696,7 @@ The **JOSE (JavaScript Object Signing and Encryption)** framework defines the st
 ### 1. JWS (JSON Web Signature / RFC 7515): Signed, NOT Encrypted!
 
 > [!CAUTION]
-> **A standard JWT is a JWS!**  
+> **A standard JWT is a JWS!**
 > Its payload is encoded in **Base64URL**, which is **NOT ENCRYPTION**. Any person, browser plugin, proxy, or ISP who intercepts a JWS can decode the payload in 1 millisecond using `atob()`. **NEVER store passwords, social security numbers, unmasked credit cards, or confidential medical diagnosis data in a JWS!**
 
 ```
@@ -1927,7 +1927,7 @@ The traditional security model was the **Castle and Moat**:
 - **Why this caused catastrophes**: Once an attacker breached a single low-security microservice (or via an employee phishing email), the entire internal network was wide open. The attacker moved laterally across databases with zero internal resistance.
 
 **The Zero-Trust Architecture (NIST SP 800-207)**:
-> *"Never Trust, Always Verify."*  
+> *"Never Trust, Always Verify."*
 > Treat every internal network packet as if it is traversing the hostile public internet. Every service call must be authenticated, authorized, and encrypted.
 
 ```
@@ -2199,7 +2199,7 @@ An exhaustive, categorized reference encyclopedia explaining the terminology, ru
 - **🔥 Real-World Production Disaster Post-Mortem**: A corporate IdP suffered a global DNS configuration failure. Over 80,000 employees were instantly locked out of Salesforce, Workday, Slack, and AWS console for 7 hours, halting customer support and emergency infrastructure deployments.
 
 #### 1.4 Identity Provider (IdP) vs. Service Provider (SP) / Relying Party (RP)
-- **Plain-English Analogy**: 
+- **Plain-English Analogy**:
   - **Identity Provider (IdP)**: The **Department of Motor Vehicles (DMV)** that issues your driver's license.
   - **Service Provider (SP)**: The **Bar or Bank** that looks at your driver's license to verify your age before serving you. The bar doesn't manufacture driver's licenses; it trusts the DMV's holographic stamp.
 - **Technical Definition & Runtime Mechanics**:
@@ -2246,7 +2246,7 @@ An exhaustive, categorized reference encyclopedia explaining the terminology, ru
 - **🔥 Real-World Production Disaster Post-Mortem**: A payment processor used JWS to pass customer bank account numbers between partner gateways. A rogue employee with access to load balancer access logs decoded the Base64 tokens and harvested 10,000 active bank account numbers.
 
 #### 2.3 JSON Web Key (JWK) & JSON Web Key Set (JWKS)
-- **Plain-English Analogy**: 
+- **Plain-English Analogy**:
   - **JWK**: A standardized business card displaying a locksmith's public signature stamp.
   - **JWKS**: The **Public Telephone Directory of Approved Locksmiths** published on a government bulletin board that anyone can check to verify which stamps are valid today.
 - **Technical Definition & Runtime Mechanics**:
@@ -2352,7 +2352,7 @@ An exhaustive, categorized reference encyclopedia explaining the terminology, ru
 - **🔥 Real-World Production Disaster Post-Mortem**: An employee was fired and the IT team triggered SAML Single Logout from Okta. The employee's home browser had already opened Salesforce. Because Salesforce's SLO endpoint timed out, the local session cookie remained active, allowing the fired employee to download the entire customer CRM database overnight.
 
 #### 4.4 Active Directory Domain Services (AD DS) & LDAP
-- **Plain-English Analogy**: 
+- **Plain-English Analogy**:
   - **Active Directory**: The **Corporate Head Office Registry & Security Department**. It stores the company's organizational chart, controls who has keys to which offices, and issues security badges.
   - **LDAP**: The **Standardized Filing Cabinet Protocol** used to look up people in the directory: *"Give me the phone number and department for Employee #8941."*
 - **Technical Definition & Runtime Mechanics**:
@@ -2373,7 +2373,7 @@ An exhaustive, categorized reference encyclopedia explaining the terminology, ru
 - **🔥 Real-World Production Disaster Post-Mortem**: An unmonitored NTP server drifted by 6 minutes across a corporate datacenter. Over 4,000 Windows servers and 15,000 workstations immediately failed Kerberos authentication, locking all employees out of internal email, fileshares, and domain controllers for 6 hours.
 
 #### 4.6 Azure AD / Microsoft Entra ID (PHS vs. PTA vs. AD FS)
-- **Plain-English Analogy**: 
+- **Plain-English Analogy**:
   - **Password Hash Sync (PHS)**: Making a safe, irreversible photocopy of your key in the cloud so the cloud can let you in even if the on-premise office is closed.
   - **Pass-Through Authentication (PTA)**: The cloud calls your on-premise security guard on a secure walkie-talkie every time someone knocks on the cloud door.
   - **AD FS**: Building a massive physical security bridge between your on-premise castle and the cloud.

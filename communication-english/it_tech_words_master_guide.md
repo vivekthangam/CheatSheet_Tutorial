@@ -819,11 +819,11 @@ This guide decodes the **75 most critical IT technical words** that every softwa
 
 > **Staff Architect (Suresh)**:
 > *"Looking at your PR on line 142, you are calling the external payment gateway inside the `@Transactional` method.
-> 
+>
 > If the third-party payment gateway takes 8 seconds to respond under heavy load, your thread will hold open the HikariCP connection for that entire duration. Under peak traffic, this will cause **connection pool exhaustion** and trigger **cascading failures** across our unrelated user login endpoints.
-> 
+>
 > Furthermore, if the client experiences a network timeout and retries the request, your endpoint is not **idempotent**, meaning the customer could be charged twice. Please extract the HTTP call outside the database transaction, enforce an **idempotency key** backed by Redis, and wrap the client in a **circuit breaker**."*
-> 
+>
 > **Senior Engineer (Vignesh)**:
 > *"Brilliant catch, Suresh. I will move the network I/O outside the transaction boundaries, use an `Idempotency-Key` header with atomic Redis locking, and configure Resilience4j to fast-fail if the gateway latency breaches our 2-second timeout SLA."*
 
@@ -832,19 +832,19 @@ This guide decodes the **75 most critical IT technical words** that every softwa
 ### 🎭 Scenario B: Sev-1 Production Outage War Room
 
 > **Incident Commander**: *"Status check! Checkout service is throwing 504 Gateway Timeouts across US-East. What are the metrics showing?"*
-> 
+>
 > **SRE Lead (Priya)**:
 > *"Our Datadog APM **telemetry** indicates that our database **P99 latency** skyrocketed from 12ms to 14,000ms.
-> 
+>
 > What happened is that our top product inventory key expired from Redis at 12:00 PM without any TTL jitter. This triggered a massive **cache stampede** where 40,000 concurrent requests bypassed Redis and hammered Postgres simultaneously.
-> 
+>
 > The database CPU hit 100%, causing severe **thread pool starvation** in our backend pods. Kubernetes readiness probes started failing, and pods are getting killed in an endless **cascading reboot loop**."*
-> 
+>
 > **Incident Commander**: *"What is our mitigation plan?"*
-> 
+>
 > **SRE Lead**:
 > *"We are enabling emergency rate-limiting at our Cloudflare edge to **throttle** ingress traffic by 30%. Next, we are populating the Redis cache with randomized TTL jitter and applying a distributed Mutex lock on the cache loader. That will shield the database and allow HikariCP connections to stabilize."*
-> 
+>
 > **Incident Commander**: *"Execute mitigation immediately. Log all actions for our post-mortem."*
 
 ---

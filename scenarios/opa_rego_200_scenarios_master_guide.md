@@ -2,8 +2,8 @@
 
 # ⚖️ Open Policy Agent (OPA) & Rego: The Complete Architectural Masterclass, Built-In Reference, Rules Engines & 200 Production Scenarios
 
-> **Target Audience:** Software Engineers, Security Architects, Platform/DevOps Engineers, and Site Reliability Engineers (SREs).  
-> **Standard:** Written in **Rego v1** (the modern standard in OPA v1.0+ requiring explicit `if` and `contains` keywords).  
+> **Target Audience:** Software Engineers, Security Architects, Platform/DevOps Engineers, and Site Reliability Engineers (SREs).
+> **Standard:** Written in **Rego v1** (the modern standard in OPA v1.0+ requiring explicit `if` and `contains` keywords).
 > **Prerequisites:** **Zero.** We start from the foundational mental model of Policy-as-Code and build up through language grammar, every built-in function, rules engine alternatives (Cedar, Kyverno, Drools, Oso), and **200 categorized real-world production scenarios**.
 
 ---

@@ -28,8 +28,8 @@
   - [TRACK 2: THE 25 FLAGSHIP FEATURES DEEP DIVE (THE 6-PART BLUEPRINT)](#track-2-the-25-flagship-features-deep-dive-the-6-part-blueprint)
     - [1. Lambda Expressions & Functional Interfaces (Java 8 - JEP 126)](#1-lambda-expressions--functional-interfaces-java-8---jep-126)
     - [2. Streams API (Java 8 - JSR 335)](#2-streams-api-java-8---jsr-335)
-    - [3. Optional<T> (Java 8)](#3-optionalt-java-8)
-    - [4. CompletableFuture<T> (Java 8)](#4-completablefuturet-java-8)
+    - [3. `Optional<T>` (Java 8)](#3-optionalt-java-8)
+    - [4. `CompletableFuture<T>` (Java 8)](#4-completablefuturet-java-8)
     - [5. New Date & Time API (java.time - JSR 310) (Java 8)](#5-new-date--time-api-javatime---jsr-310-java-8)
     - [6. Default and Static Methods in Interfaces (Java 8)](#6-default-and-static-methods-in-interfaces-java-8)
     - [7. Java Platform Module System (JPMS / Project Jigsaw) (Java 9 - JEP 261)](#7-java-platform-module-system-jpms--project-jigsaw-java-9---jep-261)
@@ -160,7 +160,7 @@ March:     Feature Release (e.g., Java 24)  [ STS - 6 Months Support ]
 September: LTS Release     (e.g., Java 25)  [ LTS - 5 to 10+ Years Support ]
 ```
 
-- **The Train Metaphor**: The release train leaves the station on a fixed date (March and September) **no matter what**. 
+- **The Train Metaphor**: The release train leaves the station on a fixed date (March and September) **no matter what**.
 - If a feature (JEP) is ready and passes quality gates, it boards the train.
 - If a feature is delayed or needs more testing, **the train does NOT wait**! The release departs on time, and the incomplete feature simply catches the next train 6 months later.
 
@@ -301,7 +301,7 @@ To truly understand Java versioning, you must know the surrounding regulatory bo
 The **JCP (Java Community Process)** is the formal international standards consortium (consisting of Oracle, IBM, Red Hat, Google, ARM, Twitter, and Java User Groups) that governs the official **Java SE (Standard Edition) Specification**. No single company can unilaterally change the core Java language without the JCP Executive Committee voting to approve it.
 
 ### 2. JSR (Java Specification Request)
-A **JSR (Java Specification Request)** is the formal document submitted to the JCP describing proposed additions or modifications to the Java platform specifications. 
+A **JSR (Java Specification Request)** is the formal document submitted to the JCP describing proposed additions or modifications to the Java platform specifications.
 - *Famous Historic JSRs*:
   - **JSR 335**: Lambda Expressions and Streams for the Java Programming Language (Java 8).
   - **JSR 310**: Date and Time API (`java.time`) (Java 8).
@@ -3628,7 +3628,7 @@ java --add-opens java.base/java.lang=ALL-UNNAMED \
     ```bash
     -XX:StartFlightRecording=settings=profile,filename=pinning.jfr
     ```
-    - JFR records the event with carrier thread ID, duration, and stack trace with <1% overhead. In JDK Mission Control (JMC), filter on "Virtual Thread Pinned" events lasting >20ms to immediately pinpoint blocking monitors.
+    - JFR records the event with carrier thread ID, duration, and stack trace with &lt;1% overhead. In JDK Mission Control (JMC), filter on "Virtual Thread Pinned" events lasting >20ms to immediately pinpoint blocking monitors.
 - **Follow-Up Trap Question & Winning Answer:**
   - *Trap:* What other operation besides `synchronized` causes pinning in Java 21?
   - *Winning Answer:* Executing blocking operations inside a **native JNI C/C++ frame** or foreign function invocation via FFM API.
@@ -4800,7 +4800,7 @@ java --add-opens java.base/java.lang=ALL-UNNAMED \
 
 ## CONCLUDING SUMMARY: THE ENTERPRISE JAVA EVOLUTION ROADMAP
 
-Across modern software engineering, Java has evolved from an object-heavy, verbose enterprise runtime into a high-density, ultra-low-latency powerhouse. 
+Across modern software engineering, Java has evolved from an object-heavy, verbose enterprise runtime into a high-density, ultra-low-latency powerhouse.
 
 Key milestones summarize this trajectory:
 - **Java 8:** Established functional fluency with Lambdas, Streams, and the Monadic `Optional`.

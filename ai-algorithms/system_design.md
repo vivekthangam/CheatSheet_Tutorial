@@ -2,7 +2,7 @@
 
 # 🏛️ Design Patterns & Distributed System Design: The Architect's Complete Masterclass
 
-> **Target Audience:** Developers, Tech Leads, and Aspiring Architects who want to transition from writing basic procedural code to designing fault-tolerant, scalable low-level and high-level enterprise software systems.  
+> **Target Audience:** Developers, Tech Leads, and Aspiring Architects who want to transition from writing basic procedural code to designing fault-tolerant, scalable low-level and high-level enterprise software systems.
 > **Documentation Standard:** Every pattern follows the complete architectural specification: **Also Known As**, **Intent**, **Real-World Analogy & Plain Words**, **Programmatic Example in Java**, **When to Use / Where to Use**, **Real-World Applications (JDK & Spring)**, **Benefits & Trade-offs**, and **Related Patterns**.
 
 > [!TIP]
@@ -434,7 +434,7 @@ Ensure a Java class has only one single instance across the entire JVM runtime l
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Thread-Safety & Race Conditions**: In a multi-threaded application, naive lazy initialization (`if (instance == null) instance = new Singleton();`) leads to race conditions where two threads check `instance == null` simultaneously and allocate two distinct objects in heap memory, fragmenting connections and leaking state.
   - **Instruction Reordering & Double-Checked Locking Pitfalls**: Prior to Java 5, JMM instruction reordering allowed a thread to read a non-null instance pointer *before* the constructor finished initializing internal fields.
   - **Reflection & Serialization Attacks**: Traditional private constructors can be bypassed via `Constructor.setAccessible(true)` or deserialization creating new object copies.
@@ -443,7 +443,7 @@ Ensure a Java class has only one single instance across the entire JVM runtime l
   2. **Static Initialization**: The JVM creates the `INSTANCE` singleton during class initialization, guaranteeing atomic, thread-safe memory allocation before any thread can access it.
   3. **Heap Pointer Resolution**: Subsequent calls resolve directly to the pre-initialized heap reference with $O(1)$ zero-overhead memory access, completely bypassing synchronization locks.
   4. **JVM Guard Rail Enforcement**: Reflection invocations (`Constructor.newInstance()`) fail with `IllegalArgumentException: Cannot reflectively create enum objects`, and Java `ObjectInputStream` guarantees enum serialization returns the single canonical instance.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Enum singletons leverage JVM-level ClassLoader guarantees to provide lock-free thread safety, zero GC churn, absolute reflection defense, and immutable global state consistency.
 
 #### Sequence Diagram
@@ -592,7 +592,7 @@ Define an interface or abstract class for creating an object, but let subclasses
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Compile-Time Coupling**: Direct `new ConcreteClass()` invocations bind client bytecode directly to concrete class symbols (`invokespecial`). Any change in constructor signature or concrete implementation forces re-compilation of all consumer classes.
   - **Violation of Inversion of Control**: High-level policy workflows become polluted with low-level creation details, making mock injection impossible during unit testing.
 * **Step-by-Step Technical Logic Flow**:
@@ -600,7 +600,7 @@ Define an interface or abstract class for creating an object, but let subclasses
   2. **Virtual Method Dispatch (vtable lookup)**: Inside `planDelivery()`, the call to `this.createTransport()` triggers Java dynamic dispatch (`invokevirtual`). The JVM looks up the concrete subclass's virtual method table (`RoadLogistics` or `SeaLogistics`).
   3. **Subclass Instantiation**: The overridden `createTransport()` allocates the concrete product (`Truck` or `Ship`) on the heap and returns it as a polymorphic reference (`Transport` interface).
   4. **Execution over Abstraction**: The creator executes `transport.deliver()` against the interface contract. The client remains 100% agnostic of concrete types.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Decouples the *invocation of creation* from the *definition of creation*. New concrete products can be introduced via new creator subclasses with zero bytecode modifications or re-compilation to existing client services (pure Open/Closed Principle).
 
 #### Sequence Diagram
@@ -760,7 +760,7 @@ Provide an interface for creating families of related or dependent objects witho
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Incompatible Object Coupling**: Systems with multiple orthogonal product axes (e.g. Buttons, Checkboxes, Windows $\times$ Windows, Mac, Linux styles) easily permit mismatched cross-family instantiations (e.g. a Mac Button inside a Windows Window), leading to runtime graphical glitches and OS-level crashes.
   - **Direct Class Dependency**: Hardcoding concrete factory classes into consumer code prevents swapping whole product ecosystems at runtime.
 * **Step-by-Step Technical Logic Flow**:
@@ -768,7 +768,7 @@ Provide an interface for creating families of related or dependent objects witho
   2. **Synchronized Family Instantiation**: The client calls `factory.createButton()` and `factory.createCheckbox()`. Because both factory methods execute on the same concrete factory instance, every produced object is guaranteed to share the exact same style tokens, color palettes, and interface implementations.
   3. **Interface Polymorphism**: The client stores products as abstract interface pointers (`Button`, `Checkbox`), interacting strictly via polymorphic dispatch (`button.render()`).
   4. **Runtime Theme Hot-Swapping**: Swapping the entire UI theme only requires passing a new `LightThemeFactory` instance; zero consumer UI layout logic is modified.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Enforces 100% atomic family consistency at compile-time and runtime. Individual product implementations cannot cross family boundaries, preventing architectural contamination.
 
 #### Sequence Diagram
@@ -951,7 +951,7 @@ Separate the construction of a complex object from its representation so that th
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Mutable State Corruption in Multi-Threading**: JavaBean patterns (using setters) leave objects in an incomplete, partially-initialized state during construction. If a background thread reads the object before all setters complete, it observes corrupted data.
   - **Telescoping Constructor Anti-Pattern**: Multiple constructors with identical parameter types (`int timeout, int retries, int port`) cause silent bugs due to accidental parameter positional swapping.
 * **Step-by-Step Technical Logic Flow**:
@@ -960,7 +960,7 @@ Separate the construction of a complex object from its representation so that th
   3. **Atomic Validation & Snapshotting**: Upon calling `.build()`, the Builder executes cross-field validation rules (e.g. `timeout > 0`, non-null URLs) and passes itself to the target class's private constructor.
   4. **Defensive Copying & Immutability**: The target constructor copies collections defensively (`Collections.unmodifiableMap(new HashMap<>(builder.headers))`) and assigns fields to `final` variables.
   5. **Safe Publication**: The newly created immutable instance is returned to the client. Because all fields are `final`, the Java Memory Model (JMM) guarantees safe publication across all CPU threads without synchronization locks.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Separates the mutable gathering phase from the immutable runtime execution phase, guaranteeing that invalid or partially constructed objects can never exist in memory.
 
 #### Sequence Diagram
@@ -1136,7 +1136,7 @@ Specify the kinds of objects to create using a prototypical instance, and create
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Repetitive Expensive Initialization**: Complex object construction often involves disk I/O, database round-trips, network configuration parsing, or matrix calculations. Re-running this logic repeatedly causes CPU throttling and latency spikes.
   - **Shallow Copy Bug Trap (`Object.clone()`)**: Default Java `clone()` performs shallow memory copying (only copies object memory address references). If a cloned object modifies an inner `List` or `Map`, it silently corrupts the state of all other clones in memory!
 * **Step-by-Step Technical Logic Flow**:
@@ -1145,7 +1145,7 @@ Specify the kinds of objects to create using a prototypical instance, and create
   3. **Heap Memory Allocation & Deep Copying**: The prototype invokes its deep-copy copy-constructor (`new ServerConfiguration(this)`).
   4. **Collection & Reference Duplication**: For every primitive field, values are copied by value. For every reference/collection (e.g. `List<String> installedModules`), a brand new collection object is allocated on the heap: `this.installedModules = new ArrayList<>(source.installedModules)`.
   5. **Isolation & Customization**: The new independent instance is returned. The caller can safely mutate the clone (e.g. `setServerName("worker-01")`) without affecting the master prototype or other parallel clones.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Transforms expensive $O(N \cdot \text{Cost}_{\text{I/O}})$ construction operations into ultra-fast in-memory heap-to-heap memory allocation operations ($O(K \cdot \text{DeepCopy})$) with complete memory isolation.
 
 #### Sequence Diagram
@@ -1316,7 +1316,7 @@ Convert the interface of an existing class into another interface that clients e
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Interface Incompatibility & Binary Dependency Traps**: Third-party libraries, legacy vendor SDKs, or external microservice contracts frequently present incompatible method signatures, data types, and protocol formats. Direct invocation creates tight coupling to external vendor contracts that may deprecate without notice.
   - **Legacy Code Volatility**: Modifying working, battle-tested legacy classes directly violates the Open/Closed Principle and risks breaking historical edge-case guarantees.
 * **Step-by-Step Technical Logic Flow**:
@@ -1325,7 +1325,7 @@ Convert the interface of an existing class into another interface that clients e
   3. **Data Transformation & Translation**: When `processPayment(customerId, amount)` is invoked, the adapter converts high-level parameters into the low-level format required by the legacy subsystem (e.g. serializing to SOAP/XML, converting USD to cents integer).
   4. **Delegation**: The adapter calls the adaptee's specific method (`executeXmlTransfer(xmlPayload)`).
   5. **Response Translation**: The adapter parses the adaptee's raw output (e.g. XML/JSON/Status code) and maps it to the modern return type (`PaymentResult`), returning it to the caller.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Establishes an Anti-Corruption Layer (ACL). The client code depends strictly on its own clean domain interface, completely isolated from vendor protocol churn or legacy quirks.
 
 #### Sequence Diagram
@@ -1478,7 +1478,7 @@ Attach additional responsibilities to an object dynamically at runtime without m
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Subclass Explosion (Combinatorial Hell)**: Statically subclassing every combination of features ($N$ features $\implies 2^N$ subclasses) leads to unmaintainable class hierarchies and severe code duplication.
   - **Static Class Binding**: Inheritance fixes behavior at compile time. An object cannot dynamically add encryption or compression at runtime based on incoming request headers.
 * **Step-by-Step Technical Logic Flow**:
@@ -1488,7 +1488,7 @@ Attach additional responsibilities to an object dynamically at runtime without m
   4. **Inner Delegation**: The outer decorator invokes `wrappee.write()`, passing execution to `EncryptionDecorator`. It transforms the data (e.g. encrypts bytes to ciphertext) and forwards to the inner core component.
   5. **Terminal Execution**: The innermost component (`FileDataStream`) executes the raw physical disk/memory I/O operation.
   6. **Outbound Unwinding (Post-Processing)**: Return values bubble back up through the decorator stack, allowing symmetric post-processing (e.g., decryption upon `read()`).
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Adheres strictly to the Single Responsibility Principle. Each decorator focuses on one isolated concern (e.g., Compression, Logging, Encryption, Caching) while runtime composition dynamically orchestrates the pipeline.
 
 #### Sequence Diagram
@@ -1681,7 +1681,7 @@ Provide a unified, simplified, high-level interface to a complex set of interfac
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **High Architectural Coupling (Leaky Subsystem Abstractions)**: If client code directly imports and orchestrates 10 different subsystem classes (e.g. `InventoryService`, `PaymentGateway`, `ShippingClient`, `TaxEngine`, `EmailNotificationService`), any internal refactoring across those subsystems breaks client code everywhere.
   - **Chatty Network & Inefficient Inter-Module Communication**: Clients risk making multiple fine-grained roundtrips, increasing latency, transaction window durations, and partial-failure rollback overhead.
 * **Step-by-Step Technical Logic Flow**:
@@ -1693,7 +1693,7 @@ Provide a unified, simplified, high-level interface to a complex set of interfac
      - *Step C*: Dispatches `shipping.scheduleDispatch(sku, user)` $\to$ returns tracking number.
   4. **Cohesive Result Synthesis**: The Facade aggregates the responses from the independent subsystems and constructs a clean summary DTO (`OrderResult`).
   5. **Direct Access Freedom**: Power users or internal administrative modules can still bypass the Facade and access raw subsystem classes directly if low-level granular control is needed.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Enforces the Principle of Least Knowledge (Law of Demeter). Clients talk only to the Facade, reducing the coupling surface area of the entire subsystem down to a single cohesive interface.
 
 #### Sequence Diagram
@@ -1857,7 +1857,7 @@ Provide a surrogate or placeholder for another object to control access to it (e
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Eager Heap Resource Exhaustion**: Instantiating heavyweight dependencies (e.g., establishing remote TCP socket connections, loading 500MB neural network models, binding graphics device contexts) at application startup causes slow boot times and OutOfMemoryErrors.
   - **Missing Interception Infrastructure**: Executing cross-cutting concerns (authentication token validation, metrics timers, thread-safe cache invalidation) directly inside domain logic pollutes business code.
 * **Step-by-Step Technical Logic Flow**:
@@ -1867,7 +1867,7 @@ Provide a surrogate or placeholder for another object to control access to it (e
      - **Cache Hit ($O(1)$ Fast Path)**: Returns cached reference immediately in $<0.1\text{ms}$ without waking downstream network threads or touching disk.
   3. **Lazy Target Invocation (Slow Path)**: If not present, the proxy delegates to the real wrapped object (`realService.fetchVideo(id)`), waiting for the slow remote/disk operation to complete.
   4. **State Storage & Return**: The proxy writes the result to the cache with optional TTL expiration policies and returns the payload to the client.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Provides transparent structural interception. The client remains completely oblivious that a proxy is standing in between, while the target object is protected from redundant calls and unauthorized access.
 
 #### Sequence Diagram
@@ -2020,7 +2020,7 @@ Compose objects into tree structures to represent part-whole hierarchies. Compos
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Branch-vs-Leaf Condition Explosions**: Traversal algorithms traversing hierarchical tree data structures (e.g. DOM nodes, AST syntax trees, File Systems) get polluted with repetitive type-checking conditionals (`if (node.isContainer()) { for (child : node) ... } else { process(node); }`).
   - **Memory Graph Fragility**: Adding new composite container types or new leaf node representations forces full refactoring of all external tree-walking consumers.
 * **Step-by-Step Technical Logic Flow**:
@@ -2031,7 +2031,7 @@ Compose objects into tree structures to represent part-whole hierarchies. Compos
      - Leaf nodes evaluate their terminal state ($O(1)$) and return immediately.
      - Composite nodes iterate over their children (`children.stream().mapToLong(FileSystemItem::getSizeInBytes).sum()`), transparently delegating down the tree hierarchy via the call stack.
   5. **Tree Reduction**: The total aggregated metric bubbles back up to the root caller.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Eliminates client-side tree traversal boilerplate by embedding recursive polymorphism directly into the nodes themselves. The client treats the root composite node identically to a single leaf.
 
 #### Sequence Diagram
@@ -2205,7 +2205,7 @@ Fit more objects into the available amount of RAM by sharing common parts of sta
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **JVM Heap Exhaustion & GC Thrashing**: Creating millions of fine-grained heap objects (e.g. 10,000,000 text character glyphs, map markers, or particle effects) floods the young generation, causing frequent stop-the-world Full GC pauses and memory starvation.
   - **Memory Duplication of Redundant State**: 99% of object memory footprint often consists of immutable shared data (textures, fonts, polygons, schemas) duplicated millions of times.
 * **Step-by-Step Technical Logic Flow**:
@@ -2216,7 +2216,7 @@ Fit more objects into the available amount of RAM by sharing common parts of sta
   3. **Canonical Reference Reuse**: If the flyweight exists in the internal `ConcurrentHashMap`, the factory returns the existing pointer. If not, it allocates it once.
   4. **Lightweight Context Instantiation**: The client allocates a small `Tree` instance on the heap holding only primitive coordinates and a 64-bit reference pointer (8 bytes compressed OOPs) to the shared `TreeType`.
   5. **Contextual Invariant Dispatch**: During rendering, `tree.draw()` calls `sharedTreeType.render(this.x, this.y, this.height)`, passing the extrinsic context on the CPU thread stack rather than storing it in heap fields.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Replaces $O(N \times \text{Size}_{\text{Heavy}})$ memory footprint with $O(K \times \text{Size}_{\text{Heavy}} + N \times \text{Size}_{\text{Light}})$ where $K \ll N$ ($K = \text{number of distinct types}$).
 
 #### Sequence Diagram
@@ -2377,7 +2377,7 @@ Decouple an abstraction from its implementation so that the two can vary indepen
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Cartesian Product Class Hierarchy Explosion**: When a domain concept varies along two independent orthogonal dimensions (e.g., GUI Controls $\times$ Operating System Platforms, or Shapes $\times$ Rendering Engines), inheritance forces creating $M \times N$ concrete classes.
   - **Monolithic Inflexible Inheritance**: Hardwiring platform-specific code into UI control subclasses makes it impossible to switch device drivers or platforms at runtime without reconstructing the entire UI graph.
 * **Step-by-Step Technical Logic Flow**:
@@ -2388,7 +2388,7 @@ Decouple an abstraction from its implementation so that the two can vary indepen
   3. **High-Level Invocation**: Client calls a domain-level feature on the abstraction: `remote.mute()`.
   4. **Primitive Delegation across the Bridge**: The abstraction translates high-level intents into one or more low-level primitive calls across the bridge: `device.setVolume(0)`.
   5. **Independent Extensibility**: You can add 10 new remote controls (voice-controlled, gesture-based) without writing a single line of Sony/Bose platform code; you can add 10 new devices without touching existing remote classes.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Applies the design principle: *"Favor object composition over class inheritance"*. It replaces $M \times N$ classes with $M + N$ classes.
 
 #### Sequence Diagram
@@ -2574,7 +2574,7 @@ Define a family of algorithms, encapsulate each one, and make them interchangeab
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Sprawling Cyclomatic Complexity (`if/else` & `switch` Hell)**: Hardcoding branching logic for pricing, tax calculation, compression algorithms, or routing engines violates the Open/Closed Principle and results in fragile 1000-line monolithic methods.
   - **Compile-Time Algorithm Coupling**: Forbids dynamic hot-swapping of business policies at runtime without recompilation or class restarts.
 * **Step-by-Step Technical Logic Flow**:
@@ -2585,7 +2585,7 @@ Define a family of algorithms, encapsulate each one, and make them interchangeab
      - Client invokes `checkoutContext.executeCheckout(amount)`.
      - Context delegates dynamically to `strategy.calculateFinalPrice(amount)` via JVM virtual method dispatch (`invokeinterface` / `invokevirtual`).
   5. **Runtime Strategy Mutation**: The strategy can be switched at runtime (`checkoutContext.setStrategy(new FlashSaleStrategy())`) without recreating or altering the context state.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Decouples algorithm execution from algorithm selection. Enables zero-regression extensibility where new business rules are added by creating new classes without touching existing codebase paths.
 
 #### Sequence Diagram
@@ -2722,7 +2722,7 @@ Define a one-to-many dependency between objects so that when one object changes 
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Tight Direct Coupling & Polling Waste**: In event-driven architectures, if the event producer directly instantiates and invokes every downstream consumer (e.g., AuditLogger, NotificationService, ElasticSearchIndexer), the producer is tightly coupled and stalls on slow consumers. Polling (consumers repeatedly asking "Did state change?") wastes CPU cycles and network bandwidth.
   - **Memory Leak Hazards (Lapsed Listener Problem)**: Failing to provide clean unregister mechanisms leads to GC roots keeping obsolete listeners in memory indefinitely.
 * **Step-by-Step Technical Logic Flow**:
@@ -2733,7 +2733,7 @@ Define a one-to-many dependency between objects so that when one object changes 
      - **Push Model**: The Subject iterates over its registered listeners and calls `observer.onPriceUpdate(ticker, price)` directly, passing immutable event data.
      - **Pull Model**: The Subject passes only a reference to itself, letting observers query only the specific sub-fields they require.
   5. **Asynchronous Hand-off**: High-throughput systems hand off the broadcast loop to an `ExecutorService` thread pool or reactive streams dispatcher (`Flow.Publisher`, Project Reactor, Kafka) so the publishing thread is not blocked by slow observer execution.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Decouples the event emitter from the number, type, and lifecycle of downstream consumers, upholding the Single Responsibility Principle.
 
 #### Sequence Diagram
@@ -2868,7 +2868,7 @@ Encapsulate a request as an object, thereby letting you parameterize clients wit
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Receiver-Invoker Tight Coupling**: When GUI buttons, scheduled cron jobs, or network message listeners directly execute receiver business logic (`receiver.doComplexWork()`), they cannot be reused across different UI buttons, queued for async background execution, serialized across network boundaries, or rolled back on failure.
   - **Lack of Reversible Transaction History**: Direct state modifications mutate memory in-place without preserving differential inverse deltas required for multi-step Undo/Redo or saga rollbacks.
 * **Step-by-Step Technical Logic Flow**:
@@ -2885,7 +2885,7 @@ Encapsulate a request as an object, thereby letting you parameterize clients wit
      - User clicks Undo. Invoker pops the top command from `undoStack`.
      - Invoker calls `command.undo()`.
      - Command executes the precise inverse compensation mutation on the Receiver and pushes the command to `redoStack`.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Transforms ephemeral method calls into first-class heap objects that can be queued, delayed, logged to WAL (Write-Ahead Logging), or replayed deterministically.
 
 #### Sequence Diagram
@@ -3058,7 +3058,7 @@ Avoid coupling the sender of a request to its receiver by giving more than one o
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Hardcoded Interceptor Monoliths**: Embedding validation, rate limiting, authentication, payload decompression, and metrics timing in a single giant monolithic routine produces inflexible, tightly coupled spaghetti code.
   - **Inability to Reorder or Conditionally Short-Circuit Middleware**: Fixed pipeline orders prevent dynamic runtime reconfiguration (e.g. enabling a DDoS mitigation filter only during attacks, or dynamically rearranging security checks).
 * **Step-by-Step Technical Logic Flow**:
@@ -3070,7 +3070,7 @@ Avoid coupling the sender of a request to its receiver by giving more than one o
      - **Failure / Early Exit**: If the request fails validation (e.g. invalid JWT token), the handler logs the rejection and immediately returns `false` (short-circuiting), stopping further downstream processing.
      - **Success / Continuation**: If passed, the handler delegates to `handleNext(request)` $\to$ `next.handle(request)`.
   5. **Terminal Execution**: When the final handler in the chain passes without errors, the chain returns `true` or delivers the request to the business controller.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Provides flexible, open-ended request filtration where each handler operates as an independent, single-responsibility filter that can be rearranged or substituted without modifying downstream handlers.
 
 #### Sequence Diagram
@@ -3231,7 +3231,7 @@ Allow an object to alter its behavior when its internal state changes. The objec
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Sprawling `switch (state)` Invariants & State Pollution**: Managing complex object lifecycles (e.g. Order states: `NEW` $\to$ `PAID` $\to$ `SHIPPED` $\to$ `DELIVERED` / `CANCELLED`) with enum conditionals causes every method to repeat 20-line `switch(state)` blocks, leading to illegal state transition vulnerabilities.
   - **Rigid Lifecycle Evolution**: Adding a new lifecycle state (e.g. `REFUND_PENDING`) requires auditing and modifying dozens of disparate switch statements across the entire codebase.
 * **Step-by-Step Technical Logic Flow**:
@@ -3243,7 +3243,7 @@ Allow an object to alter its behavior when its internal state changes. The objec
      - Context delegates to `currentState.pay(this)`.
      - Inside `NewOrderState.pay(context)`: Payment gateway processes charge $\to$ state triggers atomic transition: `context.setState(new PaidOrderState())`.
   5. **Polymorphic Behavior Shift**: Subsequent calls on `orderContext` now execute with the behavioral rules of `PaidOrderState` without changing the context's identity.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Transforms a procedural finite state machine into a self-contained polymorphic graph. Each state enforces its own transition invariants cleanly.
 
 #### Sequence Diagram
@@ -3412,7 +3412,7 @@ Define the skeleton of an algorithm in an operation, deferring some steps to sub
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Algorithm Workflow Fragmentation & Duplication**: When multiple services follow an identical macro-workflow (e.g. ETL pipeline: `OpenConnection` $\to$ `Extract` $\to$ `Validate` $\to$ `Transform` $\to$ `WriteToDB` $\to$ `CloseConnection`), implementing the steps independently across subclasses creates duplicate lifecycle boilerplate and causes order-of-execution bugs (e.g. leaking unclosed DB resources or skipping audit logs).
   - **Inversion of Control Violation**: Framework code needs to drive subclass execution (*"Don't call us, we'll call you"* / Hollywood Principle) rather than letting user subclasses manipulate the control loop.
 * **Step-by-Step Technical Logic Flow**:
@@ -3426,7 +3426,7 @@ Define the skeleton of an algorithm in an operation, deferring some steps to sub
      - Base class calls `this.parseData()`, dynamically dispatching to the concrete implementation in `PdfDataMiner` via the JVM vtable.
      - Base class calls optional lifecycle hook `hookPostProcessing()`.
      - Base class closes I/O streams in an invariant `finally` block.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Guarantees invariant algorithmic integrity and resource management safety at the base class level while granting child subclasses targeted extension points.
 
 #### Sequence Diagram
@@ -3588,7 +3588,7 @@ Define an object that encapsulates how a set of objects interact. Mediator promo
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **$O(N^2)$ Tight Mesh Coupling**: When $N$ collaborative components (e.g., UI Dialog controls: Dropdown, Checkbox, SubmitButton, FormValidator, ErrorBanner) hold direct object references to each other, adding or modifying any single control causes a cascade of breaking changes across all other controls.
   - **Spaghetti Coordination Code**: Business orchestration rules get scattered randomly across dozens of independent UI widgets.
 * **Step-by-Step Technical Logic Flow**:
@@ -3599,7 +3599,7 @@ Define an object that encapsulates how a set of objects interact. Mediator promo
      - The concrete mediator receives the event.
      - It executes filtering, access validation, and coordination logic.
      - It broadcasts or targets the event to appropriate recipient colleagues: `for (Colleague c : colleagues) { if (c != sender) c.receive(msg, sender.getName()); }`.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Converts a chaotic $O(N^2)$ direct-reference network mesh into an easily maintainable $O(N)$ star topology.
 
 #### Sequence Diagram
@@ -3750,7 +3750,7 @@ Without violating encapsulation, capture and externalize an object's internal st
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Encapsulation Breakdown in Undo Operations**: Saving snapshots of an object's internal fields (e.g. private canvas buffers, cursor offset coordinates, transaction state) by exposing public getters/setters breaks OOP encapsulation and invites outside mutations.
   - **State Corruption During External Storage**: Exposing mutable state references to an undo/redo stack allows other components to unintentionally alter past snapshots in memory.
 * **Step-by-Step Technical Logic Flow**:
@@ -3761,7 +3761,7 @@ Without violating encapsulation, capture and externalize an object's internal st
      - When undo is invoked, the Caretaker pops the latest memento from its stack (`history.pop()`).
      - Caretaker passes the memento back to the Originator: `editor.restore(memento)`.
      - Inside `restore()`, the Originator extracts the snapshot values and reassigns its private fields atomically.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Maintains complete encapsulation boundary isolation: the Originator is the only entity that ever reads/writes snapshot state, while the Caretaker treats snapshots as completely opaque handles.
 
 #### Sequence Diagram
@@ -3910,7 +3910,7 @@ Provide a way to access the elements of an aggregate object sequentially without
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Data Structure Exposure**: Exposing the internal physical memory layout (e.g. nested tree nodes, circular ring pointer arithmetic, skip-list pointers) forces client algorithms to write structure-dependent indexing code.
   - **Multiple Concurrent Scanners**: When multiple threads or algorithms need to traverse the same collection simultaneously at different speeds, storing traversal cursor index fields directly inside the collection object breaks concurrent scans.
 * **Step-by-Step Technical Logic Flow**:
@@ -3921,7 +3921,7 @@ Provide a way to access the elements of an aggregate object sequentially without
      - `next()` retrieves the current array element, updates its internal cursor pointer (`cursor = (cursor + 1) % capacity`), increments the traversal counter, and returns the element.
      - Throws standard `NoSuchElementException` when traversing past bounds.
   4. **Concurrent Traversal Isolation**: Multiple iterators can traverse the same ring buffer independently without interfering with each other's cursor indices.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Decouples the complex internal storage algorithms from client traversal code, adhering to Single Responsibility and allowing plug-and-play iteration across arbitrary data structures.
 
 #### Sequence Diagram
@@ -4067,7 +4067,7 @@ Represent an operation to be performed on the elements of an object structure. V
 
 #### 🧠 Technical Logic Flow & Under-the-Hood Mechanics (Developer Deep Dive)
 
-* **Low-Level Technical Problem It Solves**: 
+* **Low-Level Technical Problem It Solves**:
   - **Single-Dispatch Polymorphism Limitation**: Java supports only single dynamic dispatch based on runtime receiver type (`element.operation()`), meaning overloaded methods `process(BaseNode)` resolve at compile-time to the static reference type rather than the concrete runtime subclass type, causing `instanceof` cascades.
   - **Entity Class Contamination**: Forcing domain entity classes (e.g. `UserAccountNode`, `OrderRecordNode`) to implement unrelated cross-cutting operations (e.g. JSON serialization, compliance audits, tax calculation, bytecode compilation) pollutes core models with divergent responsibilities.
 * **Step-by-Step Technical Logic Flow**:
@@ -4077,7 +4077,7 @@ Represent an operation to be performed on the elements of an object structure. V
      - **Dispatch 2**: Inside `UserAccountNode.accept(visitor)`, the node calls `visitor.visit(this)`. Because `this` is explicitly typed as `UserAccountNode`, the JVM statically binds the call to the overloaded method `visit(UserAccountNode)` on the visitor.
   3. **Algorithm Execution in Specialized Visitor**: The visitor (`FinancialAuditVisitor` or `XmlExportVisitor`) extracts required properties and executes calculation/export without modifying the element class.
   4. **Heterogeneous Graph Traversal**: Client iterates a list of heterogeneous nodes (`List<VisitableNode>`), invoking `accept(visitor)` on each node, achieving type-safe dynamic operation dispatch.
-* **Why the Architecture Holds**: 
+* **Why the Architecture Holds**:
   Overcomes single-dispatch constraints via the double-dispatch handshake, enabling new features/algorithms to be added purely by creating new `Visitor` implementations without touching stable domain entity classes.
 
 #### Sequence Diagram

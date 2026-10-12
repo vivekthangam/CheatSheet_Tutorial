@@ -104,7 +104,7 @@ Imagine you have a Java method that calculates if a number is prime, and you not
 3. In the **"Local"** pane on the left, double-click your running application (e.g., `com.example.Main`).
 
 ### Step 2: Monitor the Vital Signs
-Click the **Monitor** tab. This gives you a high-level view of CPU and Heap. 
+Click the **Monitor** tab. This gives you a high-level view of CPU and Heap.
 * If the CPU graph stays near the top, you have a **logic bottleneck**.
 * If the Heap graph looks like a "sawtooth" (rising sharply and dropping constantly), you have **GC overhead**.
 
@@ -130,7 +130,7 @@ If you need to share the data or look closer, click the **Snapshot** button. Thi
 If your app crashes with `java.lang.OutOfMemoryError`, follow these steps:
 
 1.  **Trigger a Heap Dump:** In VisualVM, right-click your app and select **Heap Dump**.
-2.  **Look at the "Objects" tab:** Sort by size. 
+2.  **Look at the "Objects" tab:** Sort by size.
 3.  **The Discovery:** You notice `java.util.ArrayList` is taking up 800MB.
 4.  **Find the Root:** Right-click the ArrayList and select **"Nearest GC Root."** * *Example Discovery:* It turns out a `Static List` inside your `SessionManager` class is storing user data but never removing it when users log out.
 
@@ -233,7 +233,7 @@ Run the program: `java ProfilingDemo.java`. Then open **VisualVM**.
 ### Problem A: The CPU Spike
 1.  In VisualVM, go to the **Sampler** tab and click **CPU**.
 2.  **What you’ll see:** The `CPU-Hog-Thread` will be at the top.
-3.  **The Detail:** Expand the tree. You will see `computePrimes()` consuming nearly 100% of that thread's time. 
+3.  **The Detail:** Expand the tree. You will see `computePrimes()` consuming nearly 100% of that thread's time.
 4.  **The Fix:** You’d identify that the nested loop in `computePrimes` is $O(n^2)$ and should be optimized using something like the Sieve of Eratosthenes.
 
 
@@ -267,7 +267,7 @@ When you look at your profiler, use this mental "Cheat Sheet":
 ---
 
 ## 4. Advanced: Using "Flame Graphs"
-If you use **IntelliJ Profiler** or **async-profiler**, you will see a **Flame Graph**. 
+If you use **IntelliJ Profiler** or **async-profiler**, you will see a **Flame Graph**.
 * **Width** = How much CPU time that method (and its children) consumed.
 * **Stack** = The hierarchy of calls.
 * **Goal:** Find the widest bars at the top of the stack. Those are your "Hot Spots."
@@ -362,7 +362,7 @@ public class ProfilingDemo {
 ## 2. Comparing the Profile Results
 
 ### CPU: The Flame Graph Transformation
-In the "Broken" version, your CPU sampler showed a massive, wide block for `computePrimes`. 
+In the "Broken" version, your CPU sampler showed a massive, wide block for `computePrimes`.
 In the "Optimized" version:
 * The `computePrimesOptimized` method will be a tiny sliver.
 * The CPU usage percentage for the process will drop from ~90% to under 10%.
@@ -383,7 +383,7 @@ In the "Optimized" version:
 ---
 
 ## 3. Advanced Analysis: Method Invocation Counts
-When you profile this new version, look at the **Sampler -> CPU -> Settings**. 
+When you profile this new version, look at the **Sampler -> CPU -> Settings**.
 1.  Check the box for **"Profile Invocations."**
 2.  Now, the profiler doesn't just tell you *how long* a method took, but *how many times* it was called.
 3.  **Optimization Insight:** Sometimes a method is fast (e.g., 1ms), but if it's called 1,000,000 times in a loop, it becomes your bottleneck. Profiling invocation counts helps you find these "Death by a thousand cuts" scenarios.
@@ -418,7 +418,7 @@ To wrap up this hands-on lesson, here is a detailed breakdown of how to interpre
 In the original program, your CPU Sampler was likely dominated by `computePrimes`. In the optimized version, the **Self Time** for that method will plummet.
 
 * **Before:** `computePrimes` occupies ~90% of the CPU. The **Flame Graph** shows a very wide, deep-colored bar for this method.
-* **After:** `computePrimesOptimized` barely registers. It might not even show up at the top of the list unless you decrease the sampling interval. 
+* **After:** `computePrimesOptimized` barely registers. It might not even show up at the top of the list unless you decrease the sampling interval.
 
 
 
@@ -456,7 +456,7 @@ Now that you have the code and the tool, remember the **Cycle of Optimization**:
 1.  **Baseline:** Measure the performance of the "bad" code.
 2.  **Hypothesize:** Use the profiler to guess *where* the problem is (e.g., "I think `ArrayList` is leaking").
 3.  **Isolate:** Change **only one thing** in the code.
-4.  **Verify:** Re-profile to see if the graph actually changed. 
+4.  **Verify:** Re-profile to see if the graph actually changed.
 
 If you change three things at once, you won't know which one actually fixed the problem!
 
@@ -615,7 +615,7 @@ Yes
 
 # gemini response
 
-When you profile a production server, you rarely want to open a firewall port like **9010** to the entire internet—that is a massive security risk. Instead, you use an **SSH Tunnel**. 
+When you profile a production server, you rarely want to open a firewall port like **9010** to the entire internet—that is a massive security risk. Instead, you use an **SSH Tunnel**.
 
 An SSH Tunnel acts like a secure "pipe" from your local machine to the server, making the remote JVM think your profiler is running right next to it.
 
@@ -718,7 +718,7 @@ Click **CPU** in the Sampler tab.
 
 ### 3. The Threads Tab (The "Traffic Jam")
 This is where you see the "Contention" we talked about.
-* **Identify:** Look for the two threads we named `Blocked-Thread-1` and `Blocked-Thread-2`. 
+* **Identify:** Look for the two threads we named `Blocked-Thread-1` and `Blocked-Thread-2`.
 * **The Visual:** You will see long stretches of **Red** bars. This confirms that your code is "thread-safe" but "performance-broken" because the threads are fighting for a lock.
 
 
@@ -1180,7 +1180,7 @@ Since you want to master **all** these real-world scenarios, let's break down ex
 * **The Profiler View:**
     * **Monitor Tab:** The "Used Heap" looks like a staircase. Even after you click "Perform GC," the "bottom" of the staircase never goes back down to where it started.
     * **Heap Dump (The Smoked Gun):** You find that `java.util.HashMap$Node` is taking up 70% of the heap. When you right-click and "View GC Roots," it leads back to your `SessionManager` class.
-    
+
 
 
 ---
@@ -1203,7 +1203,7 @@ Since you want to master **all** these real-world scenarios, let's break down ex
 * **The Profiler View:**
     * **Threads Tab:** Your HTTP worker threads are **Purple** (Waiting) or **Orange** (I/O). They aren't "Blocked" by Java code; they are waiting for a response from the network.
     * **Call Tree:** You see `SocketInputStream.socketRead0` taking up 98% of the thread's life.
-    
+
 
 
 ---
@@ -1903,7 +1903,7 @@ Give me 100 scenarios based question and answer for profiling and when and where
 
 # gemini response
 
-Since providing 100 individual scenarios in a single list would be a massive wall of text, I have categorized them into the **top 10 thematic clusters** that cover the 100 most common situations you will face in a professional Java environment. 
+Since providing 100 individual scenarios in a single list would be a massive wall of text, I have categorized them into the **top 10 thematic clusters** that cover the 100 most common situations you will face in a professional Java environment.
 
 Each cluster represents 10 variations of the same core problem (e.g., different types of I/O, different types of leaks).
 
@@ -1954,7 +1954,7 @@ Each cluster represents 10 variations of the same core problem (e.g., different 
 **Scenario:** The OS reports "Too many open files" or "Cannot create new native thread."
 * **Examples:** Creating a `new Thread()` inside an API call instead of using an `ExecutorService`, unclosed fixed thread pools.
 * **Where to Check:** **Threads Tab** (Thread Count).
-* **Answer:** Monitor the total thread count. If it grows linearly without ever dropping, you are leaking threads. 
+* **Answer:** Monitor the total thread count. If it grows linearly without ever dropping, you are leaking threads.
 
 ---
 
@@ -4941,7 +4941,7 @@ Using "Profile" mode (Instrumentation) in a high-traffic production app.
 **Fixed Code:**
 ```text
 Use "Sample" mode (Sampling) or JFR (Java Flight Recorder). 
-They have <1% overhead and are safe for production.
+They have &lt;1% overhead and are safe for production.
 ```
 
 ---
@@ -5018,10 +5018,10 @@ Before looking at code, look at the shape of the graphs. The "geometry" of the m
 
 * **The Staircase:** Heap goes up, GC fires, but the "bottom" of the graph keeps rising.
     * *Check Set 1 (Memory Leaks).*
-    
+
 * **The Plateau:** CPU hits 90-100% and stays there like a flat table.
     * *Check Set 2 (CPU Hogs).*
-    
+
 * **The Flatline:** CPU is at 0-5%, but the application is not responding to users.
     * *Check Set 3 (Threads) or Set 4 (I/O).*
 
@@ -5031,15 +5031,15 @@ Before looking at code, look at the shape of the graphs. The "geometry" of the m
 Once you know the category, you need the "ID" of the killer.
 
 * **If it's Memory:** Take a **Heap Dump**. Sort by "Retained Size." If `char[]` or `byte[]` is at the top, look at what is holding them (the "Incoming References").
-    
+
 * **If it's CPU:** Open the **Sampler** and look at "Self Time." If `Regex` or `String` methods are at the top, you've found your "Hot Spot."
 * **If it's Lag:** Take a **Thread Dump**. Look for the word `BLOCKED` (Locking issue) or `SocketRead` (Database/API issue).
-    
+
 
 ---
 
 ### **Step 3: The "Treatment" (Code Fix)**
-Apply the "Fixed Code" from the 100 scenarios we discussed. 
+Apply the "Fixed Code" from the 100 scenarios we discussed.
 
 | If the Profiler says... | The Root Cause is likely... | The Fix is... |
 | :--- | :--- | :--- |

@@ -90,7 +90,7 @@ Every command in this master handbook contains:
 | Term | What It Means | Real-World Analogy |
 | :--- | :--- | :--- |
 | **System Call (`syscall`)** | The secure programmatic API boundary between user applications and the privileged Linux Kernel. | A bank teller window. You cannot walk into the bank vault yourself; you hand a slip to the teller who fetches the cash. |
-| **Pipes (`\|`) & Redirection (`>`, `<`)** | Feeding the standard output stream (`stdout`) of one command directly into the standard input stream (`stdin of another. | Connecting two water pipes together so water from faucet A flows directly into filter B without spilling on the floor. |
+| **Pipes (`\|`) & Redirection (`>`, `<`)** | Feeding the standard output stream (`stdout`) of one command directly into the standard input stream (`stdin`) of another. | Connecting two water pipes together so water from faucet A flows directly into filter B without spilling on the floor. |
 | **Permissions (`rwx` / `755`)** | 3-tiered access security (User, Group, Others) granting Read (4), Write (2), and Execute (1) rights. | An office keycard system where you can view a document (Read), edit it (Write), or run the paper shredder (Execute). |
 | **Signals (`SIGTERM 15`, `SIGKILL 9`)** | Inter-process asynchronous notifications sent by the OS to tell a process to do something or die. | `15` is a gentle tap on the shoulder asking you to pack your desk and leave. `9` is a wrecking ball demolishing the building. |
 | **Standard Streams (`0, 1, 2`)** | The 3 default I/O channels created for every running process: `0` (stdin), `1` (stdout), `2` (stderr). | 3 separate mailboxes: one for incoming letters, one for outgoing regular mail, and one for red error envelopes. |
@@ -606,7 +606,7 @@ Welcome to the command field, Vanguard Agent. Your mission is to master the Linu
 
 ### 🔗 `ln` (Hard Links vs Soft Symlinks)
 
-> **🎯 The Metaphor:** 
+> **🎯 The Metaphor:**
 > - **Hard Link:** Giving the exact same person two different passport names. Both point to the exact same human body (inode). If you delete passport A, the human still lives via passport B!
 > - **Soft Link (Symlink):** A sticky note with someone's home address written on it. If you demolish the house (original file), the sticky note still exists, but points to thin air (broken symlink)!
 
@@ -1178,7 +1178,7 @@ Welcome to the command field, Vanguard Agent. Your mission is to master the Linu
 
 ### 🚰 `|` (Pipes) & `tee` (The Stream Splitter)
 
-> **🎯 The Metaphor:** 
+> **🎯 The Metaphor:**
 > - **The Pipe (`|`):** A direct conveyor belt connecting the exhaust pipe of Machine A directly into the intake carburetor of Machine B in RAM.
 > - **`tee`:** A T-shaped pipe fitting. It lets data flow to your terminal screen while simultaneously writing a carbon copy to disk.
 
@@ -2754,7 +2754,7 @@ Lists the attributes of files in a directory.
 ## 🚑 2. System Recovery & Hardware Health
 
 ### **`fsck` (File System Consistency Check)**
-Used to check and repair a Linux file system. 
+Used to check and repair a Linux file system.
 * **Note:** Usually run on unmounted partitions or from a live USB.
 * **Example:**
     ```bash

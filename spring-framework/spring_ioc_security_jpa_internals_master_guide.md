@@ -1,6 +1,6 @@
 # 🍃 Spring Internals Master Guide: Bean IoC Container, Spring Security 6 & Spring Data JPA Under the Hood
 
-> **Target Audience**: Staff Java/Spring Architects, Senior Backend Engineers, and Tech Leads.  
+> **Target Audience**: Staff Java/Spring Architects, Senior Backend Engineers, and Tech Leads.
 > **Prerequisites**: Solid understanding of Java syntax and basic Spring Boot annotations. Zero prior framework internal bytecode or plumbing knowledge assumed. We dissect the source code, thread execution paths, data structures, and memory models governing how Spring manages beans, secures endpoints, and persists entities.
 
 ---

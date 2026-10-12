@@ -1,8 +1,8 @@
 # Security, Identity & Zero Trust Architecture: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 07 — Security & Identity  
-> **Topic Coverage**: OWASP Top 10 (SQLi, XSS, CSRF, IDOR/BOLA, SSRF, XXE, Insecure Deserialization), OAuth2 & OIDC Deep Dive (Authorization Code with PKCE, Client Credentials, Token Exchange), JWT Mechanics & Vulnerabilities (Algorithm Confusion, Secret Rotation, Revocation), Cryptography (AES-256-GCM, RSA vs ECC, Keyed HMAC, Constant-Time Comparisons), Public Key Infrastructure (PKI, mTLS, SPIFFE/SPIRE), Secrets Management (HashiCorp Vault, AWS Secrets Manager), Cloud & Container Security (Rootless, Capabilities, Seccomp), Threat Modeling (STRIDE), Compliance (SOC 2, PCI-DSS, GDPR), and Deep Exploit Post-Mortems (Log4Shell, Spring4Shell).  
-> **Target Audience**: Senior Software Engineers, Security Architects, Application Security (AppSec) Engineers, Staff SREs.  
+> **Curriculum Milestone**: Module 07 — Security & Identity
+> **Topic Coverage**: OWASP Top 10 (SQLi, XSS, CSRF, IDOR/BOLA, SSRF, XXE, Insecure Deserialization), OAuth2 & OIDC Deep Dive (Authorization Code with PKCE, Client Credentials, Token Exchange), JWT Mechanics & Vulnerabilities (Algorithm Confusion, Secret Rotation, Revocation), Cryptography (AES-256-GCM, RSA vs ECC, Keyed HMAC, Constant-Time Comparisons), Public Key Infrastructure (PKI, mTLS, SPIFFE/SPIRE), Secrets Management (HashiCorp Vault, AWS Secrets Manager), Cloud & Container Security (Rootless, Capabilities, Seccomp), Threat Modeling (STRIDE), Compliance (SOC 2, PCI-DSS, GDPR), and Deep Exploit Post-Mortems (Log4Shell, Spring4Shell).
+> **Target Audience**: Senior Software Engineers, Security Architects, Application Security (AppSec) Engineers, Staff SREs.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World War-Room Incidents, and Rapid-Fire Interview Matrix.
 
 ---
@@ -174,7 +174,7 @@ Browsers are designed to automatically attach all cookies belonging to `bank.com
 **Why Stateless Bearer Token APIs are Immune to CSRF:**
 CSRF exploits **ambient credentials** (cookies automatically attached by browsers).
 If an API requires the token in the HTTP header:
-$$\mathbf{\text{Authorization: Bearer <JWT>}}$$
+$$\mathbf{\text{Authorization: Bearer [JWT]}}$$
 Browsers **never automatically attach custom headers** on cross-origin requests. Malicious sites cannot force a victim's browser to send an `Authorization` header without an XSS exploit.
 
 ##### 4. Follow-Up Trap Question & Winning Answer

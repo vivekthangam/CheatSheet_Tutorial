@@ -2,7 +2,7 @@
 
 ![WebRTC Peer-to-Peer Streaming Architecture & NAT Traversal](../assets/images/protocols/webrtc_p2p_architecture.jpg)
 
-> **Target Audience**: Staff Distributed Systems Architects, Real-Time Video/Audio Engineers, Multiplayer Game Network Leads, and Senior Frontend Developers.  
+> **Target Audience**: Staff Distributed Systems Architects, Real-Time Video/Audio Engineers, Multiplayer Game Network Leads, and Senior Frontend Developers.
 > **Prerequisites**: Zero prior WebRTC knowledge required. We begin with foundational physical analogies (Walkie-Talkies vs Phone Operators, Tin Cans on a String) and systematically build up to NAT traversal physics, STUN/TURN mechanics, ICE state machines, SDP Offer/Answer negotiation, `MediaStream` (SRTP) vs `RTCDataChannel` (SCTP over DTLS), Mesh vs SFU vs MCU media server topologies, the Perfect Negotiation pattern, bandwidth estimation, and production diagnostics.
 
 ---
@@ -126,11 +126,11 @@ Why can't we just stream video over standard WebSockets?
 | **Data Versatility** | `RTCDataChannel` allows unreliable, unordered UDP transfers for high-speed multiplayer gaming and file sharing. | **No Native Signaling**: WebRTC defines how peers talk, but leaves out-of-band discovery up to you (must build your own WebSocket/REST signaling). |
 
 ### When NOT to Use WebRTC:
-1. **One-to-Many Mass Broadcasts (10,000+ Viewers)**:  
+1. **One-to-Many Mass Broadcasts (10,000+ Viewers)**:
    Do not use WebRTC for passive webinar audiences watching a keynote. Use **HLS (HTTP Live Streaming)** or **DASH** over standard CDNs, which costs 95% less and caches effortlessly.
-2. **Simple REST / CRUD Operations**:  
+2. **Simple REST / CRUD Operations**:
    Do not replace database fetch requests with WebRTC. Standard HTTPS with HTTP/2 or HTTP/3 multiplexing is simpler, stateless, and easier to cache.
-3. **Strict Client-to-Server Relational Writes**:  
+3. **Strict Client-to-Server Relational Writes**:
    Critical financial accounting where every byte must be acknowledged and committed into ACID databases belongs in HTTPS/gRPC, not WebRTC.
 
 ---
@@ -301,10 +301,10 @@ WebRTC provides two completely distinct pipelines inside a single peer connectio
 ```
 
 ### The Superpower of `RTCDataChannel`:
-In WebSockets, all traffic travels over TCP. If 1 packet is dropped, the entire stream stalls.  
+In WebSockets, all traffic travels over TCP. If 1 packet is dropped, the entire stream stalls.
 `RTCDataChannel` allows you to configure **Unreliable & Unordered Delivery** over UDP:
 - `ordered: false`: Packets are delivered to your app the microsecond they arrive, even if packet #7 arrives before packet #6!
-- `maxRetransmits: 0`: If a packet is lost, never try to re-send it! Drop it and move on!  
+- `maxRetransmits: 0`: If a packet is lost, never try to re-send it! Drop it and move on!
 > 🎮 **Use Case**: Multiplayer game player movement (x, y, z coordinates). A dropped position from 50ms ago is useless anyway!
 
 ---
@@ -314,7 +314,7 @@ In WebSockets, all traffic travels over TCP. If 1 packet is dropped, the entire 
 ## 3.1 Rule 1: Never Rely on STUN Alone (Mandatory TURN Provisioning)
 > **Never build a production WebRTC application with only free STUN servers.**
 
-Around 10% to 15% of real-world consumer connections sit behind Symmetric NATs (e.g. mobile 4G/5G carriers like T-Mobile, AT&T, Vodafone, or corporate VPNs). If your application only has STUN, **1 out of every 8 video calls will fail to connect**, displaying a permanent black screen!  
+Around 10% to 15% of real-world consumer connections sit behind Symmetric NATs (e.g. mobile 4G/5G carriers like T-Mobile, AT&T, Vodafone, or corporate VPNs). If your application only has STUN, **1 out of every 8 video calls will fail to connect**, displaying a permanent black screen!
 * **The Production Standard**: Always configure at least one TURN server with valid short-term credentials:
 ```typescript
 const configuration: RTCConfiguration = {
@@ -462,7 +462,7 @@ npx http-server public -p 3000
 ```
 
 > [!CAUTION]
-> **Why You CANNOT Double-Click `index.html` (`file:///` Trap)**:  
+> **Why You CANNOT Double-Click `index.html` (`file:///` Trap)**:
 > Web browsers enforce strict security isolation on hardware access. Modern browsers **permanently disable camera and microphone (`navigator.mediaDevices.getUserMedia`)** on `file:///` URLs! You **must** serve the files over `http://localhost` or a secure `https://` domain.
 
 ### Step 4: Test in Two Browser Tabs

@@ -1,6 +1,6 @@
 # 📡 Enterprise Real-Time Systems, WebSockets, SSE & Socket.IO Master Guide
 
-> **Target Audience**: Real-Time Systems Engineers, Full-Stack Architects, Distributed Systems Leads, and Platform Specialists.  
+> **Target Audience**: Real-Time Systems Engineers, Full-Stack Architects, Distributed Systems Leads, and Platform Specialists.
 > **Prerequisites**: Zero. We start with foundational physical analogies (Walkie-Talkies vs Phone Calls vs Stock Tickers) and progress through the Grand Trade-Off Matrix, Server-Sent Events (`text/event-stream`) with `Last-Event-ID` resume tokens, RFC 6455 raw WebSocket binary framing and client masking physics, the Socket.IO / Engine.IO state machine, enterprise Event Envelope Standards, and horizontal scaling via Redis Pub/Sub backplanes.
 
 ---
@@ -185,7 +185,7 @@ The server reads this header and replays any missed events starting from sequenc
 ## 2.3 HTTP/2 Multiplexing vs HTTP/1.1 6-Connection Browser Pool Limit
 
 > [!CAUTION]
-> In **HTTP/1.1**, browsers impose a strict limit of **6 concurrent connections per domain**. If a user opens 6 tabs connecting to an SSE stream over HTTP/1.1, the 7th tab **completely freezes**!  
+> In **HTTP/1.1**, browsers impose a strict limit of **6 concurrent connections per domain**. If a user opens 6 tabs connecting to an SSE stream over HTTP/1.1, the 7th tab **completely freezes**!
 > **Production Mandate**: Always serve SSE streams over **HTTP/2**. In HTTP/2, hundreds of SSE streams are multiplexed over a **single physical TCP connection**, completely eliminating the 6-connection pool limit.
 
 ---

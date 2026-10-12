@@ -77,7 +77,8 @@
 
 # 1. The Java Runtime Architecture & Execution Engine
 
-To engineer resilient, high-throughput systems on the JVM, developers must look beyond syntax and understand how Java source code is transformed, verified, loaded into memory, and ex```mermaid
+To engineer resilient, high-throughput systems on the JVM, developers must look beyond syntax and understand how Java source code is transformed, verified, loaded into memory, and ex
+```mermaid
 flowchart TD
     subgraph SRC["Source Code & Compilation"]
         JAVA["Java Source Code (*.java)"]
@@ -234,7 +235,7 @@ flowchart TD
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-</details>��─┐  │                         ▼                         │  │
+</details>��─┐  │                         ▼                         │  │
 │  │  │           NON-HEAP METASPACE           │  │  ┌─────────────────────────────────────────────┐  │  │
 │  │  │  [ Class Metadata / Constant Pool ]    │  │  │             JIT COMPILERS (TIERED)          │  │  │
 │  │  └────────────────────────────────────────┘  │  │   - C1 (Client): Fast compile, counters     │  │  │
@@ -646,7 +647,7 @@ Introduced in Java 17, Sealed types restrict which subclasses or implementations
 
 ```java
 // Sealed interface permits strictly 3 implementation records
-public sealed interface OrderCommand 
+public sealed interface OrderCommand
     permits PlaceOrderCommand, CancelOrderCommand, RefundOrderCommand {}
 
 public record PlaceOrderCommand(String orderId, double price) implements OrderCommand {}
@@ -895,7 +896,7 @@ public void processTransaction(File file) throws IOException {
     // Both stream and channel will be closed deterministically in reverse order!
     try (FileInputStream fis = new FileInputStream(file);
          FileChannel channel = fis.getChannel()) {
-        
+
         ByteBuffer buffer = ByteBuffer.allocate(1024);
         channel.read(buffer);
     } catch (IOException e) {
@@ -1043,3 +1044,4 @@ public final class OrderProcessingEngine {
 
 ---
 [🏠 Back to Home](../README.md) | [📚 Collections Reference](java_collection.md) | [📘 Java I/O Guide](java_io.md) | [📦 Jackson Guide](jackson_master_guide.md)
+```

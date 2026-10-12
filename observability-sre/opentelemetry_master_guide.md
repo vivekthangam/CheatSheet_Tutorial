@@ -153,11 +153,11 @@ export async function processOrder(orderId: string, amount: number) {
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: What is the W3C `traceparent` header format?
-> **ELI5**: A passport stamp formatted like `version-traceid-parentid-flags`.  
+> **ELI5**: A passport stamp formatted like `version-traceid-parentid-flags`.
 > **Technical**: It is a 4-part hyphen-delimited string: `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01` (Version: 2 hex chars, Trace ID: 32 hex chars, Parent Span ID: 16 hex chars, Trace Flags: 2 hex chars indicating sampling status).
 
 #### Q2: What is the difference between Head-Based and Tail-Based Sampling?
-> **ELI5**: Head-based decides to film a movie before knowing if it will be good; tail-based watches the whole movie and only saves the footage if something explodes or goes wrong.  
+> **ELI5**: Head-based decides to film a movie before knowing if it will be good; tail-based watches the whole movie and only saves the footage if something explodes or goes wrong.
 > **Technical**: Head-based sampling makes the sampling decision at the ingress root span before the request finishes. Tail-based sampling buffers all spans of a trace in the OTel Collector and makes the sampling decision only after the trace completes, allowing 100% retention of errors and slow requests (`duration > 1s`).
 
 ---
@@ -267,32 +267,32 @@ processors:
 ---
 
 #### Q2: What is the exact difference between Head-based Sampling and Tail-based Sampling?
-> **Interviewer Evaluates**: Deep understanding of tracing storage costs, network bandwidth, and signal-to-noise ratio.  
+> **Interviewer Evaluates**: Deep understanding of tracing storage costs, network bandwidth, and signal-to-noise ratio.
 > **Standout Answer**:
 > - **Head-based Sampling**: The sampling decision is made at the very root span of a request before work begins (e.g., sample 5% of all traffic). Fast, low memory, but risks missing rare 500 errors or high-latency tail events in the 95% dropped traffic.
 > - **Tail-based Sampling**: Performed at the OpenTelemetry Collector layer. The collector buffers all spans for an entire trace until the trace finishes, then evaluates policies (e.g. "keep 100% of traces with HTTP status >= 500 or duration > 2000ms, and keep 1% of successful traces"). Provides maximum diagnostic value with minimal storage bloat.
 
 #### Q3: How does W3C TraceContext format represent distributed trace identifiers?
-> **Interviewer Evaluates**: RFC standards compliance and cross-system tracing protocol knowledge.  
+> **Interviewer Evaluates**: RFC standards compliance and cross-system tracing protocol knowledge.
 > **Standout Answer**: W3C TraceContext defines two HTTP headers:
 > 1. `traceparent`: Formatted as `version-trace_id-parent_id-trace_flags` (e.g., `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`), where `trace_id` is 16 bytes (32 hex chars), `parent_id` (span ID) is 8 bytes (16 hex chars), and `01` indicates sampled.
 > 2. `tracestate`: A comma-separated list of opaque key-value pairs (e.g. `congo=t61rcWkgMzE,rojo=00f067aa0ba902b7`) passing vendor-specific routing state without mutating `traceparent`.
 
 #### Q4: What is the difference between OpenTelemetry Baggage and Trace Attributes?
-> **Interviewer Evaluates**: Context propagation mechanics and security implications.  
+> **Interviewer Evaluates**: Context propagation mechanics and security implications.
 > **Standout Answer**:
 > - **Trace Attributes**: Metadata attached to a *single* span (e.g., `db.statement`, `http.status_code`). They do *not* automatically propagate down the call graph across network boundaries.
 > - **Baggage**: Key-value pairs stored in the distributed `Context` that are automatically propagated across process boundaries via the `baggage` HTTP header. Baggage is accessible to all downstream microservices, but it does *not* automatically appear on spans as attributes unless explicitly copied to avoid ballooning telemetry storage.
 
 #### Q5: How do you prevent memory leaks when using OpenTelemetry Java Agent auto-instrumentation?
-> **Interviewer Evaluates**: JVM bytecode modification safety and classloader isolation.  
+> **Interviewer Evaluates**: JVM bytecode modification safety and classloader isolation.
 > **Standout Answer**:
 > 1. Restrict classloader scanning via `-Dotel.instrumentation.common.default.enabled=true` and disable unused instrumentations (e.g. `-Dotel.instrumentation.jdbc.enabled=false` if using manual wrapper).
 > 2. Ensure thread-local cleanup: whenever calling `Scope.close()`, always wrap it in a `try-with-resources` block to guarantee thread locals are popped on thread reuse in thread pools.
 > 3. Limit batch queue size: set `-Dotel.bsp.max.queue.size=2048` and `-Dotel.bsp.schedule.delay=5000` to cap off-heap memory buffering when the collector is degraded.
 
 #### Q6: What is an OTel Collector Processor pipeline and what is the mandatory sequence of processors?
-> **Interviewer Evaluates**: Collector pipeline configuration architecture.  
+> **Interviewer Evaluates**: Collector pipeline configuration architecture.
 > **Standout Answer**: In `otel-collector-config.yaml`, the recommended sequence is:
 > 1. `memory_limiter`: Drops or halts data when collector memory approaches threshold (MUST BE FIRST).
 > 2. `sampling` (tail-based, if configured).
@@ -300,20 +300,20 @@ processors:
 > 4. `batch`: Batches spans/metrics before network export (MUST BE LAST before exporters).
 
 #### Q7: How does OpenTelemetry integrate with Prometheus and Grafana Tempo in a production LGTM stack?
-> **Interviewer Evaluates**: Modern cloud-native observability stack integration.  
+> **Interviewer Evaluates**: Modern cloud-native observability stack integration.
 > **Standout Answer**:
 > - **Metrics**: Applications emit OTLP metric bytes to the OTel Collector. The collector's `prometheus` exporter exposes a `/metrics` scrape target, or the `prometheusremotewrite` exporter pushes metrics directly into Mimir/Prometheus.
 > - **Traces**: The OTel Collector exports OTLP gRPC (`4317`) directly to Grafana Tempo.
 > - **Exemplars**: Tempo trace IDs are attached as exemplars on Prometheus histogram metrics, allowing one-click drill-down in Grafana from an alert spike directly into the corresponding distributed trace.
 
 #### Q8: What causes "Trace Context Lost" in Spring Boot WebClient or reactive WebFlux streams?
-> **Interviewer Evaluates**: Reactive programming context propagation mechanics.  
+> **Interviewer Evaluates**: Reactive programming context propagation mechanics.
 > **Standout Answer**: In reactive streams (Project Reactor), execution hops across thread boundaries (`Schedulers.boundedElastic()`, `parallel()`), losing standard `ThreadLocal` context. Solution:
 > 1. Use Micrometer Tracing with Reactor Context Propagation: call `Hooks.enableAutomaticContextPropagation()`.
 > 2. In Spring Boot 3, ensure `io.micrometer:micrometer-tracing-bridge-otel` is active, which integrates with Reactor's `subscriberContext`.
 
 #### Q9: How do you redact Sensitive Personal Data (PII) before telemetry leaves the application pod?
-> **Interviewer Evaluates**: Enterprise compliance (GDPR/HIPAA/PCI-DSS) in telemetry pipelines.  
+> **Interviewer Evaluates**: Enterprise compliance (GDPR/HIPAA/PCI-DSS) in telemetry pipelines.
 > **Standout Answer**:
 > 1. Application-level: Use an OpenTelemetry `SpanProcessor` filter to redact credit cards, SSNs, and Authorization tokens before span dispatch.
 > 2. Collector-level: Use the `transform` processor with regex masking:
@@ -327,7 +327,7 @@ processors:
 > ```
 
 #### Q10: How does eBPF-based instrumentation (e.g., Beyla) compare to standard bytecode agents?
-> **Interviewer Evaluates**: Next-generation Linux kernel observability.  
+> **Interviewer Evaluates**: Next-generation Linux kernel observability.
 > **Standout Answer**:
 > - **Bytecode Agents (Java Agent)**: Hook classloaders to inject spans inside application methods. Deep visibility (variable names, internal function durations), but incurs JVM CPU/memory overhead and language-specific dependency.
 > - **eBPF (Kernel Tracing)**: Hooks Linux kernel socket and syscall events (`sys_enter_connect`, `sys_enter_write`). Completely non-invasive (zero code changes, works across Go, Rust, C++, Java), but cannot inspect deep application-level variables or internal class hierarchy.

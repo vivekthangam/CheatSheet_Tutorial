@@ -190,7 +190,7 @@ Your company spends $45,000/month operating a 24-node Elasticsearch cluster for 
 
 ##### 1. The Core Architectural Divergence
 - **Elasticsearch**: Parses every single incoming JSON field, splits log strings into tokens, and constructs an **inverted index** on disk. Searching "Error" is instantaneous because the word points directly to document IDs. However, the index itself often consumes **100% to 150% as much disk space as the raw data**, requiring terabytes of high-performance NVMe SSDs and enormous JVM heaps to keep indices in memory.
-- **Grafana Loki**: Inspired by Prometheus. Loki **does not index the text of the log message**. It only indexes the **metadata labels** (e.g., `{environment="prod", namespace="billing", app="payment-service"}`). 
+- **Grafana Loki**: Inspired by Prometheus. Loki **does not index the text of the log message**. It only indexes the **metadata labels** (e.g., `{environment="prod", namespace="billing", app="payment-service"}`).
 
 ```
            [ INCOMING LOG LINE ]
@@ -392,7 +392,7 @@ Your engineering VP announces: *"Our SLA with customers is 99.99% availability, 
 | **99.999% (Five Nines)**| 25.9 seconds | 5.26 minutes |
 
 ##### 3. Why Internal SLO Must Be Tighter Than External SLA
-If your customer SLA is $99.9\%$ and your internal SLO is also $99.9\%$, the exact moment your internal alert triggers, you are **already paying financial penalties to customers**. 
+If your customer SLA is $99.9\%$ and your internal SLO is also $99.9\%$, the exact moment your internal alert triggers, you are **already paying financial penalties to customers**.
 An enterprise architecture maintains a safety buffer:
 $$\text{Internal SLO (e.g., } 99.95\% \text{)} > \text{External SLA (e.g., } 99.9\% \text{)}$$
 The difference ($0.05\%$) is the **Triage Margin**. It allows engineers to detect, troubleshoot, and fix incidents *before* contractual SLA penalties are triggered.
@@ -719,7 +719,7 @@ A security auditor asks: *"How can Grafana Tempo ingest 200,000 spans per second
 
 ##### 1. Tempo's Core Architectural Breakthrough
 Legacy tracing engines (Jaeger on Elasticsearch) index every span tag in Lucene inverted indexes. When traffic spikes, indexing overhead consumes 80% of cluster CPU.
-Tempo takes the opposite philosophy: **Do not index span payloads**. 
+Tempo takes the opposite philosophy: **Do not index span payloads**.
 Instead, Tempo relies on **Trace ID direct addressing** and stores data in compressed, immutable blocks on cheap Cloud Object Storage (AWS S3, GCS, Azure Blob).
 
 ```

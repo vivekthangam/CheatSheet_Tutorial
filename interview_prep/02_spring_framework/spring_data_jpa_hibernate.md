@@ -1,13 +1,65 @@
-# Spring Data JPA & Hibernate 6: Enterprise Interview Guide
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-high-volume-financial-ledger)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Engineering  
-> **Topic Coverage**: JPA Entity Lifecycle (Transient/Managed/Detached/Removed), Hibernate Dirty Checking, N+1 Problem & Solutions, `@EntityGraph`, Optimistic vs Pessimistic Locking, JPA Specifications, HikariCP Sizing, JPQL vs Native Queries, Hibernate 2nd-Level Cache, `FetchType` Strategies, LazyInitializationException, StatelessSession, and Zero-Downtime Schema Migrations.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, Staff & Principal Engineers.  
-> **Target Depth**: 50 Progressive Technical Scenarios with Runtime Mechanics, Production Code Walkthroughs, Beginner Traps, and Real-World Outage Post-Mortems.
+# Spring Data JPA & Hibernate 6: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_data_jpa_hibernate.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_data_jpa_hibernate.md)  
+> **Topic Domain:** Jakarta Persistence (JPA), Hibernate 6 Semantic Query Model (SQM), Entity Lifecycles, First-Level Session Cache, Automated Dirty Checking, N+1 Select Problem Resolution (`@EntityGraph`), Concurrency Locking (`@Version` Optimistic vs Pessimistic `FOR UPDATE`), Keyset Pagination, HikariCP FastPath Pooling, and `StatelessSession` High-Throughput Ingestion (`S02`)  
+> **Target Framework / Runtime:** Spring Boot 3.3+, Spring Data JPA 3.3+, Hibernate ORM 6.5+, PostgreSQL 16+ / MySQL 8.4+  
+> **Architecture Level:** Principal / Staff+ Persistence Architect & Relational Data Tier Specialist  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Database Outage Post-Mortems, Hibernate Bytecode Enhancement, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Financial Ledger JPA Cheatsheet](#-real-world-production-project--code-cheatsheet-high-volume-financial-ledger) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_data_jpa_hibernate/)
 
 ---
 
-## Architecture Blueprint: The JPA Persistence Stack
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before diving into Hibernate 6 Semantic Query Model (SQM) tree compilation, entity state hydration snapshot arrays, database MVCC repeatable read transaction isolation, and HikariCP connection pool lockless contention borrowing, here is the essential high-level context: what JPA and Hibernate represent, why the Object-Relational Impedance Mismatch exists, what fatal performance traps ORMs introduce in production, and where persistence architectures anchor enterprise systems.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Jakarta Persistence (JPA)** is the standardized Java enterprise specification for Object-Relational Mapping (ORM), and **Hibernate ORM** is its flagship reference implementation. **Spring Data JPA** builds a declarative abstraction on top of JPA, automatically synthesizing data access implementations at runtime from simple repository interfaces (e.g. `JpaRepository<Order, UUID>`). Together, they bridge the paradigm gap between rich, object-oriented domain models in Java and relational tabular data stored in SQL databases (PostgreSQL, MySQL, Oracle).
+* **Everyday Analogy**: Imagine an international diplomatic embassy between two radically different cultures:
+  - **The Republic of Java (Object-Oriented World)**: Communicates through rich hierarchical object trees, interfaces, polymorphism, nested collections, and in-memory object references (`order.getItems().get(0).getProduct()`).
+  - **The Kingdom of SQL (Relational World)**: Communicates strictly through flat 2D rectangular tables, rows, columns, foreign key integers, and mathematical set operations (`SELECT * FROM orders JOIN line_items ON ...`).
+  - **Hibernate & JPA**: The master bilingual diplomat and translator stationed at the border:
+    - When a Java citizen creates an `Order` object, Hibernate translates that rich entity into relational SQL `INSERT` statements.
+    - **First-Level Cache (`PersistenceContext`)**: The diplomat’s desktop registry. If you ask for customer #42 three times during a meeting, Hibernate gives you the exact same in-memory object reference instantly without calling the SQL kingdom three times (**Identity Map**).
+    - **Automated Dirty Checking**: The diplomat takes a hidden snapshot photo of the entity when it enters the room. At the end of the meeting (`flush()`), the diplomat compares the current object against the photo. If only `status` changed, it automatically dispatches an `UPDATE orders SET status = ?` without requiring the developer to write manual SQL.
+* **Architectural Tier Placement**: Operates across the **Data Persistence & Domain Entity Tier**. Sits between the application business service layer and physical relational database management systems (RDBMS) via JDBC drivers and HikariCP connection pools.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Object-Relational Impedance Mismatch**: Objects and relational databases are founded on opposing mathematical principles. Objects encapsulate state with behavior, navigate bidirectional pointer relationships, and leverage inheritance. Relational databases store normalized flat tables governed by relational algebra, primary keys, and set joins.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The Massive JDBC ResultSet Mapping Nightmare**: Prior to ORMs, developers wrote thousands of lines of fragile manual JDBC code: `stmt.setString(1, order.getId())`, manually extracting `rs.getString("col")`, null-checking foreign keys, and assembling object graphs by hand. A single column name change broke 50 DAO classes.
+  - 💥 **Headache 2: The Catastrophic N+1 Select Performance Blackout**: Naive object traversal (`for (Order o : orders) { o.getCustomer().getName(); }`) executed 1 query to fetch 1,000 orders, followed by 1,000 individual SQL queries to fetch each customer—multiplying database latency by 1,000x and crashing production databases.
+  - 💥 **Headache 3: The `LazyInitializationException` Phantom**: Accessing an uninitialized lazy collection outside an active transaction in the UI or REST serializer threw runtime crashes because the Hibernate `Session` was already closed.
+* **The Turning Point**: Gavin King created Hibernate in 2001 to eliminate JDBC boilerplate while preserving clean object-oriented domain models. Hibernate was later standardized into EJB 3.0 / JPA, becoming the cornerstone of enterprise Java persistence.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Eliminating N+1 Queries deterministically) ➔ Solution 1**: JPA `@EntityGraph` (or `JOIN FETCH`) instructs Hibernate’s query engine to generate a single optimized SQL `LEFT JOIN`, hydrating root entities and associations in a single database round-trip.
+* **Problem 2 (High-Concurrency Lost Updates) ➔ Solution 2**: Optimistic Locking with `@Version` uses a monotonically increasing integer column. If two concurrent users attempt to modify the same bank account simultaneously, the first commit succeeds and the second transaction fails fast with `OptimisticLockException`, preventing silent data overwrites without expensive table locks.
+* **Problem 3 (High-Throughput Batch Ingestion without Heap Exhaustion) ➔ Solution 3**: Hibernate 6’s `StatelessSession` bypasses the First-Level Cache, identity maps, and dirty checking snapshots entirely, executing direct SQL batch statements with zero heap memory overhead.
+* **Quantifiable Enterprise Metrics**:
+  - **95% SQL Query Reduction**: Replacing lazy N+1 relations with `@EntityGraph` drops database query count from 2,501 queries down to 1 query during catalog page loads.
+  - **Sub-100µs Connection Borrowing**: HikariCP connection pool optimization provides microsecond-level connection reuse, sustaining 40,000 transactions per second on PostgreSQL.
+  - **Zero Data Loss via `@Version`**: Optimistic concurrency controls eliminate 100% of race condition balance overwrites in distributed multi-pod microservices.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Powers database persistence across e-commerce order management, financial transaction ledgers, inventory tracking, and CRM backends.
+* **Developer Workflow & SRE Synergy**: SREs monitor HikariCP metrics (`hikaricp_connections_active`, `hikaricp_connections_pending`) to detect connection pool starvation, and inspect slow SQL queries via Hibernate statement statistics (`hibernate.generate_statistics=true`).
+* **Scalability & Evolutionary Runway**: Allows seamless database schema evolution via Flyway/Liquibase migrations, while JPA queries (`JPQL` / `Criteria`) remain portable across database vendors.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Persistence Framework | Paradigm | Type Safety & Refactoring | Best Enterprise Fit | Primary Production Risk |
+| :--- | :--- | :--- | :--- | :--- |
+| **Spring Data JPA / Hibernate 6** | Full Object-Relational Mapping (ORM) | High (Entity types & Criteria API) | Complex domain models, rich business logic, OLTP | Hidden N+1 queries, Cartesian product joins |
+| **jOOQ** | Type-Safe SQL Fluent DSL | Maximum (Codegen from DB schema) | Complex SQL reporting, analytics, window functions | Requires explicit SQL authoring; commercial license |
+| **Spring `JdbcClient` / JdbcTemplate** | Thin Object-Mapper over SQL | Low (Raw SQL strings) | High-performance micro-APIs, simple CRUD | Manual row mapping, repetitive boilerplate |
+| **MyBatis** | XML / Annotation SQL Mapper | Medium | Legacy stored procedures, DBA-crafted SQL | Separation of SQL in XML; lack of compile-time checking |
+
+---
+
+## 2. Architecture Blueprint: The JPA Persistence Stack
 
 | Layer / Subsystem | Primary Components & Classes | Operational Responsibilities & Wire Invariants | Performance & Invalidation Characteristics |
 |---|---|---|---|
@@ -19,6 +71,378 @@
 
 > [!NOTE]
 > **Hibernate 6 SQM Architecture**: Hibernate 6 completely replaced the legacy HQL/Criteria Antlr2 parsers with a unified **Semantic Query Model (SQM)**. Both HQL strings and Criteria API expressions compile directly into an SQM tree, which translates into an engine-specific SQL AST via modern SQL translators, eliminating query translation discrepancies and optimizing generated SQL.
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: High-Volume Financial Ledger
+
+> **Attached Domain Project:** `High-Volume Financial Ledger Persistence Engine` (`com.cheatsheet.jpa`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring Data JPA 3.3+ | Hibernate 6.5+ | PostgreSQL 16+  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_data_jpa_hibernate/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_data_jpa_hibernate/)  
+> **Key Technologies Demonstrated:** Keyset Pagination, `@EntityGraph` N+1 Elimination, `@Version` Optimistic Locking, Hibernate `StatelessSession`, Dynamic Criteria Queries, DTO Projections, Connection Leak Guards.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (High-Volume Financial Ledger)
+
+The following complete enterprise persistence engine implements double-entry financial ledger accounting with optimistic locking, keyset pagination, and zero-allocation entity graph fetching:
+
+```java
+package com.cheatsheet.jpa.engine;
+
+import jakarta.persistence.*;
+import org.hibernate.StatelessSession;
+import org.hibernate.SessionFactory;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.*;
+
+// ============================================================================
+// 1. DOMAIN ENTITIES: LedgerAccount & LedgerEntry
+// ============================================================================
+@Entity
+@Table(name = "ledger_accounts", indexes = {
+    @Index(name = "idx_account_number", columnList = "account_number", unique = true)
+})
+public class LedgerAccount {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "account_number", nullable = false, unique = true, length = 32)
+    private String accountNumber;
+
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency;
+
+    @Column(name = "balance", nullable = false, precision = 19, scale = 4)
+    private BigDecimal balance;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version; // Optimistic locking defense against lost updates
+
+    @OneToMany(mappedBy = "account", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
+    private List<LedgerEntry> entries = new ArrayList<>();
+
+    protected LedgerAccount() {}
+
+    public LedgerAccount(String accountNumber, String currency, BigDecimal initialBalance) {
+        this.accountNumber = accountNumber;
+        this.currency = currency;
+        this.balance = initialBalance;
+    }
+
+    public void postEntry(BigDecimal amount, String description) {
+        this.balance = this.balance.add(amount);
+        LedgerEntry entry = new LedgerEntry(this, amount, this.balance, description, Instant.now());
+        this.entries.add(entry);
+    }
+
+    public Long getId() { return id; }
+    public String getAccountNumber() { return accountNumber; }
+    public BigDecimal getBalance() { return balance; }
+    public Long getVersion() { return version; }
+    public List<LedgerEntry> getEntries() { return Collections.unmodifiableList(entries); }
+}
+
+@Entity
+@Table(name = "ledger_entries", indexes = {
+    @Index(name = "idx_account_id_id", columnList = "account_id, id") // Composite index for keyset pagination
+})
+public class LedgerEntry {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "account_id", nullable = false)
+    private LedgerAccount account;
+
+    @Column(name = "amount", nullable = false, precision = 19, scale = 4)
+    private BigDecimal amount;
+
+    @Column(name = "post_balance", nullable = false, precision = 19, scale = 4)
+    private BigDecimal postBalance;
+
+    @Column(name = "description", nullable = false, length = 255)
+    private String description;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    protected LedgerEntry() {}
+
+    public LedgerEntry(LedgerAccount account, BigDecimal amount, BigDecimal postBalance, String description, Instant createdAt) {
+        this.account = account;
+        this.amount = amount;
+        this.postBalance = postBalance;
+        this.description = description;
+        this.createdAt = createdAt;
+    }
+
+    public Long getId() { return id; }
+    public BigDecimal getAmount() { return amount; }
+    public BigDecimal getPostBalance() { return postBalance; }
+    public String getDescription() { return description; }
+    public Instant getCreatedAt() { return createdAt; }
+}
+
+// ============================================================================
+// 2. REPOSITORY INTERFACE: Keyset Pagination & EntityGraph Queries
+// ============================================================================
+@Repository
+public interface LedgerAccountRepository extends JpaRepository<LedgerAccount, Long> {
+
+    // Eliminates N+1 queries by instructing Hibernate to issue a single SQL JOIN FETCH
+    @EntityGraph(attributePaths = {"entries"})
+    @Query("SELECT a FROM LedgerAccount a WHERE a.accountNumber = :accountNumber")
+    Optional<LedgerAccount> findByAccountNumberWithEntries(@Param("accountNumber") String accountNumber);
+
+    // Keyset (Seek-based) Pagination: O(1) query time regardless of page depth
+    @Query("""
+        SELECT e FROM LedgerEntry e
+        WHERE e.account.id = :accountId AND e.id > :lastSeenId
+        ORDER BY e.id ASC
+    """)
+    List<LedgerEntry> findNextEntriesKeyset(@Param("accountId") Long accountId,
+                                            @Param("lastSeenId") Long lastSeenId,
+                                            Pageable pageable);
+}
+
+// ============================================================================
+// 3. SERVICE TIER: High-Concurrency Settlement & Stateless Batch Processing
+// ============================================================================
+@Service
+public class FinancialLedgerService {
+
+    private final LedgerAccountRepository accountRepo;
+    private final SessionFactory sessionFactory;
+
+    public FinancialLedgerService(LedgerAccountRepository accountRepo, SessionFactory sessionFactory) {
+        this.accountRepo = accountRepo;
+        this.sessionFactory = sessionFactory;
+    }
+
+    @Transactional
+    public LedgerAccount recordTransaction(String accountNumber, BigDecimal amount, String description) {
+        LedgerAccount account = accountRepo.findByAccountNumberWithEntries(accountNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountNumber));
+
+        account.postEntry(amount, description);
+        return account; // Automatically dirty-checked and committed at transaction exit
+    }
+
+    // High-Throughput Bulk Ingestion bypassing Hibernate 1st-Level Cache
+    public void bulkInsertLedgerEntries(List<LedgerEntry> entries) {
+        try (StatelessSession statelessSession = sessionFactory.openStatelessSession()) {
+            statelessSession.beginTransaction();
+            for (LedgerEntry entry : entries) {
+                statelessSession.insert(entry); // Emits immediate SQL INSERT; zero memory retention
+            }
+            statelessSession.getTransaction().commit();
+        }
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Dimension | Positive Path (Production Standard) | Negative Path (Failure Boundary) | Detection & Mitigation |
+| :--- | :--- | :--- | :--- |
+| **Large Pagination** | Keyset pagination (`WHERE id > :lastId ORDER BY id ASC LIMIT 100`) completes in sub-2ms on 50M rows. | Standard offset pagination (`OFFSET 1000000 LIMIT 100`) scans and discards 1M rows, saturating disk I/O. | Query execution alert (> 5000ms). Enforce seek-based Keyset pagination across all APIs. |
+| **Concurrent Writes** | `@Version` detects conflict and triggers exponential backoff retry. | Unversioned entity experiences "lost update", silently overwriting ledger balance. | Financial audit balance mismatch. Enforce `@Version` optimistic locking on all mutable entities. |
+| **Collection Fetching**| `@EntityGraph` fetches parent and children via single `JOIN` query. | Lazy collection iterated in loop, firing $1 + N$ secondary SQL queries ($10,000$ queries). | HikariCP pool exhaustion & latency spike. Detect via `hibernate.generate_statistics=true`. |
+| **Bulk Data Ingestion**| Hibernate `StatelessSession` inserts 100,000 rows in 350ms with 12MB RAM. | Standard `saveAll()` loads 100,000 entities into 1st-level cache, causing `OutOfMemoryError: Java heap space`. | OutOfMemoryError heap dump. Use `StatelessSession` or periodic `entityManager.flush(); clear()`. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Hibernate N+1 Query Cascade Exhausting HikariCP Pool
+* **Outage Incident**: Production database connection pool exhausted during monthly statement generation, crashing all microservices.
+* **Root Cause**: Iterating a list of 1,000 `LedgerAccount` entities and calling `account.getEntries().size()` triggered 1,001 SQL queries.
+
+```java
+// ❌ BUG: N+1 queries — 1 query to fetch accounts + 1,000 queries for each account's entries
+@Transactional(readOnly = true)
+public List<AccountSummaryDto> generateSummaries() {
+    List<LedgerAccount> accounts = accountRepo.findAll(); // 1 query
+    return accounts.stream()
+            .map(acc -> new AccountSummaryDto(
+                    acc.getAccountNumber(),
+                    acc.getEntries().size())) // 💥 Triggers 1,000 separate SELECT queries!
+            .toList();
+}
+
+// ✅ REFACTORED: Use @EntityGraph or DTO Projection with JOIN FETCH
+@Repository
+public interface LedgerAccountRepository extends JpaRepository<LedgerAccount, Long> {
+    @Query("""
+        SELECT new com.cheatsheet.jpa.dto.AccountSummaryDto(a.accountNumber, COUNT(e.id))
+        FROM LedgerAccount a LEFT JOIN a.entries e
+        GROUP BY a.accountNumber
+    """)
+    List<AccountSummaryDto> findAccountSummariesProjected(); // Exactly 1 single aggregate SQL query!
+}
+```
+
+#### Bug 2: Missing `@Version` Causing Lost Updates Under High Concurrency
+* **Outage Incident**: Under simultaneous balance adjustments, $1,000 deposited concurrently resulted in only $500 balance credited.
+* **Root Cause**: Two concurrent HTTP requests read account balance at $1,000 simultaneously. Request 1 added $500 (wrote $1,500). Request 2 added $500 (wrote $1,500), completely overwriting Request 1's write.
+
+```java
+// ❌ BUG: No @Version field — Non-atomic read-modify-write causes lost updates
+@Entity
+public class UnversionedAccount {
+    @Id private Long id;
+    private BigDecimal balance; // 💥 Concurrent transactions silently overwrite each other's updates!
+}
+
+// ✅ REFACTORED: Add @Version for OptimisticLockException + Spring Retry
+@Entity
+public class VersionedAccount {
+    @Id private Long id;
+    private BigDecimal balance;
+
+    @Version
+    private Long version; // Hibernate appends "WHERE version = :expectedVersion" to SQL UPDATE
+}
+
+@Service
+public class AccountBalanceService {
+    @Retryable(retryFor = OptimisticLockException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
+    @Transactional
+    public void updateBalance(Long accountId, BigDecimal delta) {
+        VersionedAccount acc = accountRepo.findById(accountId).orElseThrow();
+        acc.setBalance(acc.getBalance().add(delta));
+    }
+}
+```
+
+#### Bug 3: `LazyInitializationException` Thrown During REST Jackson Serialization
+* **Outage Incident**: REST API returned `500 Internal Server Error` with `LazyInitializationException: could not initialize proxy - no Session`.
+* **Root Cause**: Entity was returned from a `@Transactional` service. When Spring Web MVC attempted to serialize `account.getEntries()` into JSON, the Hibernate session was already closed.
+
+```java
+// ❌ BUG: Returning raw lazy entity outside transaction boundary
+@RestController
+public class AccountController {
+    @Autowired private AccountService accountService;
+
+    @GetMapping("/accounts/{id}")
+    public LedgerAccount getAccount(@PathVariable Long id) {
+        // 💥 Jackson tries to access lazy 'entries' outside session: LazyInitializationException!
+        return accountService.getAccount(id);
+    }
+}
+
+// ✅ REFACTORED: Map to decoupled Record DTO inside transactional service boundary
+public record AccountResponseDto(String accountNumber, BigDecimal balance, List<EntryDto> entries) {}
+
+@Service
+public class AccountService {
+    @Transactional(readOnly = true)
+    public AccountResponseDto getAccountDto(Long id) {
+        LedgerAccount acc = accountRepo.findByIdWithEntries(id).orElseThrow();
+        List<EntryDto> entries = acc.getEntries().stream()
+                .map(e -> new EntryDto(e.getId(), e.getAmount(), e.getDescription()))
+                .toList();
+        return new AccountResponseDto(acc.getAccountNumber(), acc.getBalance(), entries);
+    }
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: SQL Injection via Unsanitized Native Query Concatenation
+* **Vulnerability Vector**: An audit search query concatenated user input directly into an SQL string, allowing SQL injection via `' OR '1'='1`.
+
+```java
+// 🚨 VULNERABILITY: Raw string concatenation in EntityManager native queries
+public List<LedgerEntry> searchEntriesUnsafe(String userDescription) {
+    String sql = "SELECT * FROM ledger_entries WHERE description = '" + userDescription + "'";
+    // 💥 Attacker inputs: "' OR 1=1 --" to extract all financial entries in the system!
+    return entityManager.createNativeQuery(sql, LedgerEntry.class).getResultList();
+}
+
+// 🛡️ MITIGATION: Use Typed Named Parameters with CriteriaBuilder or JPQL
+public List<LedgerEntry> searchEntriesSecure(String userDescription) {
+    String jpql = "SELECT e FROM LedgerEntry e WHERE e.description = :desc";
+    return entityManager.createQuery(jpql, LedgerEntry.class)
+            .setParameter("desc", userDescription) // Database driver escapes input safely
+            .getResultList();
+}
+```
+
+#### Sec 2: Mass Assignment & IDOR via Direct Entity Binding
+* **Vulnerability Vector**: An endpoint bound `@RequestBody LedgerAccount` directly from user JSON, allowing attackers to overwrite their own `balance` directly.
+
+```java
+// 🚨 VULNERABILITY: Attacker sends JSON {"balance": 99999999.00} modifying protected state
+@PutMapping("/accounts/{id}")
+public LedgerAccount updateAccount(@PathVariable Long id, @RequestBody LedgerAccount payload) {
+    payload.setId(id);
+    return entityManager.merge(payload); // 💥 Direct mass assignment alters financial balance!
+}
+
+// 🛡️ MITIGATION: Bind to strict, immutable command Record DTO validating allowed fields
+public record UpdateAccountProfileRequest(@NotBlank String displayName, @Email String alertEmail) {}
+
+@PutMapping("/accounts/{id}/profile")
+public void updateAccountProfile(@PathVariable Long id, @Valid @RequestBody UpdateAccountProfileRequest req) {
+    accountService.updateProfile(id, req.displayName(), req.alertEmail()); // Balance remains untouched
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Open-Session-In-View (OSIV) Latency Trap
+* **Anti-Pattern**: `spring.jpa.open-in-view=true` (Spring Boot default) keeps the database connection and Hibernate session open during the entire HTTP request lifecycle, including during slow external REST calls or templating.
+
+```yaml
+# ⚠️ ANTI-PATTERN: Default OSIV holds database connections during slow network I/O
+spring:
+  jpa:
+    open-in-view: true # 💥 Under 200 concurrent users, HikariCP pool starves and times out!
+```
+
+```yaml
+# 🏗️ REFACTOR: Explicitly disable OSIV and enforce explicit transactional boundary fetching
+spring:
+  jpa:
+    open-in-view: false # Database connections are acquired and released strictly inside @Transactional
+```
+
+```java
+// 🏗️ REFACTOR: Explicit fetch in service layer guarantees zero lazy loading issues
+@Service
+public class ReportService {
+    @Transactional(readOnly = true)
+    public FinancialReport generateReport(String accountNumber) {
+        // Explicitly fetch all required relations before leaving transactional boundary
+        return accountRepo.fetchFullReportGraph(accountNumber);
+    }
+}
+```
 
 ---
 
@@ -38,9 +462,9 @@ You're debugging a production issue where changes to an entity are not persisted
 - **Average vs. Elite**: Average says "call `save()` again." Elite explains that `merge()` copies the detached entity's state onto a managed entity and returns the managed copy — the original detached entity is still detached.
 
 ##### 3. Standout Technical Answer
-> **JPA Entity Lifecycle Pipeline**:  
-> `[Transient: new Entity()]` ──(`em.persist()`)──► `[Managed: PersistenceContext]` ──(`session.close()` / `evict()` / `detach()`)──► `[Detached]`  
-> `[Detached]` ──(`em.merge()`)──► `[Managed (New Attached Copy)]`  
+> **JPA Entity Lifecycle Pipeline**:
+> `[Transient: new Entity()]` ──(`em.persist()`)──► `[Managed: PersistenceContext]` ──(`session.close()` / `evict()` / `detach()`)──► `[Detached]`
+> `[Detached]` ──(`em.merge()`)──► `[Managed (New Attached Copy)]`
 > `[Managed]` ──(`em.remove()`)──► `[Removed]` ──(`transaction.commit()` / `flush()`)──► `[Database DELETE Issued]`
 
 | Initial Lifecycle State | Transition Trigger | Resulting State | Hibernate ActionQueue Event | Persistence Context Status | Database Synchronization Mechanics |
@@ -313,7 +737,7 @@ After a new deployment, hundreds of API requests fail with `org.hibernate.LazyIn
 When an entity association is marked `FetchType.LAZY`, Hibernate generates a CGLIB/ByteBuddy proxy. When getter methods are invoked outside a `@Transactional` method, the underlying Hibernate `Session` is already closed. The proxy cannot execute a SQL query, throwing `LazyInitializationException`.
 
 **Why Open Session in View (OSIV) is Dangerous:**
-Spring Boot enables `spring.jpa.open-in-view=true` by default. OSIV keeps the database connection and Hibernate Session open through the web filter, controller, and view/JSON serialization layers. 
+Spring Boot enables `spring.jpa.open-in-view=true` by default. OSIV keeps the database connection and Hibernate Session open through the web filter, controller, and view/JSON serialization layers.
 - **The Outage Risk**: If Jackson serializes an object, it triggers lazy queries while sending HTTP bytes to slow mobile clients. A slow client holding an HTTP connection holds an open physical database connection from HikariCP! Under 200 concurrent requests, HikariCP runs out of connections, freezing the entire application.
 
 ```yaml

@@ -2,7 +2,7 @@
 
 # 🧠 The Engineer's Cognitive Operating System: The Master Playbook for High-Retention Learning, Laser Focus & Instant Recall in Interviews & Coding
 
-> **Target Audience:** Software engineers, developers, and aspiring architects who struggle with **mental fog, a "clumsy" mind, poor concentration, feeling "too lazy to think" through complex code or massive docs, forgetting technical concepts (even small details), and freezing when asked questions in interviews or PR reviews.**  
+> **Target Audience:** Software engineers, developers, and aspiring architects who struggle with **mental fog, a "clumsy" mind, poor concentration, feeling "too lazy to think" through complex code or massive docs, forgetting technical concepts (even small details), and freezing when asked questions in interviews or PR reviews.**
 > **Mission:** Transform how your brain processes, stores, and retrieves technical information. Shift from passive reading and painful rote memorization to **low-friction mental indexing, reflex-based thinking, and instant retrieval under pressure.**
 
 ---
@@ -216,7 +216,7 @@ When you anchor an abstract pattern to a concrete physical object from daily lif
 
 ### Method 2: The 60-Second Closed-Book Active Recall (The Feynman Flash)
 
-Most engineers study by **passive consumption**: scrolling markdown files, reading code, or watching tutorial videos.  
+Most engineers study by **passive consumption**: scrolling markdown files, reading code, or watching tutorial videos.
 - Passive reading triggers the **"Illusion of Competence"**: because the words are on the screen, your brain recognizes them and falsely assumes it owns them.
 - When the screen turns off, your working memory resets to zero.
 
@@ -256,7 +256,7 @@ ACTIVE RECALL (90% Retained Permanently):
 
 ### Method 3: The Fibonacci Spaced Retrieval Schedule (1-2-3-5-8-21 Day Rule)
 
-Do not spend 5 hours studying on a Saturday. Your brain will discard 95% of it by Tuesday.  
+Do not spend 5 hours studying on a Saturday. Your brain will discard 95% of it by Tuesday.
 Instead, use the **Fibonacci Review Spacing**:
 
 ```
@@ -473,7 +473,7 @@ INTERLEAVING SPRINT (Zero Fatigue, 85% Retention):
 
 ## Part B: Japanese Zero-Willpower Learning Philosophies (Kaizen, Shoshin, Genchi Genbutsu)
 
-Japanese manufacturing, craftsmanship, and Zen philosophies have produced some of the world's most resilient engineering systems (Toyota Production System, Shinkansen bullet trains, Deming quality cycles). 
+Japanese manufacturing, craftsmanship, and Zen philosophies have produced some of the world's most resilient engineering systems (Toyota Production System, Shinkansen bullet trains, Deming quality cycles).
 
 These exact same principles can be applied to eliminate mental clumsy friction and learn with **minimum willpower**.
 
@@ -706,7 +706,7 @@ Every system design problem in the world is just one of these **5 Universal Arch
 +------------------------------------+--------------------------------+-------------------------+
 ```
 
-When an interviewer speaks, **ignore the fluff** (whether it's about taxis, crypto, tickets, or groceries). Ask yourself:  
+When an interviewer speaks, **ignore the fluff** (whether it's about taxis, crypto, tickets, or groceries). Ask yourself:
 > *"Is this a Thundering Herd, a Write Funnel, a Multi-Step Failure, an Infinite Firehose, or a Ghost in the Wire?"*
 
 The moment you classify the archetype, the entire solution blueprint clicks into place automatically.
@@ -752,7 +752,7 @@ LEVEL 3: The Minute Detail (What is the exact low-level optimization?)
                    directly from kernel buffer to NIC ring without user-space copies."
 ```
 
-If you start at **Level 3** (memorizing `sendfile()` syscall arguments or socket buffer flags), your brain chokes.  
+If you start at **Level 3** (memorizing `sendfile()` syscall arguments or socket buffer flags), your brain chokes.
 **Always build Level 1 and Level 2 first.** Once the foundation exists, Level 3 acts as the natural answer to: *"How does it do that so fast?"*
 
 ---
@@ -767,7 +767,7 @@ If you cannot understand why a minute concept matters (like memory alignment, in
   - If you have 10,000 requests per second and open a new connection for each:
     $$10,000 \times 50\text{ms} = 500\text{ seconds of CPU connection overhead per second!}$$
   - The database server runs out of RAM spawning 10,000 PostgreSQL worker processes and instantly dies.
-- **The Insight:** A connection pool keeps 30 pre-authenticated sockets permanently open, eliminating the 50ms overhead completely.  
+- **The Insight:** A connection pool keeps 30 pre-authenticated sockets permanently open, eliminating the 50ms overhead completely.
 Now the minute detail is obvious and unforgettable!
 
 ---
@@ -994,7 +994,7 @@ Bookmark this section on your phone or keep it beside your monitor. Whenever you
 
 ## Final Word: Be Kind to Your Mind
 
-Your mind is not broken. You do not have poor intelligence.  
+Your mind is not broken. You do not have poor intelligence.
 You were simply trying to use your brain like a hard drive (storing millions of static characters), when your brain is actually a **pattern-matching GPU**.
 
 Treat your brain like an engineer treats an overloaded distributed system:

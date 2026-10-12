@@ -51,7 +51,7 @@
   max-width: 100% !important;
 }
 
-/* Optional: Make wide tables and code blocks scale smoothly across full width */
+/* Make wide tables and code blocks scale smoothly across full width */
 .vp-doc table {
   display: table !important;
   width: 100% !important;
@@ -60,4 +60,97 @@
 
 .vp-doc div[class*='language-'] {
   max-width: 100% !important;
+}
+
+/**
+ * =================================================================
+ * Pristine ASCII & Unicode Box-Drawing Diagram Fixes
+ * ================================================================= */
+
+/* True monospace font, strictly disable ligatures that break ASCII art arrows (--> , ==> , etc.) */
+.vp-doc pre,
+.vp-doc code,
+.vp-doc pre code,
+div[class*='language-'] pre,
+div[class*='language-'] code {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Menlo, Consolas, "Roboto Mono", "DejaVu Sans Mono", "Courier New", monospace !important;
+  font-variant-ligatures: none !important;
+  -webkit-font-feature-settings: "liga" 0, "calt" 0 !important;
+  font-feature-settings: "liga" 0, "calt" 0 !important;
+  letter-spacing: 0px !important;
+}
+
+/* Ensure ASCII diagrams never wrap or truncate columns, and allow smooth horizontal scrolling */
+.vp-doc pre,
+div[class*='language-'] pre {
+  white-space: pre !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+  overflow-x: auto !important;
+  line-height: 1.35 !important;
+}
+
+/* Specific styling for ASCII diagrams (language-text, language-ascii, language-ditaa, language-plain) */
+div[class*='language-text'] pre,
+div[class*='language-ascii'] pre,
+div[class*='language-ditaa'] pre,
+div[class*='language-plain'] pre,
+div[class*='language-diagram'] pre,
+div[class*='language-none'] pre,
+div:not([class*='language-']) > pre {
+  line-height: 1.25 !important;
+  letter-spacing: 0px !important;
+  font-size: 0.9em !important;
+}
+
+/* Fix vertical bar alignment in box-drawing diagrams */
+.vp-doc pre code {
+  display: block !important;
+  width: max-content !important;
+  min-width: 100% !important;
+}
+
+/**
+ * =================================================================
+ * Mermaid Diagram Styling & Container Polish
+ * ================================================================= */
+
+.mermaid-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin: 1.75rem 0;
+  padding: 1.5rem;
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  overflow-x: auto;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.mermaid svg {
+  max-width: 100% !important;
+  height: auto !important;
+  font-family: var(--vp-font-family-base) !important;
+}
+
+/* Adaptive Light & Dark mode container colors */
+html:not(.dark) .mermaid-wrapper {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html.dark .mermaid-wrapper {
+  background-color: #0f172a;
+  border-color: #1e293b;
 }

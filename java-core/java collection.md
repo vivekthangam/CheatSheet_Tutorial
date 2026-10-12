@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > This guide has been upgraded to the comprehensive **Dual-Track Engineering Master Guide Standard** conforming to Principal Systems Architect and Bar-Raiser interview benchmarks.
-> 
+>
 > 👉 **Please refer to the canonical master guide: [`java_collection.md`](java_collection.md)**
 
 ---

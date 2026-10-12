@@ -171,15 +171,15 @@ try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: What is a partition offset in Kafka?
-> **ELI5**: A bookmark that notes exactly which page you finished reading in a book.  
+> **ELI5**: A bookmark that notes exactly which page you finished reading in a book.
 > **Technical**: An offset is a monotonically increasing 64-bit integer assigned sequentially to each message within a partition, identifying its immutable physical position within that partition's commit log.
 
 #### Q2: What happens if you add more consumers than partitions in a consumer group?
-> **ELI5**: If there are 3 slices of pizza and 5 people in the room, 2 people will sit idle with nothing to eat.  
+> **ELI5**: If there are 3 slices of pizza and 5 people in the room, 2 people will sit idle with nothing to eat.
 > **Technical**: Partitions are the unit of concurrency in Kafka. If a consumer group has more consumer instances than partitions in the subscribed topic, the extra consumers remain idle as hot standbys until an active consumer crashes.
 
 #### Q3: Why does Kafka store data on disk instead of in-memory like Redis?
-> **ELI5**: Kafka lets the operating system's fast memory cache handle speed while ensuring data doesn't disappear when the power plug is pulled.  
+> **ELI5**: Kafka lets the operating system's fast memory cache handle speed while ensuring data doesn't disappear when the power plug is pulled.
 > **Technical**: Kafka relies heavily on the Linux OS Page Cache and sequential append-only disk I/O, which achieves speeds near sequential RAM bandwidth while providing petabyte-scale persistence at minimal cost.
 
 ---
@@ -329,32 +329,32 @@ partition.assignment.strategy=org.apache.kafka.clients.consumer.CooperativeStick
 # TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (50 PRODUCTION SCENARIOS)
 
 #### Q2: How does Kafka achieve zero-copy data transfer and why does it outperform traditional message brokers?
-> **Interviewer Evaluates**: OS-level network stack mechanics and Linux system call understanding.  
+> **Interviewer Evaluates**: OS-level network stack mechanics and Linux system call understanding.
 > **Standout Answer**: Traditional message brokers read data from the OS page cache into application memory via `read()`, copy it from application memory to the socket buffer via `write()`, and finally send it to the NIC buffer (4 context switches, 3 memory copies). Kafka uses the Linux `sendfile()` system call (zero-copy), which instructs the kernel to transfer data directly from the page cache to the network socket buffer without passing through user-space JVM memory, drastically reducing CPU overhead and eliminating garbage collection churn.
 
 #### Q3: What is the exact difference between `acks=1`, `acks=0`, and `acks=all` (or `acks=-1`)?
-> **Interviewer Evaluates**: Distributed consensus and durability semantics.  
+> **Interviewer Evaluates**: Distributed consensus and durability semantics.
 > **Standout Answer**:
 > - `acks=0`: Producer does not wait for any acknowledgment from the broker; highest throughput, highest risk of data loss.
 > - `acks=1`: Producer waits for the partition leader to write the record to its local log. If the leader crashes before replicas fetch the record, data loss occurs.
 > - `acks=all`: Producer waits for the full In-Sync Replica (ISR) set to acknowledge the write. Combined with `min.insync.replicas=2`, this guarantees no data loss as long as at least two replicas remain online.
 
 #### Q4: What is the KRaft consensus protocol and why did Kafka replace Apache ZooKeeper?
-> **Interviewer Evaluates**: Modern Kafka architecture (Kafka 3.0+) and control plane scaling.  
+> **Interviewer Evaluates**: Modern Kafka architecture (Kafka 3.0+) and control plane scaling.
 > **Standout Answer**: ZooKeeper stored cluster metadata externally in a separate system, creating metadata synchronization bottlenecks, slow partition rebalances, and scalability caps at ~200,000 partitions. KRaft (Kafka Raft Metadata Mode) runs an internal Raft consensus quorum directly inside the Kafka brokers. Metadata changes are written to an internal metadata event log (`@metadata`), enabling instant failover in milliseconds and scaling to millions of partitions.
 
 #### Q5: What is the role of the High Watermark (HW) vs Log End Offset (LEO)?
-> **Interviewer Evaluates**: Replication mechanics and consumer visibility.  
+> **Interviewer Evaluates**: Replication mechanics and consumer visibility.
 > **Standout Answer**:
 > - **Log End Offset (LEO)**: The offset of the next record to be written to a partition's log on a broker (leader or follower).
 > - **High Watermark (HW)**: The offset of the latest record that has been successfully replicated across all ISR members. Consumers can only read messages up to the HW to prevent "phantom reads" if an un-replicated leader crashes and is replaced.
 
 #### Q6: How does Log Compaction work and what are its memory implications?
-> **Interviewer Evaluates**: Key-value retention semantics and cleaner thread mechanics.  
+> **Interviewer Evaluates**: Key-value retention semantics and cleaner thread mechanics.
 > **Standout Answer**: Log Compaction retains only the latest record for each key within a partition, discarding older tombstoned or replaced values. Kafka divides segments into clean and dirty logs. The `Cleaner` background thread uses an in-memory hash table (skimpy offset map) to deduplicate records. If the skimpy map runs out of memory, cleaner performance degrades, so `log.cleaner.dedupe.buffer.size` must be sized appropriately for key cardinality.
 
 #### Q7: How do you implement exactly-once processing (EOS) across Kafka read-process-write cycles?
-> **Interviewer Evaluates**: Distributed transactions and two-phase commit knowledge.  
+> **Interviewer Evaluates**: Distributed transactions and two-phase commit knowledge.
 > **Standout Answer**:
 > 1. Set `enable.idempotence=true` on the producer (uses PID + sequence numbers to eliminate producer-side network retries duplicates).
 > 2. Configure `transactional.id` on the producer.
@@ -362,20 +362,20 @@ partition.assignment.strategy=org.apache.kafka.clients.consumer.CooperativeStick
 > 4. Configure consumers with `isolation.level=read_committed`, ensuring consumers skip aborted transactions.
 
 #### Q8: What causes partition skew and consumer lag imbalances, and how do you resolve them?
-> **Interviewer Evaluates**: Partitioning strategies and load distribution.  
+> **Interviewer Evaluates**: Partitioning strategies and load distribution.
 > **Standout Answer**: Skew occurs when hot partition keys (e.g. a high-volume merchant ID or default `null` keys with legacy partitioners) route disproportionate message volume to a single partition. Remediation:
 > 1. Use composite partition keys with high cardinality (e.g. `tenantId + ":" + orderId`).
 > 2. Introduce salted keys for hot entities.
 > 3. Increase partition count and scale consumer group instances to match.
 
 #### Q9: What is the difference between `Eager` and `Cooperative Sticky` partition assignment strategies?
-> **Interviewer Evaluates**: Kafka client rebalance protocols.  
+> **Interviewer Evaluates**: Kafka client rebalance protocols.
 > **Standout Answer**:
 > - **Eager (`RangeAssignor`, `RoundRobinAssignor`)**: During any consumer join/leave, all consumers in the group revoke all assigned partitions simultaneously (stop-the-world rebalance), pausing all message processing.
 > - **Cooperative Sticky (`CooperativeStickyAssignor`)**: Uses incremental cooperative rebalancing. Only partitions that need to be migrated are revoked, allowing unaffected consumers to continue processing without downtime.
 
 #### Q10: How do you tune Kafka for low-latency (<5ms) vs maximum throughput workloads?
-> **Interviewer Evaluates**: Production profiling and batching trade-offs.  
+> **Interviewer Evaluates**: Production profiling and batching trade-offs.
 > **Standout Answer**:
 > - **Max Throughput**: `linger.ms=20`, `batch.size=131072` (128 KB), `compression.type=lz4` or `zstd`, `buffer.memory=67108864` (64 MB), `acks=all`.
 > - **Ultra-Low Latency**: `linger.ms=0` (immediate dispatch), `batch.size=0`, disable compression (`compression.type=none`), `fetch.min.bytes=1`, `acks=1` (if permissible by durability SLA).

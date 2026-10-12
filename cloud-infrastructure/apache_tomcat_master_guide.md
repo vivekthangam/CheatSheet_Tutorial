@@ -291,7 +291,7 @@ export CATALINA_OPTS="${CATALINA_OPTS} -Dfile.encoding=UTF-8"
 ### Incident 1: The Cascading Thread Starvation Lockup via Unbounded HTTP Client
 - **Symptom**: All Tomcat instances froze simultaneously. Kubernetes liveness probes failed on port 8080, causing rapid pod restart loops.
 - **Root Cause**: An external payment API slowed from 100ms to 60s. The application used an `HttpClient` without socket timeouts (`timeout = infinity`). All 400 worker threads became blocked waiting for TCP reads. Once `acceptCount="300"` filled, Tomcat stopped accepting connections, failing the K8s `/healthz` probe.
-- **Remediation**: 
+- **Remediation**:
   1. Configured 2-second connect and read timeouts on all HTTP client calls.
   2. Moved `/healthz` liveness probes to an isolated internal management port (Spring Boot Actuator on port 8081).
 
@@ -314,7 +314,7 @@ export CATALINA_OPTS="${CATALINA_OPTS} -Dfile.encoding=UTF-8"
 # 7. Senior Tomcat & Java SRE Engineer Interview Bank (30 Questions)
 
 #### Q1: What is the exact sequence of events when a client establishes a connection to Tomcat's Coyote NIO Connector?
-> **Answer**: 
+> **Answer**:
 > 1. The client sends a TCP SYN packet; the OS kernel places it in the listen backlog queue (`acceptCount`).
 > 2. Tomcat's `Acceptor` thread accepts the socket and registers it with a `Poller` thread.
 > 3. The `Poller` registers the socket channel with a Java NIO `Selector`.
@@ -341,7 +341,7 @@ export CATALINA_OPTS="${CATALINA_OPTS} -Dfile.encoding=UTF-8"
 > **Answer**: Standard Java classloaders use parent-first delegation (child asks parent first). Tomcat's `WebappClassLoader` reverses this for web application libraries (child-first delegation): it searches `/WEB-INF/classes` and `/WEB-INF/lib` *first* before delegating to the Common or System classloader. This allows individual web apps to override shared container libraries with their own specific versions.
 
 #### Q7: What is the performance difference between Coyote NIO and NIO2 protocols?
-> **Answer**: 
+> **Answer**:
 > - **NIO (`Http11NioProtocol`)**: Synchronous non-blocking I/O using OS `epoll`/`kqueue` selectors. Poller threads continually query the selector for ready channels.
 > - **NIO2 (`Http11Nio2Protocol`)**: True asynchronous I/O using completion handlers (`AsynchronousSocketChannel`). The operating system kernel performs the I/O read and directly notifies Tomcat upon completion. NIO2 can offer lower CPU utilization under huge connection counts, though NIO remains the most battle-tested default.
 

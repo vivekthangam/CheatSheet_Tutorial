@@ -736,7 +736,7 @@ else {
 > **Answer**: Bash passes data as raw byte/character streams; downstream tools must scrape text lines and columns with string-parsing tools (`awk`, `sed`, `grep`). PowerShell passes strongly typed .NET objects (`System.Object`). Downstream cmdlets inspect, filter, and invoke properties and methods directly via reflection without serialization or column alignment fragility.
 
 #### Q2: What are the four lifecycle blocks of an advanced PowerShell function, and in what order do they execute?
-> **Answer**: 
+> **Answer**:
 > 1. `begin`: Executes once before any pipeline objects arrive; used for setup.
 > 2. `process`: Executes once for every individual object streamed through the pipeline.
 > 3. `end`: Executes once after all pipeline objects have been consumed; used for teardown.

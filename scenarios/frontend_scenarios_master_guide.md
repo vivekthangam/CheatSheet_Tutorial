@@ -183,7 +183,7 @@ interface PriceQuote {
       <p class="price">{{ quote().price | currency }}</p>
       <small>Updated: {{ lastUpdated() | date:'mediumTime' }}</small>
     </div>
-  `
+  ```
 })
 export class TickerCardComponent {
   // Fine-grained reactive Signal
@@ -227,7 +227,7 @@ export class TickerCardComponent {
 export async function processLargeDatasetSafely(items, chunkSize = 1000) {
   for (let i = 0; i < items.length; i += chunkSize) {
     const chunk = items.slice(i, i + chunkSize);
-    
+
     // Process 1,000 items synchronously
     for (const item of chunk) {
       heavyCalculation(item);
@@ -283,7 +283,7 @@ export function SafeClientTimeDisplay() {
   useEffect(() => {
     // Runs ONLY on the client after successful initial hydration!
     setFormattedTime(new Date().toLocaleTimeString());
-    
+
     const interval = setInterval(() => {
       setFormattedTime(new Date().toLocaleTimeString());
     }, 1000);
@@ -346,3 +346,4 @@ export function SafeClientTimeDisplay() {
 
 ---
 [🏠 Back to Home](README.md) | [⚛️ React Master Guide](react_master_guide.md) | [🅰️ Angular Master Guide](angular_master_guide.md) | [🌐 Frontend Terms Encyclopedia](frontend_polyglot_technical_terms_master_guide.md)
+```

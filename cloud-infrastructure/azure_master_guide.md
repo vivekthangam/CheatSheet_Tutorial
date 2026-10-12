@@ -873,7 +873,8 @@ ApplicationIntent=ReadOnly;
   - **Max VNets per Subscription per Region**: 1,000.
   - **Subnet CIDR Limits**: `/8` (16 million IPs) to `/29` (8 IPs). Remember: **Azure reserves 5 IP addresses per subnet** (first 4 and last 1).
   - **Max VNet Peerings per VNet**: 500.
-- **Production Bic```mermaid
+
+```mermaid
 flowchart TD
     classDef backbone fill:#1e1e2e,stroke:#6366f1,stroke-width:3px,color:#f8fafc,rx:10,ry:10
     classDef pop fill:#1e1e2e,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,rx:8,ry:8
@@ -910,8 +911,7 @@ flowchart TD
     Singapore <-->|"Sub-millisecond Private WAN"| SEAZones
 ```
 
-<details>
-<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+::: details View Text-Based Representation (ASCII Fallback)
 
 ```text
 Microsoft Global WAN & Edge PoP Architecture:
@@ -935,7 +935,7 @@ Microsoft Global WAN & Edge PoP Architecture:
   └─────────────────────────┘     └─────────────────────────┘
 ```
 
-</details>
+:::
 
 #### 📊 Visual Architecture & Subsystem Mechanics: Global Fiber WAN & Edge Ingress
 1. **Node Anatomy & Topology**: Microsoft's terrestrial and subsea optical mesh encompasses over 175,000 miles of lit fiber cables interconnecting over 60 Azure regions and 200+ Edge Points of Presence (PoPs). Regional data centers are grouped into tri-zone Availability Zones linked by dedicated, redundant dark fiber rings with an optical round-trip time (RTT) latency budget of $<2\text{ ms}$.
@@ -1155,8 +1155,7 @@ flowchart TD
     StreamTier --> ReplicationModes
 ```
 
-<details>
-<summary><b>View Text-Based Representation (ASCII Fallback)</b></summary>
+::: details View Text-Based Representation (ASCII Fallback)
 
 ```text
 Azure Storage Three-Tier Distributed Architecture:
@@ -1179,7 +1178,7 @@ Azure Storage Three-Tier Distributed Architecture:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-</details>
+:::
 
 #### 📊 Visual Architecture & Subsystem Mechanics: The X-Store Distributed Engine
 1. **Node Anatomy & Three-Tier Hierarchy**: Azure Storage is engineered around the Object Exchange (X-Store) architecture. The Front-End Layer terminates client protocols (Blob REST, SMB 3.0, NFSv4.1, ADLS Gen2 DFS); the Partition Layer manages global object namespaces, commit logs, and secondary indexes; the Stream Layer manages raw append-only block placement on physical disks.
@@ -1193,7 +1192,10 @@ Azure Storage Three-Tier Distributed Architecture:
    - ZRS tolerates the complete catastrophic loss of an entire datacenter facility or multiple simultaneous storage nodes with only a $33-50\%$ storage capacity overhead, compared to $200\%$ overhead for traditional 3x mirroring.
 4. **Production Failure Modes & SRE Hotspotting**:
    - **Partition Hotspotting (HTTP 503 ServerBusy)**: When an application writes thousands of files whose names share a sequential prefix (e.g., `logs/2026-09-11-00-01.json`), all requests map to the same partition server range, exhausting that node's CPU and disk queue depth. Remediation: Prepend a random hash prefix or reverse the timestamp (e.g., `<hash>-logs/...`) to distribute partitions uniformly across hundreds of partition nodes.
-   - **Silent Bit Rot & Scrubbing**: Physical flash memory degradation (silent data corruption) is mitigated by background scrubbing engines continuously calculating CRC64 checksums across sealed extents and regenerating corrupt blocks using Reed-Solomon parity.��──────────────┐
+   - **Silent Bit Rot & Scrubbing**: Physical flash memory degradation (silent data corruption) is mitigated by background scrubbing engines continuously calculating CRC64 checksums across sealed extents and regenerating corrupt blocks using Reed-Solomon parity.
+
+```text
+┌─────────────────────────────────┐   ┌───────────────────────────────────────────┐
 │ STANDARD NETWORKING (Software)  │   │ ACCELERATED NETWORKING (Hardware SR-IOV)  │
 ├─────────────────────────────────┤   ├───────────────────────────────────────────┤
 │ [Guest VM (Linux/Windows)]      │   │ [Guest VM (Linux/Windows)]                │
@@ -1516,7 +1518,7 @@ During Black Friday checkout, the e-commerce shopping cart API reported a $68\%$
 ### The Outage & War Room Triage
 - **Symptoms**: Application logs showed millions of errors:
 ```text
-Microsoft.Azure.Cosmos.CosmosException : Response status code does not indicate success: 
+Microsoft.Azure.Cosmos.CosmosException : Response status code does not indicate success:
 TooManyRequests (429); Substatus: 3200; ActivityId: 8a1b2c3d-...; Reason: Request rate is large.
 ```
 - **The Root Cause**: The application team created a Cosmos DB container partitioned on `CountryCode` (e.g. `US`). Over $95\%$ of transactions originated from US shoppers. While the total container had 100,000 provisioned RU/s distributed across 10 physical partitions, the single physical partition serving `US` was capped at 10,000 RU/s ($100,000 / 10$). The physical partition serving `US` hit 100% capacity and throttled, while the other 9 partitions sat 99% idle!
@@ -1586,4 +1588,3 @@ TooManyRequests (429); Substatus: 3200; ActivityId: 8a1b2c3d-...; Reason: Reques
 
 ---
 *Azure Architecture Master Guide — Production Reference Handbook (2026 Edition).*
-

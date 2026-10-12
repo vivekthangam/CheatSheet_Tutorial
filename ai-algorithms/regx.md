@@ -292,7 +292,7 @@ Code snippet
 ```regex
 (?i)SELECT\s+(.+?)\s+FROM\s+([a-zA-Z_]\w*)
 ```
-Explanation: (?i) makes it case-insensitive. Group 1 is columns, Group 2 is the table name. 
+Explanation: (?i) makes it case-insensitive. Group 1 is columns, Group 2 is the table name.
 
 ### 5.3 Environment Variable Parser
 **Logic:** Parses .env files, handling single quotes, double quotes, and unquoted values.
@@ -624,7 +624,7 @@ const pattern = /"([^"]+)"/g;
 const str = 'User "JohnDoe" logged in';
 let match = pattern.exec(str);
 if (match) console.log(match[1]); // Output: JohnDoe
-``
+```
 
 ### 2. Java (Spring Boot / Desktop)
 Java requires double-escaping backslashes (e.g., \\d) and uses the java.util.regex package.
@@ -717,8 +717,8 @@ This guide provides a comprehensive scenario-based roadmap for mastering Regular
 * **Fixed Length:** `^\d{5}$` — Validates exactly 5 digits (Zip Code).
 * **Range Length:** `^[a-z0-9_-]{3,16}$` — Username validation (3 to 16 chars).
 * **Min Length:** `.{8,}` — Password length check (minimum 8).
-* **Greedy Match:** `<div>.*</div>` — Matches everything from the first <div> to the last </div>.
-* **Lazy Match:** `<div>.*?</div>` — Matches only until the first closing </div>.
+* **Greedy Match:** `&lt;div&gt;.*&lt;/div&gt;` — Matches everything from the first `&lt;div&gt;` to the last `&lt;/div&gt;`.
+* **Lazy Match:** `&lt;div&gt;.*?&lt;/div&gt;` — Matches only until the first closing `&lt;/div&gt;`.
 * **Optional Prefix:** `(\+1)?\d{10}` — Matches US numbers with or without +1.
 * **Exactly Two:** `([a-z])\1` — Finds double letters (e.g., "aa", "bb").
 * **Max Repetitions:** `[aeiou]{1,3}` — Matches between 1 and 3 vowels.
@@ -881,4 +881,4 @@ This guide provides a comprehensive scenario-based roadmap for mastering Regular
 
 ---
 
-[⬆️ Back to Top](#-the-definitive-regex-engineering-guide-core-to-advanced)
+[⬆️ Back to Top](#-the-definitive-regex-engineering-guide-core-to-advanced)

@@ -985,7 +985,7 @@ portal.enterprise.com. 3600 IN CAA 0 issue "comodoca.com"
 ```
 
 ### 3. Deep Root Cause Analysis (RCA)
-The enterprise security team implemented DNS Certification Authority Authorization (CAA) records to prevent rogue SSL certificates, restricting issuance strictly to DigiCert. 
+The enterprise security team implemented DNS Certification Authority Authorization (CAA) records to prevent rogue SSL certificates, restricting issuance strictly to DigiCert.
 
 When GitHub Pages attempted to provision a TLS certificate for `portal.enterprise.com`, its ACME client queried Let's Encrypt. Let's Encrypt inspected the DNS CAA records, observed that it was not listed as an authorized certificate authority, and aborted the ACME validation handshake in compliance with RFC 6844. GitHub Pages fell back to serving its default wildcard certificate (`*.github.io`). Browsers detected a hostname mismatch (`portal.enterprise.com` != `*.github.io`) and threw catastrophic security warnings to all visitors.
 

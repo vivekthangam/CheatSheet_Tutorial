@@ -1,7 +1,7 @@
 # 🗺️ The Master Learning Curriculum & Architecture Roadmap
 ### The Systematic Blueprint for Navigating 150+ Enterprise Engineering Guides
 
-> **Navigation Bar**:  
+> **Navigation Bar**:
 > [ 🏠 Back to Home / README ](README.md) • [ 📚 All 150+ Guides Categorized ](all_markdown_files_categorized.md) • [ 🧭 Master Navigation Portal ](README.md#🧭-master-navigation-portal)
 
 ---
@@ -37,7 +37,7 @@ Choose your specialized curriculum path below:
 
 | # | Curriculum Path | Target Roles | Estimated Modules |
 | :-: | :--- | :--- | :-: |
-| **Path 1** | [Full-Stack Java & Enterprise Spring Developer](#-path-1-full-stack-java--enterprise-spring-developer-path) | Backend Engineer, Full-Stack Dev, Spring Lead | 12 Core Guides |
+| **Path 1** | [Full-Stack Java & Enterprise Spring Developer](#-path-1-full-stack-java--enterprise-spring-developer-path) | Backend Engineer, Full-Stack Dev, Spring Lead | 15 Core Guides |
 | **Path 2** | [Database Architect & Relational/NoSQL Persistence](#-path-2-database-architect--storage-systems-path) | Data Engineer, DB Architect, Backend Staff | 8 Core Guides |
 | **Path 3** | [Cloud Native, Containers, Kubernetes & SRE](#-path-3-cloud-native-kubernetes-devops--sre-path) | DevOps Engineer, SRE, Platform Architect | 14 Core Guides |
 | **Path 4** | [Distributed Systems, Messaging & Event Streaming](#-path-4-distributed-systems-messaging--event-streaming-path) | Distributed Systems Dev, Event Architect | 7 Core Guides |
@@ -69,15 +69,19 @@ Step 9: Microservices ─► Step 10: Testing ─────► Step 11: 200+ S
 2. **Core Concurrency & Asynchronous Programming**:
    * Read [Java Multithreading & Concurrency Masterclass](java-core/java_thread.md) for OS thread scheduling, JMM, and Virtual Threads.
    * Master non-blocking pipelines with [Java CompletableFuture Masterclass](java-core/completable_future.md).
+   * Trace the full language and runtime evolution in [Modern Java Evolution (Java 8 to 25)](interview_prep/01_java_core/java_version_evolution_8_to_25.md) covering Lambdas, Streams, Records, Pattern Matching, Virtual Threads Loom, FFM, Structured Concurrency, Scoped Values, and Vector API.
    * Practice with [Java Concurrency: 200 Scenarios](scenarios/java_threads_concurrency_200_scenarios_master_guide.md).
 3. **Core Spring Boot 3 & Microservice Frameworks**:
    * Read [Spring Boot 3+ Enterprise Guide](spring-framework/spring_boot.md) for IoC/DI, MVC RFC 7807, and Actuator.
    * Master aspect-oriented programming with [Spring AOP & Proxy Architecture](spring-framework/spring_aop_master_guide.md).
    * Master enterprise microservices with [Spring Framework 6 & Spring Boot 3 Master Guide](spring-framework/spring_master_guide.md).
-4. **Persistence, Serialization & Security**:
+   * Master modular architecture, domain boundaries, and event publication registries with [Spring Modulith & Modular Monoliths](interview_prep/02_spring_framework/spring_modulith_modular_monoliths.md).
+   * Maximize native performance, Substrate VM memory efficiency, and ahead-of-time compilation with [Spring Boot GraalVM Native Image & AOT Engine](interview_prep/02_spring_framework/spring_boot_graalvm_native_aot.md).
+4. **Persistence, Caching, Serialization & Security**:
    * Study [Spring Data JPA & Hibernate 6 Master Guide](spring-framework/spring_data_jpa.md) for pooled sequences and N+1 prevention.
+   * Master high-scale caching in [Spring Distributed Caching & Redis Mastery](interview_prep/02_spring_framework/spring_cache_redis_distributed.md) for L1/L2 tiered caches, stampede prevention, and Redisson distributed locks.
    * Study [Jackson JSON Engine Master Guide](java-core/jackson_master_guide.md) for streaming parsing, `@JsonView`, and RCE defense.
-   * Study [Java & Spring Cryptography Master Guide](java-core/java_spring_cryptography_master_guide.md) for AES-GCM, Argon2id, and KMS envelopes.
+   * Study [Java & Spring Cryptography Master Guide](java-core/java_spring_cryptography_master_guide.md) and [Java Cryptography & JCA/JCE Security Mastery](interview_prep/01_java_core/java_cryptography_security_mastery.md) for AES-GCM, Argon2id, and KMS envelopes.
 5. **Real-World Scenarios & Production Polish**:
    * Solve 100+ multi-domain scenarios in [Spring Enterprise 100+ Production Scenarios](scenarios/spring_200_scenarios_master_guide.md).
    * Prepare for senior interviews with [Java Interview Master Guide](java-core/java_interview_master_guide.md).
@@ -108,6 +112,7 @@ Step 6: MongoDB Polyglot ◄── Step 5: Spring Data JPA / JDBC ◄── Step
    * Understand Write-Ahead Logging (WAL), page dirty caches, and the ARIES Crash Recovery Algorithm in [SQL Normalization & ACID Guide](databases-persistence/sql_normalization_acid_master_guide.md#track-2-master-catalog-of-normalization--acid-engine-architecture).
    * Deep-dive into PostgreSQL heap tuples, MVCC `xmin`/`xmax`, and autovacuum in [PostgreSQL Engine Internals Master Guide](databases-persistence/postgresql_master_guide.md).
 4. **Application Persistence & Polyglot NoSQL**:
+   * Master native JDBC driver internals, connection pooling physics, and HikariCP zero-overhead concurrency in [JDBC, Connection Pooling & HikariCP Mastery](interview_prep/01_java_core/java_jdbc_hikaricp_mastery.md).
    * Bridge relational theory to Java using [Spring Data JPA & Hibernate 6](spring-framework/spring_data_jpa.md) and [Spring SQL & JDBC](spring-framework/spring_sql.md).
    * Master NoSQL document modeling, WiredTiger internals, and Mongoose in [MongoDB Polyglot Master Guide](databases-persistence/mongodb_master_guide.md).
    * Solve 50+ database edge cases in [Spring Data JPA 50+ Scenarios](scenarios/spring_data_jpa_scenarios_master_guide.md) and [MongoDB 50+ Scenarios](scenarios/mongodb_scenarios_master_guide.md).
@@ -190,7 +195,7 @@ Step 6: 200 Security Scenarios ◄── Step 5: OPA & Rego Policy ◄── Ste
 #### Step-by-Step Curriculum:
 1. **Mathematical & Cryptographic Foundations**:
    * Explore AES-GCM, RSA, Ed25519, and Post-Quantum PQC in [Cryptography Algorithms Encyclopedia](security-identity/cryptography_algorithms_master_guide.md).
-   * Implement secure JCA/JCE and envelope encryption in [Java & Spring Enterprise Cryptography](java-core/java_spring_cryptography_master_guide.md).
+   * Implement secure JCA/JCE and envelope encryption in [Java & Spring Enterprise Cryptography](java-core/java_spring_cryptography_master_guide.md) and [Java Cryptography & JCA/JCE Security Mastery](interview_prep/01_java_core/java_cryptography_security_mastery.md).
 2. **Enterprise Identity & Authorization**:
    * Master OAuth2, OIDC, SAML 2.0, Kerberos, and mTLS in [Enterprise Security & Auth Masterclass](security-identity/security_auth_master_guide.md).
    * Implement Spring Security 6 stateless JWT filters with [Spring Security 6 Master Guide](spring-framework/spring_security.md).

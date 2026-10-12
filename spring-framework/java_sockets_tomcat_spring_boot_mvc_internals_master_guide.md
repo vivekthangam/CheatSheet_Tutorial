@@ -1,6 +1,6 @@
 # ☕ Java Sockets to Spring Boot MVC: How Low-Level Sockets are Wrapped into Servlets, Filters, Interceptors & Controllers
 
-> **Target Audience**: Staff Java/Spring Architects, Backend Engineers, Real-Time Platform Engineers, and SREs.  
+> **Target Audience**: Staff Java/Spring Architects, Backend Engineers, Real-Time Platform Engineers, and SREs.
 > **Prerequisites**: Zero prior socket or internals knowledge required. We build systematically from the operating system kernel socket (`socket()`, file descriptors, TCP buffers), to JVM Java Sockets (`java.net.Socket`, Java NIO `SocketChannel`), through the embedded Tomcat `NioEndpoint` (Acceptor, Poller, Worker threads), and dissect the exact step-by-step pipeline that wraps raw bytes into `HttpServletRequest`, runs Servlet `Filter` chains, dispatches through `DispatcherServlet`, executes `HandlerInterceptor` chains, resolves arguments via Jackson `HttpMessageConverter`, executes the `@RestController`, and flushes the response back out to the wire.
 
 ---

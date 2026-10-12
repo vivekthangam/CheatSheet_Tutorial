@@ -264,7 +264,7 @@ Often skipped in tutorials, these are plugins that intercept requests to the API
 
 ## 🏷️ 3. Namespaces & Labels
 * **Namespaces**: Virtual isolation. Use these to separate `dev`, `staging`, and `prod`.
-* **Labels**: Key-value pairs used for organizing. 
+* **Labels**: Key-value pairs used for organizing.
 * **Selectors**: How you query labels. A Service uses a selector to find which Pods to send traffic to.
 
 ---
@@ -317,7 +317,7 @@ Pods are ephemeral (they die and get new IPs). A **Service** provides a stable n
 
 * **ClusterIP (Default)**: Exposes the service on a cluster-internal IP. Use this for internal microservice communication (e.g., API to DB).
 * **NodePort**: Exposes the service on each Node’s IP at a static port (30000-32767). Useful for simple external access.
-* **LoadBalancer**: Provisions an external Load Balancer in supported cloud environments (AWS, GCP, Azure). 
+* **LoadBalancer**: Provisions an external Load Balancer in supported cloud environments (AWS, GCP, Azure).
 * **Headless Service**: Set `clusterIP: None`. Instead of a single IP, a DNS lookup returns the IPs of all underlying Pods. Critical for **StatefulSets** (Databases).
 
 
@@ -406,7 +406,7 @@ RBAC determines permissions by linking a **Subject** (User/Group/ServiceAccount)
 
 ## 🔑 2. Secrets & ConfigMaps
 * **ConfigMap**: Stores non-sensitive configuration (e.g., `application.properties` or environment names).
-* **Secret**: Stores sensitive data (e.g., DB passwords, API keys, SSL certs). 
+* **Secret**: Stores sensitive data (e.g., DB passwords, API keys, SSL certs).
   * *Note*: Secrets are Base64 encoded, not encrypted by default. You should use a tool like "Sealed Secrets" or "HashiCorp Vault" for true security.
 
 
@@ -449,7 +449,7 @@ Kubernetes assigns a priority to your pod based on your resource definitions:
 | Scenario | Command |
 | :--- | :--- |
 | **Check RBAC permissions** | `kubectl auth can-i create pods --as=system:serviceaccount:ns:sa` |
-| **View secret data (decoded)** | `kubectl get secret <name> -o jsonpath='{.data.password}' | base64 --decode` |
+| **View secret data (decoded)** | `kubectl get secret <name> -o jsonpath='{.data.password}' \| base64 --decode` |
 | **Monitor pod health events** | `kubectl get events --field-selector involvedObject.name=<pod-name>` |
 | **Check resource usage** | `kubectl top pod` (Requires Metrics Server) |
 | **View Pod QoS Class** | `kubectl get pod <name> -o jsonpath='{.status.qosClass}'` |
@@ -1883,6 +1883,3 @@ To apply the foundational templates for a Java-based Expense Manager:
 ---
 
 [⬆️ Back to Top](#️-the-comprehensive-kubernetes-k8s-production-architecture--scenario-guide)
-
-
-

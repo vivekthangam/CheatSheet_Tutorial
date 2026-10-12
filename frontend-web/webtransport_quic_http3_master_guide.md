@@ -2,7 +2,7 @@
 
 ![WebTransport over QUIC and HTTP/3 Architecture](../assets/images/protocols/webtransport_quic_protocol.jpg)
 
-> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Game Engine Developers, Media Streaming Engineers, Full-Stack Architects, and SRE Leads.  
+> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Game Engine Developers, Media Streaming Engineers, Full-Stack Architects, and SRE Leads.
 > **Prerequisites**: Zero prior WebTransport or QUIC knowledge required. We begin with foundational physical analogies (The Single-Track Railway vs The Multi-Lane Highway) and progress systematically through the QUIC (RFC 9000) and HTTP/3 transport layer, HTTP/3 `CONNECT` encapsulation (RFC 9297), Bidirectional Streams, Unidirectional Streams, Unreliable Datagrams, TCP Head-of-Line (HoL) blocking elimination, 0-RTT handshakes, seamless connection migration across Wi-Fi/Cellular, TLS 1.3 certificate hashing (`serverCertificateHashes`), full working client/server implementations, fallback negotiation, 8 deep failure modes, 20 anti-patterns, 2 Sev-1 outage post-mortems, a 40+ term technical glossary, and an enterprise 30-point audit checklist.
 
 ---

@@ -265,7 +265,7 @@ Healthy     Progressing     Degraded                   │
 
 ### Q2: What is the difference between `Synced` and `Healthy` in ArgoCD?
 - **ELI5 Analogy:** `Synced` means you bought the exact medicine prescribed by the doctor. `Healthy` means the medicine actually cured your fever.
-- **Senior Technical Answer:** 
+- **Senior Technical Answer:**
   - **Synced:** Relates to **configuration convergence**. The Kubernetes manifest in Git matches the specification submitted to the Kubernetes API server.
   - **Healthy:** Relates to **runtime workload status**. Evaluates whether the underlying pods are running, passing liveness/readiness probes, and handling traffic without errors.
 

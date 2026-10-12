@@ -2,7 +2,7 @@
 
 # 🌐 GraphQL Polyglot Masterclass: Architecture, Complete Setups in Java, Node.js & Go, Pros & Cons, and 100 Production Scenarios
 
-> **Target Audience:** Software Engineers, Backend Developers, Distributed Systems Architects, and Technical Leads.  
+> **Target Audience:** Software Engineers, Backend Developers, Distributed Systems Architects, and Technical Leads.
 > **Prerequisites:** **Zero.** We build from foundational mental models through complete, production-ready code in **Node.js**, **Golang**, and **Java (Spring Boot 3)**, concluding with an architectural trade-off evaluation and **100 categorized real-world production scenarios**.
 
 ---

@@ -2,7 +2,7 @@
 
 ![Network Transport & Application Protocols Comparison Stack](../assets/images/protocols/network_transport_stack.jpg)
 
-> **Target Audience**: Staff Infrastructure Architects, Real-Time Platform Engineers, Systems Programmers, Full-Stack Developers, SREs, and Network Engineers.  
+> **Target Audience**: Staff Infrastructure Architects, Real-Time Platform Engineers, Systems Programmers, Full-Stack Developers, SREs, and Network Engineers.
 > **Prerequisites**: Zero prior networking knowledge required. We build systematically from fundamental physical analogies (Water Pipes, Letters, Tamper-Evident Couriers) up to bit-level packet frame dissections, TLS 1.3 cryptographic handshakes, sliding window flow control, BBR congestion control, multiplexed stream states, complete runnable code for all protocols, 10 deep production failure modes, 20 anti-patterns, 2 Sev-1 outage post-mortems, a 40+ term technical glossary, and a 30-point enterprise audit checklist.
 
 ---

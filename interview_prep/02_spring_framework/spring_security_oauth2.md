@@ -1,15 +1,66 @@
-# Spring Security 6, OAuth2 & JWT: Enterprise Interview Guide
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-zero-trust-fintech-auth-gateway)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Engineering  
-> **Topic Coverage**: SecurityFilterChain Architecture, DelegatingFilterProxy, Authentication vs Authorization, OAuth2 Resource Server, JWT Validation & JWKS, Method‑Level Security (`@PreAuthorize`, `@Secured`), CORS/CSRF Configuration, RBAC vs ABAC, Spring Security 6 Migration, Password Encoding (BCrypt/Argon2), Token Blacklisting, and Zero‑Trust Authentication Patterns.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, Staff & Principal Engineers.  
-> **Target Depth**: 50 Progressive Technical Scenarios with Runtime Mechanics, Production Code Walkthroughs, Beginner Traps, and Real‑World Outage Post‑Mortems.
+# Spring Security 6, OAuth2.1 & Zero-Trust JWT Architecture: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_security_oauth2.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_security_oauth2.md)  
+> **Topic Domain:** `SecurityFilterChain` Component Lifecycle, `DelegatingFilterProxy` & `FilterChainProxy`, Asymmetric JWT Verification & JWKS Rotation (`NimbusJwtDecoder`), Method-Level Security (`@PreAuthorize` / `MethodSecurityInterceptor`), RBAC vs ABAC Attributes, CORS/CSRF Defenses, Password Hashing (Argon2id vs BCrypt), Distributed Token Revocation, and Zero-Trust Edge Gateway Architecture (`S03`)  
+> **Target Framework / Runtime:** Spring Boot 3.3+, Spring Security 6.3+, OAuth 2.1 RFC Specification, OpenJDK HotSpot JVM 17/21 LTS  
+> **Architecture Level:** Principal / Staff+ Security Architect, Identity & Access Management (IAM) Specialist & DevSecOps Lead  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Authentication Security Breach Post-Mortems, Cryptographic Bytecode Verification, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Fintech Zero-Trust Auth Cheatsheet](#-real-world-production-project--code-cheatsheet-zero-trust-fintech-auth-gateway) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_security_oauth2/)
 
 ---
 
-## Architecture Blueprint: The Spring Security Filter Chain
+## 1. Foundational Primer: What, Why & Where? (The "Head")
 
-> **Spring Security Request Lifecycle Pipeline**:  
+*Before diving into NimbusJwtDecoder public-key cryptographic parsing, DelegatingFilterProxy Servlet container bridge mechanics, SecurityContextHolder thread-local propagation across async task boundaries, and Argon2id memory-hard password verification, here is the essential high-level context: what Spring Security represents, why stateful session cookies collapsed in microservice meshes, and where Zero-Trust access control anchors modern enterprise applications.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Spring Security** is a modular, declarative application security framework that provides comprehensive **Authentication** (verifying *who* the caller is) and **Authorization** (verifying *what* the caller is allowed to do) for Java applications. Operating as a sequential pipeline of intercepting HTTP filters (**The `SecurityFilterChain`**), it intercepts incoming web requests before they reach your controllers, authenticates credentials (JWT, OAuth2, SAML, session cookies, API keys), applies role and permission rules, and defends against common web vulnerabilities (CSRF, CORS, session fixation, clickjacking).
+* **Everyday Analogy**: Imagine passing through an international commercial airport terminal:
+  - **Unprotected Web Application**: No airport security checkpoints, customs officers, or locked boarding doors. Anyone can walk straight off the street into the cockpit of a Boeing 777 and push buttons (**Unrestricted Access**).
+  - **Spring Security (`SecurityFilterChain`)**: A strict, sequential series of security checkpoints:
+    - **Filter 1 (CORS Preflight)**: The airport terminal entrance doors: checks if your airline even operates out of this terminal before letting you in line.
+    - **Filter 6 (Bearer Token Authentication / TSA)**: TSA passport control. You present your cryptographically signed passport (**The JWT Bearer Token**). The officer scans the digital hologram using the embassy's public key (**JWKS public key validation**). If valid, they stamp your hand with your verified passenger identity and seat assignment (**`SecurityContextHolder.setContext()`**).
+    - **Filter 11 (`AuthorizationFilter` / Gate Attendant)**: The gate boarding agent: verifies that your boarding pass explicitly lists "First Class" before allowing you into the First Class lounge (`@PreAuthorize("hasRole('VIP')")`). If your ticket says "Economy", you are turned away with HTTP 403 Forbidden.
+* **Architectural Tier Placement**: Operates at the **Edge Gateway & Cross-Cutting Application Security Tier**. Positioned directly in front of the Spring Web MVC / WebFlux `DispatcherServlet`, ensuring unauthorized or unauthenticated requests are rejected before consuming application compute resources.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Stateful Session Clustering Nightmare**: In traditional monolithic web applications, user logins were tied to stateful HTTP sessions stored in server memory (`JSESSIONID`). When enterprise systems decomposed into 100+ Kubernetes microservices, clustering and replicating gigabytes of HTTP session state across 500 pods caused massive network storms, memory leaks, and session loss during pod restarts.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The "Swiss Cheese" Security Antipattern**: Without a centralized security filter pipeline, developers manually sprinkled `if (user == null || !user.isAdmin())` checks into individual controller methods. Inevitably, an engineer forgot the check on a new billing endpoint, creating catastrophic data breach vulnerabilities (Broken Object Level Authorization - BOLA / IDOR).
+  - 💥 **Headache 2: Cryptographic Token Forgery (The "None" Algorithm Flaw)**: Naive homegrown JWT parsers failed to enforce strict signature verification, allowing malicious hackers to modify claims, set `"alg": "none"`, and forge administrative tokens.
+  - 💥 **Headache 3: The Cross-Site Request Forgery (CSRF) Exploitation**: Stateless REST APIs with cookie-based authentication allowed malicious third-party websites to silently trigger state-changing requests (e.g. fund transfers) on behalf of logged-in victims.
+* **The Turning Point**: The industry-wide adoption of OAuth 2.0 / 2.1 (RFC 6749/6750) and JSON Web Tokens (RFC 7519) established standardized, stateless, asymmetric token authorization that decoupled identity providers (Keycloak, Okta, Auth0) from resource servers, which Spring Security 6 codified into standard architectural patterns.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Stateless, Scalable Multi-Service Authentication) ➔ Solution 1**: Spring Security's OAuth2 Resource Server validates self-contained JWT tokens locally using cached public keys fetched from the Identity Provider's JSON Web Key Set (`/.well-known/jwks.json`). Microservices authenticate millions of requests per second with zero database lookups or inter-service auth calls.
+* **Problem 2 (Declarative, Tamper-Proof Method Authorization) ➔ Solution 2**: `@EnableMethodSecurity` and `@PreAuthorize("hasRole('ADMIN') or #userId == authentication.principal.id")` enforce fine-grained attribute-based access control (ABAC) directly on domain service methods using Spring Expression Language (SpEL), guaranteeing security even if requests bypass HTTP controllers.
+* **Problem 3 (Defense-in-Depth Against Modern Attack Vectors) ➔ Solution 3**: Automated security headers (`HeaderWriterFilter`) inject HSTS, X-Content-Type-Options: nosniff, and CSP headers; password encoders utilize memory-hard hashing algorithms (`Argon2PasswordEncoder`) that resist GPU/ASIC rainbow-table cracking.
+* **Quantifiable Enterprise Metrics**:
+  - **Zero Database Load for Auth**: Asymmetric JWT verification offloads 100% of user authentication queries from primary databases to in-memory public key crypto.
+  - **Sub-1ms Auth Latency**: In-memory signature verification executes in under 0.2ms, adding negligible overhead to REST API latency.
+  - **100% Compliance with OWASP Top 10**: Built-in CSRF defenses, secure cookie defaults (SameSite, HttpOnly), and input sanitization mitigate 8 of the top 10 web application vulnerabilities out-of-the-box.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Anchors identity verification across API Gateways, Zero-Trust microservices, SaaS multi-tenant platforms, and enterprise Single Sign-On (SSO) systems.
+* **Developer Workflow & SRE Synergy**: SREs inspect authenticated identities in structured logs via MDC context propagation (`traceId`, `userId`, `tenantId`), and audit failed authentication attempts via Spring Boot Actuator (`/actuator/auditevents`).
+* **Scalability & Evolutionary Runway**: Cleanly separates authentication providers: applications can switch between local database users, corporate Active Directory (LDAP), and external cloud identity providers (Okta, Google Workspace) via configuration changes without altering business code.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Identity Architecture | Mechanism | Statelessness & Scalability | Revocation Speed | Best Enterprise Fit |
+| :--- | :--- | :--- | :--- | :--- |
+| **Stateless JWT (Asymmetric RS256)** | Cryptographic signature verified via public JWKS | Maximum (Zero shared state; microservice local verify) | Eventual (Tied to short token expiration e.g., 15m) | High-scale distributed microservices, public mobile APIs |
+| **Opaque Token + Introspection** | Random UUID token; validated via `/introspect` RPC | Low-Medium (Requires network call to IdP per request) | Instant (Token revoked immediately at IdP) | High-security banking, regulatory zero-trust operations |
+| **Stateful Server Session** | Server-side session store (Redis / Spring Session) | Medium (Tied to distributed Redis cache cluster) | Instant (Delete session key in Redis) | Traditional server-rendered web portals, admin consoles |
+| **Mutual TLS (mTLS)** | X.509 client certificate verified at TCP handshake | Maximum (Hardware/OS layer cryptographic verification) | Certificate revocation list (CRL / OCSP) | Service-to-service internal mesh, Kubernetes pod security |
+
+---
+
+## 2. Architecture Blueprint: The Spring Security Filter Chain
+
+> **Spring Security Request Lifecycle Pipeline**:
 > `[Client Request (HTTP/1.1 / HTTP/2)]` ──► `[Servlet Container (Tomcat / Jetty)]` ──► `[DelegatingFilterProxy]` ──► `[FilterChainProxy ("springSecurityFilterChain")]` ──► `[SecurityFilterChain (Ordered Filter Cascade)]` ──► `[DispatcherServlet (@RestController)]`
 
 | Execution Order | Filter Component | Subsystem Responsibility & Wire Protocol Invariant | Security Boundary & Failure Action |
@@ -27,6 +78,610 @@
 | **Filter 10** | `ExceptionTranslationFilter` | Catches `AuthenticationException` and `AccessDeniedException` propagated up from downstream filters. | Translates `AuthenticationException` into HTTP 401 Unauthorized (`AuthenticationEntryPoint`) and `AccessDeniedException` into HTTP 403 Forbidden (`AccessDeniedHandler`). |
 | **Filter 11** | `AuthorizationFilter` | Evaluates request URL matching against authorization rules (`hasRole`, `hasAuthority`, SpEL, `@AuthorizeHttpRequests`). | Invokes `AuthorizationManager`; throws `AccessDeniedException` if authorization fails; otherwise invokes `filterChain.doFilter()`. |
 | **Downstream** | `DispatcherServlet` | Dispatches authenticated, authorized request to Spring MVC `@Controller` / `@RestController` handlers. | Reached only if all security filters successfully evaluate and permit execution. |
+
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Zero-Trust Fintech Auth Gateway
+
+> **Attached Domain Project:** `Zero-Trust Fintech Auth Gateway & Distributed Token Engine` (`com.cheatsheet.security`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring Security 6.3+ | Java 21 LTS | Nimbus JOSE JWT 9.37+  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_security_oauth2/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_security_oauth2/)  
+> **Key Technologies Demonstrated:** `SecurityFilterChain`, RSA/Ed25519 JWKS Validation, Custom `JwtAuthenticationConverter`, Distributed Token Blacklist, ABAC Attribute Security, CORS/CSRF Defense, Custom RFC 7807 `AuthenticationEntryPoint` & `AccessDeniedHandler`.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Zero-Trust Fintech Auth Gateway)
+
+The following production-grade security architecture implements a zero-trust financial authentication gateway with dual-tier JWT validation, dynamic scope-to-authority mapping, tenant context propagation, and distributed token revocation:
+
+```java
+package com.cheatsheet.security.engine;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+// ============================================================================
+// 1. DOMAIN MODELS & FINANCIAL TRANSFER DTOs
+// ============================================================================
+public record TransferRequest(String sourceAccountId, String targetAccountId, BigDecimal amount, String currency) {}
+public record TransferResponse(String transactionId, String status, Instant timestamp) {}
+public record SecurityErrorResponse(String type, String title, int status, String detail, Instant timestamp) {}
+
+// ============================================================================
+// 2. DISTRIBUTED TOKEN BLACKLIST SERVICE (Fast-Revocation Defense)
+// ============================================================================
+public interface TokenRevocationRegistry {
+    void revokeToken(String jti, Instant expiresAt);
+    boolean isRevoked(String jti);
+}
+
+@org.springframework.stereotype.Service
+public class DistributedTokenRevocationRegistry implements TokenRevocationRegistry {
+    // In production, backed by Redis cluster with TTL = token.expiresAt - now()
+    private final Map<String, Instant> revokedJtis = new ConcurrentHashMap<>();
+
+    @Override
+    public void revokeToken(String jti, Instant expiresAt) {
+        revokedJtis.put(jti, expiresAt);
+    }
+
+    @Override
+    public boolean isRevoked(String jti) {
+        Instant exp = revokedJtis.get(jti);
+        if (exp == null) return false;
+        if (Instant.now().isAfter(exp)) {
+            revokedJtis.remove(jti);
+            return false;
+        }
+        return true;
+    }
+}
+
+// ============================================================================
+// 3. ZERO-TRUST JWT REVOCATION FILTER
+// ============================================================================
+public class JwtRevocationCheckFilter extends OncePerRequestFilter {
+
+    private final TokenRevocationRegistry revocationRegistry;
+
+    public JwtRevocationCheckFilter(TokenRevocationRegistry revocationRegistry) {
+        this.revocationRegistry = revocationRegistry;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            // High-performance jti check: inspect token claim if authentication is already validated
+            var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth instanceof JwtAuthenticationToken jwtAuth) {
+                String jti = jwtAuth.getToken().getId();
+                if (jti != null && revocationRegistry.isRevoked(jti)) {
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    response.getWriter().write("""
+                        {"error": "invalid_token", "message": "Access token has been revoked by security policy"}
+                    """);
+                    return;
+                }
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+}
+
+// ============================================================================
+// 4. FINE-GRAINED JWT CONVERTER (Extracts Roles, Scopes, and Tenant Bounds)
+// ============================================================================
+public class FintechJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+
+    @Override
+    public AbstractAuthenticationToken convert(Jwt jwt) {
+        Set<GrantedAuthority> authorities = new HashSet<>();
+
+        // 1. Extract fine-grained OAuth2 Scopes
+        List<String> scopes = jwt.getClaimAsStringList("scope");
+        if (scopes != null) {
+            scopes.stream()
+                  .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope))
+                  .forEach(authorities::add);
+        }
+
+        // 2. Extract Business Roles with standard Spring ROLE_ prefix
+        List<String> roles = jwt.getClaimAsStringList("roles");
+        if (roles != null) {
+            roles.stream()
+                 .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                 .map(SimpleGrantedAuthority::new)
+                 .forEach(authorities::add);
+        }
+
+        // 3. Extract Tenant Membership Claim
+        String tenantId = jwt.getClaimAsString("tenant_id");
+        if (tenantId != null) {
+            authorities.add(new SimpleGrantedAuthority("TENANT_" + tenantId));
+        }
+
+        return new JwtAuthenticationToken(jwt, authorities, jwt.getSubject());
+    }
+}
+
+// ============================================================================
+// 5. SECURITY FILTER CHAIN & ZERO-TRUST CONFIGURATION
+// ============================================================================
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true, securedEnabled = true)
+public class FintechSecurityConfig {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            TokenRevocationRegistry revocationRegistry,
+            JwtDecoder jwtDecoder) throws Exception {
+
+        http
+            // 1. Enforce pure stateless REST session policy
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            
+            // 2. Disable CSRF for stateless Bearer tokens, or enable CookieCsrfTokenRepository if browser clients
+            .csrf(csrf -> csrf.disable())
+
+            // 3. Configure strict CORS origin whitelisting
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+            // 4. Inject RFC 7807 Exception Handlers
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(customAuthenticationEntryPoint())
+                .accessDeniedHandler(customAccessDeniedHandler())
+            )
+
+            // 5. Authorization Boundary Rules
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/tokens").permitAll()
+                .requestMatchers("/api/v1/admin/**").hasRole("SECURITY_ADMIN")
+                .requestMatchers("/api/v1/transfers/**").hasAuthority("SCOPE_transfers:execute")
+                .anyRequest().authenticated()
+            )
+
+            // 6. OAuth2 Resource Server with Nimbus JWT
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt
+                    .decoder(jwtDecoder)
+                    .jwtAuthenticationConverter(new FintechJwtAuthenticationConverter())
+                )
+            )
+
+            // 7. Insert Token Revocation Filter after JWT authentication
+            .addFilterAfter(new JwtRevocationCheckFilter(revocationRegistry), UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        // Enforce Issuer, Audience, and Lifetime validation
+        NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri("https://auth.fintech.bank/.well-known/jwks.json").build();
+
+        OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer("https://auth.fintech.bank");
+        OAuth2TokenValidator<Jwt> withAudience = new OAuth2TokenValidator<Jwt>() {
+            @Override
+            public OAuth2TokenValidatorResult validate(Jwt token) {
+                if (token.getAudience().contains("fintech-gateway-api")) {
+                    return OAuth2TokenValidatorResult.success();
+                }
+                return OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_audience", "Missing required audience: fintech-gateway-api", null));
+            }
+        };
+
+        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience));
+        return jwtDecoder;
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("https://portal.fintech.bank", "https://mobile.fintech.bank"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
+        config.setExposedHeaders(List.of("X-Correlation-Id"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(Duration.ofHours(1));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
+    public AuthenticationEntryPoint customAuthenticationEntryPoint() {
+        return (request, response, authException) -> {
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+            var error = new SecurityErrorResponse(
+                "https://fintech.bank/errors/unauthorized",
+                "Unauthorized Access",
+                HttpStatus.UNAUTHORIZED.value(),
+                authException.getMessage(),
+                Instant.now()
+            );
+            response.getWriter().write(objectMapper.writeValueAsString(error));
+        };
+    }
+
+    @Bean
+    public AccessDeniedHandler customAccessDeniedHandler() {
+        return (request, response, accessDeniedException) -> {
+            response.setStatus(HttpStatus.FORBIDDEN.value());
+            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+            var error = new SecurityErrorResponse(
+                "https://fintech.bank/errors/forbidden",
+                "Access Denied",
+                HttpStatus.FORBIDDEN.value(),
+                "Insufficient privileges to access this resource",
+                Instant.now()
+            );
+            response.getWriter().write(objectMapper.writeValueAsString(error));
+        };
+    }
+}
+
+// ============================================================================
+// 6. PROTECTED FINANCIAL GATEWAY CONTROLLER (ABAC & RBAC Enforcement)
+// ============================================================================
+@RestController
+@RequestMapping("/api/v1/transfers")
+public class FinancialTransferController {
+
+    @PostMapping
+    @PreAuthorize("hasAuthority('SCOPE_transfers:execute') and hasRole('OPERATOR') and #request.amount <= 1000000.00")
+    public TransferResponse executeTransfer(
+            @RequestBody TransferRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal Jwt jwt) {
+        
+        // Tenant boundary invariant check
+        String tokenTenant = jwt.getClaimAsString("tenant_id");
+        if (tokenTenant == null || !tokenTenant.equals("FINTECH_CORP")) {
+            throw new org.springframework.security.access.AccessDeniedException("Cross-tenant transaction violation");
+        }
+
+        return new TransferResponse(
+            UUID.randomUUID().toString(),
+            "SETTLED",
+            Instant.now()
+        );
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Lifecycle Stage | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Malicious Injection) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Token Verification** | Valid RSA-256 signature from JWKS with active issuer & audience match. | Client presents forged token signed with `alg: none` or expired timestamp. | `JwtDecoder` fails cryptographic check; `AuthenticationEntryPoint` logs audit alarm and returns RFC 7807 HTTP 401. |
+| **Token Revocation** | `jti` verified against in-memory/Redis distributed blacklist in $< 1\text{ms}$. | Revoked or stolen administrative credential presented within active expiry window. | `JwtRevocationCheckFilter` intercepts before dispatcher, terminates request with HTTP 401 and invalidates context. |
+| **Method Security (ABAC)** | Pre-authenticated principal matches role, scope, and amount threshold ($\le \$1\text{M}$). | Principal attempts transfer exceeding authorized threshold ($\$5\text{M}$) or cross-tenant account ID. | `@PreAuthorize` SpEL triggers `AccessDeniedException`; `AccessDeniedHandler` emits audit alert and returns HTTP 403. |
+| **CORS Preflight** | HTTP `OPTIONS` from whitelisted origin `https://portal.fintech.bank` returns allowed headers. | Arbitrary browser origin `https://attacker.evil` sends preflight request with credentials. | `CorsFilter` evaluates origin predicate, fails match, and responds with HTTP 403 without invoking filter chain. |
+| **Security Context Isolation** | Security context isolated to current thread and automatically cleared after request completes. | Asynchronous thread pool or virtual thread spawns child tasks without security propagation. | Security boundary rejects calls in spawned thread or uses `DelegatingSecurityContextAsyncTaskExecutor` explicitly. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Missing `ROLE_` Prefix in `hasRole()` Causing Total Administrative Lockout
+* **Outage Incident**: Following a Spring Security 6 migration, all customer service agents and administrators received HTTP 403 Forbidden on every endpoint.
+* **Root Cause**: The JWT claims contained `"roles": ["ADMIN", "SUPPORT"]`. The developer configured `authorizeHttpRequests(auth -> auth.requestMatchers("/admin/**").hasRole("ADMIN"))`. Spring's `hasRole("ADMIN")` automatically prepends `ROLE_` and looks for authority `ROLE_ADMIN`. Because the converter registered authority as `ADMIN`, the match failed permanently.
+
+```java
+// ❌ BUG: Converter creates authorities without "ROLE_" prefix; hasRole("ADMIN") permanently fails
+public class FlawedJwtConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+    public AbstractAuthenticationToken convert(Jwt jwt) {
+        List<String> roles = jwt.getClaimAsStringList("roles");
+        // Authority created as "ADMIN", NOT "ROLE_ADMIN"
+        var authorities = roles.stream().map(SimpleGrantedAuthority::new).toList();
+        return new JwtAuthenticationToken(jwt, authorities);
+    }
+}
+
+// In SecurityConfig:
+http.authorizeHttpRequests(auth -> auth
+    .requestMatchers("/admin/**").hasRole("ADMIN") // 💥 Looks for "ROLE_ADMIN", fails to match "ADMIN"!
+);
+
+// ✅ REFACTORED: Normalize roles with "ROLE_" prefix in converter or use hasAuthority
+public class HardenedJwtConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+    public AbstractAuthenticationToken convert(Jwt jwt) {
+        List<String> roles = jwt.getClaimAsStringList("roles");
+        var authorities = roles.stream()
+            .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+            .map(SimpleGrantedAuthority::new)
+            .collect(Collectors.toSet());
+        return new JwtAuthenticationToken(jwt, authorities);
+    }
+}
+```
+
+#### Bug 2: SecurityContext Lost Across `@Async` and Virtual Thread Boundaries
+* **Outage Incident**: Production background task failed with `NullPointerException` when fetching current user ID for audit logging, corrupting compliance audit tables.
+* **Root Cause**: `SecurityContextHolder` defaults to `MODE_THREADLOCAL`. Asynchronous methods annotated with `@Async` run on a worker thread pool where `SecurityContextHolder.getContext()` returns an empty context.
+
+```java
+// ❌ BUG: Default ThreadLocal SecurityContext does NOT propagate into @Async worker threads
+@Service
+public class AuditService {
+    @Async
+    public void recordTransferAudit(String transferId) {
+        // 💥 Returns empty context or null authentication on worker thread!
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String operator = auth.getName(); // Throws NullPointerException!
+        auditRepository.save(new AuditRecord(transferId, operator, Instant.now()));
+    }
+}
+
+// ✅ REFACTORED: Configure DelegatingSecurityContextAsyncTaskExecutor for asynchronous propagation
+@Configuration
+public class AsyncSecurityConfig {
+    @Bean
+    public AsyncTaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(10);
+        executor.setMaxPoolSize(50);
+        executor.setThreadNamePrefix("async-sec-");
+        executor.initialize();
+        // Transparently clones SecurityContext to child threads
+        return new DelegatingSecurityContextAsyncTaskExecutor(executor);
+    }
+}
+```
+
+#### Bug 3: Using `permitAll()` While Failing Custom Pre-Filters
+* **Outage Incident**: Health check `/actuator/health` returned HTTP 500 across all Kubernetes pods during a rolling restart, causing cluster-wide pod eviction.
+* **Root Cause**: A custom API Key filter was registered before `AuthorizationFilter`. While `/actuator/health` had `.permitAll()`, the custom filter threw an unhandled exception if the `X-Api-Key` header was missing, failing requests before Spring's authorization logic could permit them.
+
+```java
+// ❌ BUG: Custom filter throws exception before permitAll() authorization filter is reached
+public class ApiKeyFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) 
+            throws ServletException, IOException {
+        String key = req.getHeader("X-Api-Key");
+        if (key == null) {
+            // 💥 Throws on ALL requests including /actuator/health, crashing Kubernetes probes!
+            throw new BadCredentialsException("Missing API key header");
+        }
+        chain.doFilter(req, res);
+    }
+}
+
+// ✅ REFACTORED: Bypass filter logic for permitAll paths or let filter chain continue
+public class ApiKeyFilter extends OncePerRequestFilter {
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/actuator/health") || path.startsWith("/api/v1/public");
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) 
+            throws ServletException, IOException {
+        String key = req.getHeader("X-Api-Key");
+        if (key != null && isValidKey(key)) {
+            // Populate authentication context
+        }
+        // Always delegate to filterChain so Spring Security authorization handles access rules
+        chain.doFilter(req, res);
+    }
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: JWT Algorithm Confusion & `alg: none` Vulnerability
+* **Vulnerability Vector**: An attacker crafts a JWT header with `{"alg": "none"}` or manipulates an RSA public key to verify an HMAC-SHA256 signature, tricking weak decoders into accepting forged administrator tokens.
+
+```java
+// 🚨 VULNERABILITY: Permitting arbitrary JWS algorithms without strict algorithm whitelisting
+@Bean
+public JwtDecoder vulnerableDecoder() {
+    // 💥 Accepts any algorithm specified in the token header, including 'none' or symmetric HMAC
+    return NimbusJwtDecoder.withJwkSetUri("https://auth.fintech.bank/.well-known/jwks.json").build();
+}
+
+// 🛡️ MITIGATION: Enforce strict cryptographic algorithm constraints (e.g., RS256 / ES256 only)
+@Bean
+public JwtDecoder secureJwtDecoder() {
+    NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder
+        .withJwkSetUri("https://auth.fintech.bank/.well-known/jwks.json")
+        .jwsAlgorithms(algorithms -> {
+            algorithms.clear();
+            algorithms.add(SignatureAlgorithm.RS256); // Strict whitelist
+            algorithms.add(SignatureAlgorithm.ES256);
+        })
+        .build();
+
+    // Enforce cryptographic validator chain
+    OAuth2TokenValidator<Jwt> defaultValidator = JwtValidators.createDefaultWithIssuer("https://auth.fintech.bank");
+    jwtDecoder.setJwtValidator(defaultValidator);
+    return jwtDecoder;
+}
+```
+
+#### Sec 2: Insecure Direct Object Reference (IDOR) with Broken Object-Level Authorization
+* **Vulnerability Vector**: Authenticated User A (`customer_123`) supplies another user's `accountId` (`customer_999`) in the request body. If the application only checks `isAuthenticated()`, User A drains User B's funds.
+
+```java
+// 🚨 VULNERABILITY: Controller checks role but neglects ownership binding between token and resource
+@PostMapping("/accounts/{accountId}/withdraw")
+@PreAuthorize("hasRole('USER')") // 💥 Anyone with USER role can withdraw from ANY account!
+public ResponseEntity<Void> withdraw(@PathVariable String accountId, @RequestParam BigDecimal amount) {
+    accountService.debit(accountId, amount);
+    return ResponseEntity.ok().build();
+}
+
+// 🛡️ MITIGATION: Enforce Object-Level Authorization using SpEL and SecurityContext principal
+@PostMapping("/accounts/{accountId}/withdraw")
+@PreAuthorize("hasRole('USER') and @accountSecurityGuard.isAccountOwner(#accountId, authentication)")
+public ResponseEntity<Void> withdrawSecure(@PathVariable String accountId, @RequestParam BigDecimal amount) {
+    accountService.debit(accountId, amount);
+    return ResponseEntity.ok().build();
+}
+
+@Component("accountSecurityGuard")
+public class AccountSecurityGuard {
+    private final AccountRepository accountRepository;
+
+    public AccountSecurityGuard(AccountRepository accountRepository) {
+        this.accountRepository = accountRepository;
+    }
+
+    public boolean isAccountOwner(String accountId, Authentication authentication) {
+        String authenticatedUserId = authentication.getName();
+        return accountRepository.findByAccountId(accountId)
+            .map(acc -> acc.getOwnerId().equals(authenticatedUserId))
+            .orElse(false);
+    }
+}
+```
+
+#### Sec 3: Permissive CORS Configuration Allowing Credential Theft
+* **Vulnerability Vector**: Setting `allowedOrigins("*")` combined with `allowCredentials(true)` exposes authenticated endpoints to cross-origin malicious scripts running on arbitrary domains.
+
+```java
+// 🚨 VULNERABILITY: Wildcard origin with credential sharing
+@Bean
+public CorsConfigurationSource dangerousCorsSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.addAllowedOrigin("*"); // 💥 Wildcard allows malicious sites to initiate authenticated requests
+    config.setAllowCredentials(true);
+    // ...
+    return source;
+}
+
+// 🛡️ MITIGATION: Explicit trusted origin whitelisting with strict HTTPS enforcement
+@Bean
+public CorsConfigurationSource hardenedCorsSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(List.of(
+        "https://banking.fintech.bank",
+        "https://admin.fintech.bank"
+    ));
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
+    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
+    config.setAllowCredentials(true);
+    config.setMaxAge(Duration.ofMinutes(30));
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", config);
+    return source;
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: The Monolithic Security Filter God-Class
+* **Anti-Pattern**: Implementing authentication, IP filtering, request throttling, JSON parsing, and auditing inside a single 800-line custom `GenericFilterBean`.
+
+```java
+// ⚠️ ANTI-PATTERN: Monolithic Filter mixing authentication, rate limiting, auditing, and business logic
+public class OmniSecurityFilter extends GenericFilterBean {
+    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
+        // 1. IP Whitelisting check...
+        // 2. Redis Rate limiting logic...
+        // 3. JWT extraction and manual parsing...
+        // 4. Database user query...
+        // 5. Database audit insertion...
+        // 6. Business parameter validation...
+        // 💥 Impossible to unit-test; unhandled exceptions bypass framework error handlers
+    }
+}
+
+// 🏗️ REFACTOR: Decompose into single-responsibility Spring Security filters & delegates
+// 1. RatelimitFilter -> 2. BearerTokenAuthenticationFilter -> 3. TokenRevocationFilter -> 4. AuditEventListener
+@Configuration
+public class ModularSecurityConfig {
+    @Bean
+    public SecurityFilterChain modularFilterChain(HttpSecurity http, RateLimitingFilter rateLimitFilter) throws Exception {
+        return http
+            .addFilterBefore(rateLimitFilter, BearerTokenAuthenticationFilter.class)
+            .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
+            .build();
+    }
+}
+```
+
+#### Arch 2: Synchronous Remote Token Introspection Bottleneck
+* **Anti-Pattern**: Validating every incoming request by making a synchronous HTTP call to an external identity provider (`/oauth2/introspect`).
+
+```java
+// ⚠️ ANTI-PATTERN: Remote opaque token introspection on every HTTP request creates latency bottleneck
+@Bean
+public OpaqueTokenIntrospector introspector() {
+    // 💥 Every single incoming API request incurs a 150ms HTTP network round-trip to Keycloak/Auth0!
+    return new SpringOpaqueTokenIntrospector("https://idp.bank/oauth2/introspect", "client-id", "secret");
+}
+
+// 🏗️ REFACTOR: Stateless Cryptographic JWT Validation with Local In-Memory JWKS Caching
+@Bean
+public JwtDecoder localCachedJwtDecoder() {
+    // Validates tokens locally via cached asymmetric public keys (JWKS updated every 24h)
+    // Latency drops from 150ms HTTP call to < 0.05ms local cryptographic signature check
+    return NimbusJwtDecoder.withJwkSetUri("https://idp.bank/.well-known/jwks.json")
+        .cache(new ConcurrentMapCache("jwksCache"))
+        .build();
+}
+```
 
 ---
 

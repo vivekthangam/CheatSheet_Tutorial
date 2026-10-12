@@ -3279,7 +3279,7 @@ public class ParentChildReferenceDemo {
     public static class Department {
         public String name;
         @JsonManagedReference // Serialized normally
-        public List<Employee> employees = new ArrayList<>();
+        public `List<Employee>` employees = new ArrayList<>();
 
         public Department(String name) { this.name = name; }
     }
@@ -3424,7 +3424,7 @@ public class DtoProjectionArchitecture {
 ### Q148: How do you serialize self-referencing hierarchical trees (e.g. Employee manager $\to$ reports) without recursion?
 - **What the Interviewer Evaluates:** Self-referencing graphs, employee hierarchies, `@JsonIdentityInfo`.
 - **Standout Technical Answer:**
-  - An `Employee` has a `manager` (Employee) and a list of `reports` (List<Employee>).
+  - An `Employee` has a `manager` (Employee) and a list of `reports` (`List<Employee>`).
   - Both sides point to the same class (`Employee`).
   - Annotate with:
     `@JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")`
@@ -4752,3 +4752,4 @@ public class AntiXssCharacterEscapes extends CharacterEscapes {
 - [CompletableFuture 200 Scenarios Master Guide](./completable_future_200_scenarios_master_guide.md)
 - [Java Collections & Streams 200 Scenarios Master Guide](./java_collections_streams_200_scenarios_master_guide.md)
 - [Spring Core & Reactive WebFlux Architecture Guide](../spring/spring_core_master_guide.md)
+```

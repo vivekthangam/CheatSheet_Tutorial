@@ -268,7 +268,7 @@ American executives and global managers do not communicate in dry textbook Engli
 ---
 
 ### 22. **Greenfield vs. Brownfield** `[GREEN-feeld / BROWN-feeld]` *(Noun / Adjective)*
-- **Tamil Meaning**: 
+- **Tamil Meaning**:
   - *Greenfield*: பழைய எந்த கட்டுப்பாடும் இல்லாமல் புதிதாக ஆரம்பிக்கப்படும் திட்டம் (Brand new clean slate).
   - *Brownfield*: ஏற்கனவே உள்ள பழைய லெகசி அமைப்பிற்குள் மாற்றம் செய்யும் திட்டம்.
 - **Business Definition**:
@@ -905,12 +905,12 @@ Study how blunt, literal, or broken Indian English thoughts are transformed into
 ### 🎭 Scenario A: Pushing back politely against an unrealistic sprint deadline
 
 > **Product Manager (PM)**: *"Karthik, the client wants real-time biometric face authentication added to our mobile checkout by next Monday."*
-> 
-> **Lead Software Engineer (Karthik)**: 
+>
+> **Lead Software Engineer (Karthik)**:
 > *"I appreciate the business value of biometric checkout, Sarah. However, given that our squad is already committed to delivering the payment retry logic and Kafka consumers, introducing biometric authentication right now represents **severe scope creep**.
-> 
+>
 > If we try to rush this by Monday, we risk taking on heavy **technical debt** and introducing **single points of failure** in checkout. I recommend we deliver the core payment MVP as planned for Monday, and schedule biometrics as a dedicated, well-tested milestone for Sprint 14. That way, we protect both product stability and our contractual SLA."*
-> 
+>
 > **Product Manager**: *"That makes total sense, Karthik. Let's keep Monday's scope clean and socialize the biometric timeline with the enterprise client today."*
 
 ---
@@ -918,17 +918,17 @@ Study how blunt, literal, or broken Indian English thoughts are transformed into
 ### 🎭 Scenario B: Proposing a technical refactor to an executive director
 
 > **Director of Engineering**: *"Why should we spend two sprints refactoring the legacy Spring monolith when we could be shipping new consumer features?"*
-> 
+>
 > **Senior Architect**:
 > *"That's a very fair question, David. Right now, our legacy database monolith is our primary operational **bottleneck**. Our engineers spend 40% of their weekly **bandwidth** patching intermittent deadlocks rather than writing features.
-> 
+>
 > By executing this targeted migration to sharded read replicas, we unlock three immediate benefits:
 > 1. We eliminate our primary **single point of failure** during Black Friday.
 > 2. We reduce API P99 latency from 180ms to 8ms, which directly **moves the needle** on checkout conversion.
 > 3. We establish the horizontal **scalability** required for our upcoming European expansion.
-> 
+>
 > In short, spending two sprints paying down this **technical debt** now provides the engineering runway to double our feature velocity throughout the next year."*
-> 
+>
 > **Director**: *"Compelling rationale. You have my buy-in. Let's socialize the migration schedule with product management."*
 
 ---

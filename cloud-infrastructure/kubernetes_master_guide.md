@@ -473,7 +473,7 @@ spec:
 * **Under the Hood**: A Service uses **Label Selectors** (e.g., `app: payment`). The control plane’s `EndpointSlice` controller monitors all pods matching that label. Whenever a pod starts, terminates, or passes its readiness probe, the controller updates the Service's `EndpointSlice` object. On each worker node, `kube-proxy` reads this object and programs the local Linux kernel networking layer (via `iptables`, `IPVS`, or eBPF maps) to transparently redirect traffic hitting the Service’s virtual `ClusterIP` to the live private IPs of the pods.
 
 ### Q4: What is the difference between `NodePort`, `ClusterIP`, and `LoadBalancer` service types?
-* **ELI5**: 
+* **ELI5**:
   - `ClusterIP`: An internal office intercom phone extension (reachable only inside the building).
   - `NodePort`: An exterior keypad on every entrance door that rings through to the desk.
   - `LoadBalancer`: A dedicated toll-free 1-800 number managed by the telephone utility routing directly to the building.

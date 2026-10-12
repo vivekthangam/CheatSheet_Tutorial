@@ -144,11 +144,11 @@ spring:
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: What is Shamir's Secret Sharing in HashiCorp Vault?
-> **ELI5**: A treasure chest with 5 keyholes that requires any 3 keyholders to turn their keys together to open it.  
+> **ELI5**: A treasure chest with 5 keyholes that requires any 3 keyholders to turn their keys together to open it.
 > **Technical**: It is an algorithm that splits the Vault master unseal key into $N$ distinct shares, requiring a threshold of $K$ shares ($K \le N$, typically 3 of 5) to reconstruct the unseal key and decrypt the barrier keyring.
 
 #### Q2: What is the Transit Secrets Engine?
-> **ELI5**: A locked safe with a slot in the door: you slide a document in, it stamps it into encrypted code, and hands it back. The safe never keeps your document.  
+> **ELI5**: A locked safe with a slot in the door: you slide a document in, it stamps it into encrypted code, and hands it back. The safe never keeps your document.
 > **Technical**: Transit provides "Cryptography-as-a-Service". Applications send plaintext payloads to Vault over HTTP/gRPC, and Vault returns ciphertext encrypted with an internal AES-GCM or RSA key that never leaves Vault's protected memory.
 
 ---
@@ -237,21 +237,21 @@ seal "awskms" {
 # TRACK 6: CRACK-THE-INTERVIEW QUESTION BANK (50 PRODUCTION SCENARIOS)
 
 #### Q1: What is the difference between an AppRole `role_id` and `secret_id`?
-> **Interviewer Evaluates**: Deep understanding of machine-to-machine authentication security in zero-trust architectures.  
-> **Standout Answer**: An AppRole functions like a username and password for automated workloads. The `role_id` is a static, non-sensitive identifier representing the service identity (similar to a username) and can be safely baked into deployment configs or CI manifests. The `secret_id` is a high-entropy, short-lived secret token (equivalent to a password) delivered out-of-band via secure response wrapping or ephemeral injection. Vault requires both to issue an access token.  
-> **Trap Follow-Up**: What is Response Wrapping (`cubbyhole`) and why is it used during `secret_id` distribution?  
+> **Interviewer Evaluates**: Deep understanding of machine-to-machine authentication security in zero-trust architectures.
+> **Standout Answer**: An AppRole functions like a username and password for automated workloads. The `role_id` is a static, non-sensitive identifier representing the service identity (similar to a username) and can be safely baked into deployment configs or CI manifests. The `secret_id` is a high-entropy, short-lived secret token (equivalent to a password) delivered out-of-band via secure response wrapping or ephemeral injection. Vault requires both to issue an access token.
+> **Trap Follow-Up**: What is Response Wrapping (`cubbyhole`) and why is it used during `secret_id` distribution?
 > **Winning Answer**: Response wrapping stores the payload in a single-use temporary token. If an attacker intercepts the wrapped token and unwraps it, the legitimate application receives a `token already used` error, alerting the security team to an active man-in-the-middle breach.
 
 #### Q2: How does Shamir's Secret Sharing threshold scheme work mathematically and why does Vault need unsealing?
-> **Interviewer Evaluates**: Core cryptographic foundations and zero-knowledge storage mechanics.  
+> **Interviewer Evaluates**: Core cryptographic foundations and zero-knowledge storage mechanics.
 > **Standout Answer**: Vault encrypts its master keyring using an internal Master Key, which is never written to disk. In standard Shamir unsealing, this Master Key is mathematically split into $N$ key shares using polynomial interpolation (degree $K - 1$). Any $K$ shares (the threshold, e.g. 3 of 5) can reconstruct the polynomial and recover the Master Key. Without unsealing, the storage backend holds only raw encrypted blobs that cannot be decrypted even by an administrator with physical access to the server.
 
 #### Q3: What is the Transit Secrets Engine (Cryptography-as-a-Service) and how does it prevent DB data breaches?
-> **Interviewer Evaluates**: Application-layer cryptography (ALPE) vs storage-layer encryption.  
+> **Interviewer Evaluates**: Application-layer cryptography (ALPE) vs storage-layer encryption.
 > **Standout Answer**: The Transit engine exposes cryptographic operations (encrypt, decrypt, sign, verify, generate HMAC) over REST APIs without storing application data inside Vault. Applications send plaintext credit card numbers or PII to Vault, and Vault returns a versioned ciphertext (`vault:v1:8B7x...`). The application writes only the ciphertext to its relational database. If the database is dumped or leaked, the attacker obtains zero plaintexts without active API access to Vault's HSM/keys.
 
 #### Q4: How do Dynamic Database Secrets work and how does Vault clean up leaked credentials upon TTL expiry?
-> **Interviewer Evaluates**: Ephemeral credentials architecture and credential rotation lifecycles.  
+> **Interviewer Evaluates**: Ephemeral credentials architecture and credential rotation lifecycles.
 > **Standout Answer**:
 > 1. Vault connects to the database using an administrative superuser.
 > 2. When a service requests credentials (`GET /v1/database/creds/readonly-role`), Vault executes a templated SQL script creating a random username and password with a strict Time-To-Live (TTL, e.g. 1 hour):
@@ -260,31 +260,31 @@ seal "awskms" {
 > 4. When the lease expires or is explicitly revoked, Vault connects to the database and executes `DROP ROLE "v-token-app-1718"`, permanently killing the credential.
 
 #### Q5: What is Integrated Storage (Raft) in Vault and why did it replace external Consul / ZooKeeper backends?
-> **Interviewer Evaluates**: Distributed state persistence, failure domains, and operational complexity.  
+> **Interviewer Evaluates**: Distributed state persistence, failure domains, and operational complexity.
 > **Standout Answer**: Historically, Vault relied on HashiCorp Consul for high-availability clustering and storage. This created two separate systems to maintain, tune, and secure. Integrated Storage embeds the Raft consensus protocol directly inside the Vault binary itself. All nodes form a Raft quorum, synchronizing encrypted storage locally with zero external network dependencies, lower network latency, and single-binary lifecycle operations.
 
 #### Q6: Explain the difference between Service Tokens and Batch Tokens in Vault.
-> **Interviewer Evaluates**: Vault token store memory optimization and high-scale throughput design.  
+> **Interviewer Evaluates**: Vault token store memory optimization and high-scale throughput design.
 > **Standout Answer**:
 > - **Service Tokens**: Standard stateful tokens written to disk and memory in the token store. They support parent-child hierarchies, renewability, explicit revocation, and dynamic secret leasing. However, creating 100,000 service tokens per second exhausts storage I/O and RAM.
 > - **Batch Tokens**: Lightweight, stateless, encrypted binary blobs containing their own policies and expiry. They are not stored in the token store, cannot be renewed or individually revoked, and cannot hold dynamic secret leases. Ideal for high-volume ephemeral batch workloads (e.g. serverless functions or container build pipelines).
 
 #### Q7: How does Vault PKI Secrets Engine automate internal mTLS certificate issuance and CRL / OCSP distribution?
-> **Interviewer Evaluates**: Automated X.509 certificate lifecycles, service mesh security, and cert-manager integration.  
+> **Interviewer Evaluates**: Automated X.509 certificate lifecycles, service mesh security, and cert-manager integration.
 > **Standout Answer**: Vault acts as an internal Root or Intermediate Certificate Authority. Services authenticate and request short-lived X.509 certificates (e.g., 24-hour TTL) on startup via `vault write pki/issue/internal-mesh common_name="svc.cluster.local"`. Because certificates expire in 24 hours, traditional Certificate Revocation Lists (CRLs) and OCSP stapling become largely redundant; if a service is compromised, revoking its Vault token immediately halts its ability to re-issue certificates upon expiry.
 
 #### Q8: What happens when an audit device fails in Vault, and why does Vault block all incoming traffic?
-> **Interviewer Evaluates**: Strict compliance posture and fail-closed vs fail-open security philosophies.  
+> **Interviewer Evaluates**: Strict compliance posture and fail-closed vs fail-open security philosophies.
 > **Standout Answer**: Vault enforces a **fail-closed** audit architecture. If an audit device is configured (e.g., writing to `/var/log/vault/audit.log` or a syslog socket) and the target disk fills up or the socket drops, Vault will refuse to serve any further API requests (blocking all read/write operations) until at least one audit device can successfully log the request. This guarantees that an attacker cannot operate inside Vault without an immutable audit trail.
 
 #### Q9: How do you design multi-cluster Disaster Recovery (DR) and Performance Replication in Vault Enterprise?
-> **Interviewer Evaluates**: Global enterprise infrastructure and data classification boundaries.  
+> **Interviewer Evaluates**: Global enterprise infrastructure and data classification boundaries.
 > **Standout Answer**:
 > - **Performance Replication**: Secondary clusters replicate all K/V data, transit keys, and policies from the Primary, but maintain independent local token stores. Clients in secondary regions read and write locally (forwarding writes to the primary), achieving low latency across multiple geographical regions.
 > - **Disaster Recovery (DR) Replication**: A DR secondary cluster maintains an exact bit-for-bit mirrored replica of the entire primary cluster (including token store and dynamic leases). It does not serve client traffic during normal operations; upon a disaster, it is promoted to primary, allowing services to resume without re-authenticating.
 
 #### Q10: How does Vault Agent work with Kubernetes Service Account Auto-Authentication (`vault-k8s`)?
-> **Interviewer Evaluates**: Cloud-native zero-trust secrets delivery and sidecar injector mechanics.  
+> **Interviewer Evaluates**: Cloud-native zero-trust secrets delivery and sidecar injector mechanics.
 > **Standout Answer**:
 > 1. Vault Agent runs as an init or sidecar container alongside the application pod.
 > 2. It reads the projected Kubernetes Service Account JWT from `/var/run/secrets/kubernetes.io/serviceaccount/token`.

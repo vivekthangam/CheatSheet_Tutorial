@@ -46,7 +46,7 @@ Launch your application and connect your profiler.
 > `-Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false`
 
 ### 3. The Sampling Rule
-Always prefer **Sampling** over **Instrumentation**. 
+Always prefer **Sampling** over **Instrumentation**.
 *   **Instrumentation** modifies your code to add "timers" (High overhead, skews results).
 *   **Sampling** takes periodic snapshots of the stack (Accurate, minimal impact).
 

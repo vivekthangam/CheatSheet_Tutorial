@@ -2,8 +2,8 @@
 
 # 🔬 200 Production Scenarios & Tier-1 Interview Master Guide: Message Queues & Distributed Event Streaming
 
-> **Target Audience:** Staff Engineers, Principal Distributed Systems Architects, Tech Leads, and Bar-Raiser Interview Panels.  
-> **Coverage:** Apache Kafka, RabbitMQ, Apache Pulsar, AWS SQS/SNS, Redis Streams, NATS JetStream, Kafka Streams, and Event-Driven Architecture (EDA).  
+> **Target Audience:** Staff Engineers, Principal Distributed Systems Architects, Tech Leads, and Bar-Raiser Interview Panels.
+> **Coverage:** Apache Kafka, RabbitMQ, Apache Pulsar, AWS SQS/SNS, Redis Streams, NATS JetStream, Kafka Streams, and Event-Driven Architecture (EDA).
 > **Strict 4-Part Structure per Scenario:**
 > 1. **Exact Question asked by Tier-1 product panels** (Uber, Netflix, Stripe, Amazon, LinkedIn, Apple).
 > 2. **What the Interviewer Evaluates** under the surface (low-level OS/network, data structures, consensus, protocols).

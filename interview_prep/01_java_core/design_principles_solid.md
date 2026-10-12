@@ -1,36 +1,19 @@
-[🏠 Back to Home](../../README.md) | [☕ Core Java Internals](../java_interview_master_guide.md) | [🧩 LeetCode Patterns](../../ai-algorithms/leetcode_patterns.md) | [🐍 Python Master Guide](../../systems-languages/python_master_guide.md) | [🦀 Rust Systems Guide](../../systems-languages/rust_master_guide.md)
+[🏠 Back to Home](../../README.md) | [☕ Core Java Internals](java_interview_master_guide.md) | [🍃 Spring Ecosystem](../02_spring_framework/spring_core_ioc_boot.md) | [🛠️ Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/01_java_core/design_principles_solid/)
 
-# 🏛️ Software Design Principles & SOLID Architecture Master Interview Guide (50 Scenarios) 📐
+# Software Design Principles & SOLID Architecture: Enterprise Architecture & Production Masterclass
 
-### *(The Comprehensive Enterprise Architecture Handbook: SOLID Principles, Architectural & Behavioral Paradigms, HotSpot JVM vtable/itable Substrates, Hexagonal Clean Architecture, 50 Production Scenarios, and SEV-1 War Room Incident Post-Mortems)*
-
-[![Java 21](https://img.shields.io/badge/Java-21%20LTS-orange.svg?style=for-the-badge&logo=openjdk)](https://www.oracle.com/java/)
-[![SOLID Principles](https://img.shields.io/badge/Architecture-SOLID%20Patterns-blue.svg?style=for-the-badge&logo=blueprint)](https://github.com/)
-[![Design Patterns](https://img.shields.io/badge/Patterns-GoF%20%26%20Enterprise-brightgreen.svg?style=for-the-badge&logo=buffer)](https://github.com/)
-[![Production Scenarios](https://img.shields.io/badge/Scenarios-50%20Production%20Cases-purple.svg?style=for-the-badge&logo=apache)](https://github.com/)
-[![War-Room Forensics](https://img.shields.io/badge/SEV--1-War%20Room%20RCA-red.svg?style=for-the-badge&logo=sentry)](https://github.com/)
-
----
-
-```text
-==================================================================================================
-   ███████╗  ██████╗  ██╗     ██╗██████╗      █████╗ ██████╗  ██████╗██╗  ██╗
-   ██╔════╝ ██╔═══██╗ ██║     ██║██╔══██╗    ██╔══██╗██╔══██╗██╔════╝██║  ██║
-   ███████╗ ██║   ██║ ██║     ██║██║  ██║    ███████║██████╔╝██║     ███████║
-   ╚════██║ ██║   ██║ ██║     ██║██║  ██║    ██╔══██║██╔══██╗██║     ██╔══██║
-   ███████║ ╚██████╔╝ ███████╗██║██████╔╝    ██║  ██║██║  ██║╚██████╗██║  ██║
-   ╚══════╝  ╚═════╝  ╚══════╝╚═╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
-==================================================================================================
-        ENTERPRISE SOLID DESIGN PRINCIPLES & ARCHITECTURAL PATTERNS MASTER GUIDE (50 SCENARIOS)
-==================================================================================================
-```
-
-> **Scope**: SOLID Principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion), Architectural Principles (DRY vs WET/AHA, KISS, YAGNI), Behavioral Principles (Law of Demeter, Tell Don't Ask, Command-Query Separation / CQRS), Structural Principles (Composition Over Inheritance, Fragile Base Class Problem, Separation of Concerns, Fail-Fast vs Fault-Tolerant, Postel's Law), Java 17/21 Production Refactoring Blueprints, and War-Room Post-Mortems.
+> **Document Identity:** [`interview_prep/01_java_core/design_principles_solid.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/01_java_core/design_principles_solid.md)  
+> **Topic Domain:** SOLID Principles (SRP, OCP, LSP, ISP, DIP), Pragmatic Principles (DRY, KISS, YAGNI, AHA), Behavioral Dynamics (Law of Demeter, Tell Don't Ask, CQS/CQRS), Structural Patterns (Composition Over Inheritance, Fragile Base Class), HotSpot `vtable`/`itable` Dispatch Mechanics, and Hexagonal Clean Architecture (`J02`)  
+> **Target Framework / Runtime:** Java 17 LTS / 21 LTS / 25 LTS, OpenJDK HotSpot JVM  
+> **Architecture Level:** Principal / Staff+ Enterprise Architect & Clean Code Systems Lead  
+> **Target Depth:** 50 Production Scenarios, 10 SEV-1 Architecture Outage Post-Mortems, HotSpot Assembly/vtable Internals, and Companion Production Code Project  
+> 🛠️ **Companion IDE Project:** [`code/01_java_core/design_principles_solid/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/01_java_core/design_principles_solid/)
 
 ---
 
 ## 📑 Master Table of Contents
 
+- [🏛️ 1. Foundational Primer: What, Why & Where? (The "Head")](#1-foundational-primer-what-why--where-the-head)
 - [🏛️ Guide Architecture Overview & Foundational Mental Model](#guide-architecture-overview)
 - [☕ Layer 1: SOLID Principles Master Deep-Dive (Scenarios 1–15)](#layer-1-solid-principles-master-deep-dive)
   - [Scenario 1: Single Responsibility Principle (SRP) & Actor-Driven Change](#scenario-1-single-responsibility-principle-srp--actor-driven-change)
@@ -93,6 +76,61 @@
 
 ---
 
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before diving into HotSpot vtable/itable method resolution, polymorphic dynamic dispatch, fragile base class inheritance cascading regressions, and 2,000-line god class deadlocks, here is the essential high-level context: what software design principles represent, why software rots over time, what concrete catastrophic outages design failures produce, and where architectural principles anchor sustainable enterprise engineering.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Software Design Principles & SOLID** are formal, battle-tested structural heuristics that govern how software modules, classes, and interfaces are organized. Coined by Robert C. Martin (Uncle Bob) and Barbara Liskov, SOLID stands for:
+  - **SRP (Single Responsibility Principle)**: A class should have one, and only one, reason to change (serving a single actor).
+  - **OCP (Open/Closed Principle)**: Software entities should be open for extension, but closed for modification.
+  - **LSP (Liskov Substitution Principle)**: Subtypes must be substitutable for their base types without altering program correctness.
+  - **ISP (Interface Segregation Principle)**: Clients should not be forced to depend upon methods they do not use.
+  - **DIP (Dependency Inversion Principle)**: High-level business policy should not depend upon low-level infrastructure details; both should depend upon abstractions (ports).
+* **Everyday Analogy**: Imagine building a modern modular skyscraper:
+  - **Bad Architecture (Monolithic Spaghetti / Anti-SOLID)**: The plumbing pipes, high-voltage electrical wires, elevator cables, and kitchen gas lines are all melted and fused together inside the concrete walls. If a tenant on the 4th floor wants to replace a kitchen faucet, the plumber has to cut the building's main electrical power cable and smash the structural support pillars on floor 12 (**Cascading Regressions & God Class Collapse**).
+  - **SOLID Architecture (Modular Clean Design)**:
+    - **SRP**: The electrical fuse box only handles electricity. The water meter only handles water.
+    - **OCP**: The skyscraper has standard wall power outlets. If you invent a new electric vehicle or smart appliance, you plug it into the standard wall socket without knocking down walls or rewiring the city power grid.
+    - **LSP**: Any standard 3-prong electrical plug can fit into the wall socket and operate safely without blowing up the building's circuit breakers.
+    - **ISP**: A desk lamp plug only requires a simple 2-prong socket; it is not forced to carry heavy 480V 3-phase industrial air-conditioner conduit.
+    - **DIP**: High-level room lighting depends on the abstract *Wall Socket Switch Contract*. The wall switch does not care whether the power is generated by hydroelectric dams, solar panels, or nuclear generators (**Infrastructure Inversion**).
+* **Architectural Tier Placement**: Design principles govern the **Domain Core & Structural Architecture Tier**. They dictate how the Domain Layer, Application Use Cases, and Infrastructure Ports interact across Hexagonal / Clean Architecture boundaries.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Inevitable Trajectory of Software Rot**: In small prototypes, quick hacks work. But as companies grow, 50 different engineers modify the same code over 5 years. Without strict architectural guardrails, software succumbs to **Rigidity** (a change in one place breaks 20 other places), **Fragility** (the software breaks in areas that have no conceptual relationship to the edit), and **Immobility** (code cannot be reused in another service because it brings along massive unwanted dependencies).
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The God Class Concurrency Deadlock**: A 4,000-line `OrderManager` class handling validation, database saves, payment charging, PDF generation, and email dispatch becomes an unmaintainable bottleneck where concurrent threads dead-lock on shared internal mutable locks.
+  - 💥 **Headache 2: The Cascading Subclass Outage (LSP Violation)**: A child class throws an unexpected `UnsupportedOperationException` or alters validation invariants, silently crashing an upstream batch billing pipeline that processed 100,000 customers.
+  - 💥 **Headache 3: The Fatal Deployment Trap (Missing OCP & Dead Code)**: In August 2012, Knight Capital went bankrupt in 45 minutes, losing **$440 million**, because an engineer repurposed an old flag inside a monolithic class, triggering obsolete dead-code trading routines on active production trading desks.
+* **The Turning Point**: Decades of empirical software engineering proven by NASA, bell laboratories, and large financial systems confirmed that object-oriented principles are not academic dogma—they are the direct mathematical prerequisite for sustainable software evolution.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Zero-Downtime Feature Addition without Regressions) ➔ Solution 1**: OCP enforces plugin strategies (Strategy Pattern, Spring registries). Supporting a new payment gateway (e.g. Apple Pay, Crypto) requires creating a single new class implementing `PaymentGateway`—zero edits to existing checkout services.
+* **Problem 2 (Decoupled Testing & Infrastructure Independence) ➔ Solution 2**: DIP inverts dependency arrows: the domain layer defines repository ports. Unit tests execute against fast in-memory mocks without requiring a running Docker database or network connectivity.
+* **Problem 3 (Preventing Fragile Base Class Breakage) ➔ Solution 3**: Enforcing **Composition Over Inheritance** prevents subtle parent-class method mutations from silently breaking dozens of child services.
+* **Quantifiable Enterprise Metrics**:
+  - **70% Reduction in Merge Conflicts**: Splitting God classes by actor (SRP) allows separate feature teams to work simultaneously without Git merge collisions.
+  - **Zero Regression Escape Rate**: Clear interface boundaries and polymorphic strategies enable 100% isolated unit test coverage.
+  - **Instant Infrastructure Swaps**: Clean Hexagonal architecture allows swapping persistence engines (e.g., migrating from PostgreSQL to DynamoDB) by rewriting only the adapter layer, keeping 100% of business domain rules untouched.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Sits at the heart of Domain-Driven Design (DDD) aggregates, Hexagonal/Ports-and-Adapters microservices, Spring Boot service architectures, and API gateway routing engines.
+* **Developer Workflow & SRE Synergy**: Modular, cohesive classes produce clear, targeted stack traces in APM tools (Datadog, Sentry), allowing on-call engineers to pinpoint the exact failure boundary within minutes of an incident.
+* **Scalability & Evolutionary Runway**: Well-designed boundaries allow an initial monolithic application to be cleanly decomposed into autonomous microservices when user scale demands it, with zero rewrites of core domain logic.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Principle / Pattern | Violation Warning Sign (Smell) | Clean Architecture Refactoring | Production Risk If Ignored |
+| :--- | :--- | :--- | :--- |
+| **SRP (Single Responsibility)** | Classes $>500$ lines, multiple actors modifying same file | Split into dedicated Use Cases & Domain Services | Concurrency deadlocks, high merge friction |
+| **OCP (Open/Closed)** | Cascading `switch(type)` or `if(instanceof)` chains | Strategy Pattern, Spring Component Registry | Regressions in existing features when adding new types |
+| **LSP (Liskov Substitution)** | Subclass throws `UnsupportedOperationException` | Separate interfaces, Favor Composition | Upstream caller crashes on runtime polymorphism |
+| **ISP (Interface Segregation)** | Client classes implement methods with empty bodies | Split fat interface into lean role interfaces | Unnecessary recompilation, bloated mock setups in tests |
+| **DIP (Dependency Inversion)** | Core domain imports AWS/SQL/Kafka client libraries | Hexagonal Ports (interfaces) & Infrastructure Adapters | High coupling; impossible to mock; vendor lock-in |
+
+---
+
 ## Guide Architecture Overview
 
 ![Software Design Principles & SOLID 8-Layer Enterprise Architecture Roadmap](../../assets/images/solid/solid_architecture_roadmap.jpg)
@@ -150,6 +188,354 @@ To prevent chaos, enterprise systems are engineered as an **8-Layer Software Sub
 - **Fragile Base Class Regression Cascades**: Modifying an internal method in a widely inherited base class inadvertently alters the behavior of dozens of descendant classes, causing silent production bugs. Diagnostic: refactor inheritance trees (`extends`) into explicit delegate composition (`private final Engine engine`).
 - **Liskov Substitution Billing Disasters**: A `CryptoPaymentGateway` subclass throws `UnsupportedOperationException` on `refund()`, violating the contract of the base `PaymentGateway`. Downstream automated refund reconciliation workers crash in an unhandled loop, backing up millions of dollars in customer transactions. Diagnostic: split the contract into `PaymentGateway` and `RefundableGateway` via Interface Segregation.
 - **Dead Code Re-activation (The Knight Capital Disaster)**: Failure to delete deprecated code paths while adding new flags inside a monolithic switch block allowed old test code to trigger in production, executing $440M in erroneous trades in 45 minutes. Diagnostic: enforce OCP with the Strategy pattern and mandate removal of dead code paths.
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Hexagonal SOLID Order & Payment Engine
+
+> **Attached Domain Project:** `Enterprise Hexagonal Order & Payment Processing Architecture` (`com.cheatsheet.solid`)  
+> **Target Tooling:** Java 21 LTS | Clean Hexagonal Architecture | SOLID Invariant Engine | Ports & Adapters | Strategy Pattern  
+> **Companion Code Mirror:** [`code/01_java_core/design_principles_solid/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/01_java_core/design_principles_solid/)  
+> **Key Technologies Demonstrated:** Single Responsibility Actor Segregation, Open/Closed Polymorphic Strategy Registry, Liskov Substitution Behavioral Invariants, Interface Segregation Role Contracts (`PaymentProcessor` vs `RefundableProcessor`), Dependency Inversion via Domain Ports, Tell-Don't-Ask Rich Entities.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (SOLID Hexagonal Core)
+
+The following production-grade implementation demonstrates the 5 SOLID principles working harmoniously inside a hexagonal domain model:
+
+```java
+package com.cheatsheet.solid.engine;
+
+import java.math.BigDecimal;
+import java.util.*;
+
+// ============================================================================
+// DOMAIN ENTITIES & VALUE OBJECTS (Tell Don't Ask & Immutability)
+// ============================================================================
+public class Order {
+    public enum Status { CREATED, PAID, SHIPPED, CANCELLED }
+
+    private final String orderId;
+    private final String customerId;
+    private final List<OrderItem> items;
+    private Status status;
+
+    public Order(String orderId, String customerId, List<OrderItem> items) {
+        if (orderId == null || orderId.isBlank()) throw new IllegalArgumentException("orderId required");
+        if (customerId == null || customerId.isBlank()) throw new IllegalArgumentException("customerId required");
+        if (items == null || items.isEmpty()) throw new IllegalArgumentException("Order must have at least one item");
+        this.orderId = orderId;
+        this.customerId = customerId;
+        this.items = List.copyOf(items); // Defensive copy preserving immutability
+        this.status = Status.CREATED;
+    }
+
+    // Tell, Don't Ask: Domain logic encapsulated inside entity
+    public void markAsPaid() {
+        if (this.status != Status.CREATED) {
+            throw new IllegalStateException("Cannot transition to PAID from status: " + this.status);
+        }
+        this.status = Status.PAID;
+    }
+
+    public BigDecimal calculateTotal() {
+        return items.stream()
+                .map(OrderItem::subtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public String getOrderId() { return orderId; }
+    public String getCustomerId() { return customerId; }
+    public Status getStatus() { return status; }
+    public List<OrderItem> getItems() { return items; }
+}
+
+public record OrderItem(String sku, int quantity, BigDecimal unitPrice) {
+    public OrderItem {
+        if (quantity <= 0) throw new IllegalArgumentException("Quantity must be positive");
+        if (unitPrice.compareTo(BigDecimal.ZERO) < 0) throw new IllegalArgumentException("Price cannot be negative");
+    }
+    public BigDecimal subtotal() {
+        return unitPrice.multiply(BigDecimal.valueOf(quantity));
+    }
+}
+
+// ============================================================================
+// INTERFACE SEGREGATION PRINCIPLE (ISP) & DEPENDENCY INVERSION (DIP) PORTS
+// ============================================================================
+
+// Core Payment execution port
+public interface PaymentGateway {
+    PaymentReceipt charge(String orderId, BigDecimal amount);
+}
+
+// Segregated refund port: Only providers supporting refunds implement this!
+public interface RefundablePaymentGateway extends PaymentGateway {
+    RefundReceipt refund(String transactionId, BigDecimal amount);
+}
+
+public record PaymentReceipt(String transactionId, boolean successful, String authorizationCode) {}
+public record RefundReceipt(String refundId, boolean successful) {}
+
+// Outbound persistence port (DIP: High-level use-case owns the port interface)
+public interface OrderRepository {
+    void save(Order order);
+    Optional<Order> findById(String orderId);
+}
+
+// Outbound event publishing port (DIP)
+public interface OrderEventPublisher {
+    void publishOrderPaid(String orderId);
+}
+
+// ============================================================================
+// OPEN/CLOSED PRINCIPLE (OCP) VIA STRATEGY REGISTRY
+// ============================================================================
+public class PaymentGatewayRegistry {
+    private final Map<String, PaymentGateway> gateways = new HashMap<>();
+
+    public void register(String providerName, PaymentGateway gateway) {
+        gateways.put(providerName.toUpperCase(), gateway);
+    }
+
+    public PaymentGateway getGateway(String providerName) {
+        PaymentGateway gateway = gateways.get(providerName.toUpperCase());
+        if (gateway == null) {
+            throw new UnsupportedOperationException("No payment gateway configured for provider: " + providerName);
+        }
+        return gateway;
+    }
+}
+
+// ============================================================================
+// SINGLE RESPONSIBILITY PRINCIPLE (SRP) USE CASE SERVICE
+// ============================================================================
+public class OrderCheckoutUseCase {
+    private final OrderRepository orderRepository;
+    private final PaymentGatewayRegistry gatewayRegistry;
+    private final OrderEventPublisher eventPublisher;
+
+    public OrderCheckoutUseCase(
+            OrderRepository orderRepository,
+            PaymentGatewayRegistry gatewayRegistry,
+            OrderEventPublisher eventPublisher
+    ) {
+        this.orderRepository = Objects.requireNonNull(orderRepository);
+        this.gatewayRegistry = Objects.requireNonNull(gatewayRegistry);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
+    }
+
+    public PaymentReceipt processCheckout(String orderId, String paymentProvider) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderId));
+
+        PaymentGateway gateway = gatewayRegistry.getGateway(paymentProvider);
+        PaymentReceipt receipt = gateway.charge(order.getOrderId(), order.calculateTotal());
+
+        if (receipt.successful()) {
+            order.markAsPaid();
+            orderRepository.save(order);
+            eventPublisher.publishOrderPaid(order.getOrderId());
+        }
+
+        return receipt;
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Phase | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **SRP (Single Responsibility)** | Distinct services for checkout, tax calculation, and receipt PDF generation. | Monolithic "God Class" handling HTTP routing, database queries, and raw PDF generation in one file. | Static analysis tracking LCOM4 (Lack of Cohesion); flag any class exceeding LCOM4 $> 1.0$. |
+| **OCP (Open/Closed)** | New payment providers (e.g. ApplePay, Klarna) registered via `PaymentGatewayRegistry` without touching existing code. | Cascading 500-line `switch(provider)` statement; editing it risks breaking existing Stripe and PayPal logic. | Unit test verifying new strategy registration dynamically without modifying core `CheckoutService`. |
+| **LSP (Liskov Substitution)** | Subtypes honor all supertype invariants; pre-conditions not strengthened, post-conditions not weakened. | Subclass throws `UnsupportedOperationException` on mandatory base interface methods (e.g. `refund()`). | Compiler contract check via Interface Segregation (`RefundablePaymentGateway`). |
+| **ISP (Interface Segregation)** | Clients depend only on specific role interfaces (`PaymentGateway` vs `RefundablePaymentGateway`). | "Fat" repository interface forcing read-only reporting microservices to implement `delete()` and `update()`. | Architecture test (ArchUnit) verifying consumer packages only import dedicated role interfaces. |
+| **DIP (Dependency Inversion)** | Domain layer defines Repository port interfaces; database adapters reside in outer infrastructure package. | Domain entity classes import Spring Data annotations or Hibernate `EntityManager` directly. | ArchUnit rule: `noClasses().that().resideInAPackage("..domain..").should().dependOnClassesThat().resideIn("..infrastructure..")`. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: The LSP Violation Billing Cascade Outage
+* **Outage Incident**: An automated nightly subscription refund batch crashed halfway through execution, leaving thousands of customers unrefunded and double-billing credit cards.
+* **Root Cause**: A newly added `CryptoPaymentGateway` subclass implemented `PaymentGateway` whose signature included `refund()`. Because cryptocurrency payments cannot be reversed on-chain, the developer threw `UnsupportedOperationException`. When the batch processor iterated through payments polymorphically, it crashed on the crypto record.
+
+```java
+// ❌ BUG: Subclass violates LSP by throwing UnsupportedOperationException on base method!
+public interface PaymentGateway {
+    void charge(BigDecimal amount);
+    void refund(String transactionId); // Fatal assumption: assumes all gateways support refund!
+}
+
+public class CryptoGateway implements PaymentGateway {
+    public void charge(BigDecimal amount) { /* charge crypto */ }
+    public void refund(String transactionId) {
+        throw new UnsupportedOperationException("Crypto payments cannot be refunded!"); // CRASH!
+    }
+}
+
+// ✅ REFACTORED: Interface Segregation Principle splits role contracts cleanly
+public interface PaymentGateway {
+    void charge(BigDecimal amount);
+}
+
+public interface RefundableGateway extends PaymentGateway {
+    void refund(String transactionId);
+}
+
+public class CryptoGateway implements PaymentGateway {
+    public void charge(BigDecimal amount) { /* valid charge */ }
+}
+
+public class StripeGateway implements RefundableGateway {
+    public void charge(BigDecimal amount) { /* charge */ }
+    public void refund(String txId) { /* refund */ }
+}
+```
+
+#### Bug 2: The Anemic Domain Model Concurrency Race Condition
+* **Outage Incident**: Inventory was oversold during Black Friday; a product with 5 physical stock items was sold 12 times concurrently.
+* **Root Cause**: The domain entity was anemic (only getters and setters). Multiple concurrent threads called `stock = item.getStock()`, evaluated `if (stock > 0)` outside the entity, and called `item.setStock(stock - 1)`, causing lost updates.
+
+```java
+// ❌ BUG: Anemic Domain Model violates Tell, Don't Ask; state logic leaked to caller!
+InventoryItem item = repo.findById(id);
+if (item.getAvailableQuantity() >= requested) { // Race condition here!
+    item.setAvailableQuantity(item.getAvailableQuantity() - requested);
+    repo.save(item);
+}
+
+// ✅ REFACTORED: Rich Domain Model encapsulates state changes with invariant guards
+public class InventoryItem {
+    private int availableQuantity;
+
+    public synchronized void reserve(int quantity) {
+        if (quantity <= 0) throw new IllegalArgumentException("Quantity must be positive");
+        if (this.availableQuantity < quantity) {
+            throw new InsufficientStockException("Requested " + quantity + " but only " + availableQuantity + " left");
+        }
+        this.availableQuantity -= quantity;
+    }
+}
+```
+
+#### Bug 3: The Fragile Base Class Fragility Trap
+* **Outage Incident**: An analytics dashboard began reporting zero metrics after a common utility update.
+* **Root Cause**: A parent class `BaseCounter` modified its internal implementation of `add()` to call `addAll()`. A subclass `InstrumentedCounter` that overrode both `add()` and `addAll()` to count elements ended up double-counting every element added.
+
+```java
+// ❌ BUG: Inheritance exposes fragile internal method chaining
+public class BaseCounter {
+    public void add(String item) { /* add 1 */ }
+    public void addAll(List<String> items) {
+        for (String item : items) add(item); // Parent calls self!
+    }
+}
+
+// ✅ REFACTORED: Composition Over Inheritance eliminates coupling to base internals
+public class InstrumentedCounter {
+    private final BaseCounter delegate;
+    private int count = 0;
+
+    public InstrumentedCounter(BaseCounter delegate) {
+        this.delegate = delegate;
+    }
+
+    public void add(String item) {
+        count++;
+        delegate.add(item);
+    }
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Defensive Copying to Prevent Invariant Tampering
+* **Vulnerability Vector**: An untrusted caller passes a mutable list of price adjustments or roles to an immutable user session object. Later, the caller modifies the original list reference in memory, bypassing permission checks and elevating privileges after construction.
+
+```java
+// 🚨 VULNERABILITY: Storing raw reference allows external caller to mutate internal state
+public final class UserPermissions {
+    private final List<String> roles;
+    public UserPermissions(List<String> roles) {
+        this.roles = roles; // Caller can call roles.add("ROLE_SUPERADMIN") later!
+    }
+}
+
+// 🛡️ MITIGATION: Always create unmodifiable defensive copies in constructors and getters
+public final class UserPermissions {
+    private final List<String> roles;
+    public UserPermissions(List<String> roles) {
+        this.roles = List.copyOf(roles); // Completely immutable snapshot!
+    }
+    public List<String> getRoles() {
+        return roles; // Already unmodifiable
+    }
+}
+```
+
+#### Sec 2: Fail-Fast Boundary Invariant Enforcement
+* **Vulnerability Vector**: An endpoint receives negative payment amounts or null currency codes. The application continues processing, executing database queries and queuing Kafka messages before failing deep in the payment gateway, corrupting audit ledgers.
+
+```java
+// 🛡️ MITIGATION: Fail-Fast value objects enforcing domain invariants immediately on instantiation
+public record Money(BigDecimal amount, Currency currency) {
+    public Money {
+        Objects.requireNonNull(amount, "Amount cannot be null");
+        Objects.requireNonNull(currency, "Currency cannot be null");
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Monetary amount must be strictly positive: " + amount);
+        }
+    }
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Replacing Cascading Switch Statements with Strategy Pattern
+* **Anti-Pattern**: Using large `switch` statements over type enums across multiple classes, violating OCP and forcing modifications in dozens of places whenever a new type is introduced.
+
+```java
+// ⚠️ ANTI-PATTERN: Violates OCP; new discount type requires editing this switch!
+public BigDecimal calculateDiscount(CustomerType type, BigDecimal total) {
+    return switch (type) {
+        case REGULAR -> total.multiply(BigDecimal.valueOf(0.05));
+        case VIP -> total.multiply(BigDecimal.valueOf(0.15));
+        case WHOLESALE -> total.multiply(BigDecimal.valueOf(0.25));
+    };
+}
+
+// 🏗️ REFACTOR: Strategy Pattern via Polymorphic Interfaces (OCP compliant)
+public interface DiscountStrategy {
+    BigDecimal applyDiscount(BigDecimal total);
+}
+
+public class VipDiscountStrategy implements DiscountStrategy {
+    @Override
+    public BigDecimal applyDiscount(BigDecimal total) {
+        return total.multiply(BigDecimal.valueOf(0.15));
+    }
+}
+```
+
+#### Arch 2: Law of Demeter Violation ("Train Wrecks")
+* **Anti-Pattern**: Navigating deep object graphs (`order.getCustomer().getAddress().getCity()`), tightly coupling callers to the internal structure of intermediate classes.
+
+```java
+// ⚠️ ANTI-PATTERN: Train wreck violates Law of Demeter and creates NPE risk
+String zip = order.getCustomer().getAddress().getZipCode();
+
+// 🏗️ REFACTOR: Delegate through immediate collaborator
+String zip = order.getDeliveryZipCode();
+```
 
 ---
 
@@ -1572,7 +1958,7 @@ To write maintainable systems, you must distinguish between two types of code re
 
 ##### 2. Accidental Duplication (Coincidental Similarity) — DO NOT ABSTRACT!
 - **Definition**: Two blocks of code look structurally identical today, but they belong to different business actors and represent completely different concepts.
-- **Enterprise Example**: 
+- **Enterprise Example**:
   - `ShippingAddressValidator`: Validates customer shipping addresses for courier truck delivery. Today, it checks: `zipCode.length() == 5 && city != null`.
   - `BillingAddressValidator`: Validates billing addresses for credit card fraud verification. Today, it also checks: `zipCode.length() == 5 && city != null`.
   - **What Happens If You Combine Them?**
@@ -1670,7 +2056,7 @@ This anti-pattern is formally cataloged by Martin Fowler as **Speculative Genera
 
 #### 💡 Foundational Concept: Combating Codebase Entropy
 
-Software systems naturally degrade over time if left unmaintained—a phenomenon known as **Software Entropy**. 
+Software systems naturally degrade over time if left unmaintained—a phenomenon known as **Software Entropy**.
 
 In criminology, the **Broken Window Theory** states that visible signs of disorder or neglect in a neighborhood encourage further crime. In software, if a new developer opens a 2,000-line class full of cryptic variable names, magic numbers, and 5-level nested `if` statements, they subconsciously conclude: *"Nobody cares about this code. It's fine if I add another quick 20-line hack."* Within a year, the system becomes an unmaintainable legacy quagmire.
 

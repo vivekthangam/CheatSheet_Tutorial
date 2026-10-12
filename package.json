@@ -4,10 +4,14 @@
   "scripts": {
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
-    "docs:preview": "vitepress preview"
+    "docs:preview": "vitepress preview",
+    "docs:deploy": "vitepress build && npx gh-pages -d .vitepress/dist"
   },
   "devDependencies": {
-    "vue": "^3.5.0",
-    "vitepress": "^1.6.0"
+    "gh-pages": "^6.3.0",
+    "mermaid": "^12.1.0",
+    "vitepress": "^1.6.4",
+    "vitepress-plugin-mermaid": "^2.0.17",
+    "vue": "^3.5.0"
   }
 }

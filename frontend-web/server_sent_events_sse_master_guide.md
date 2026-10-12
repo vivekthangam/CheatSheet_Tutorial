@@ -2,7 +2,7 @@
 
 ![Server-Sent Events (SSE) vs HTTP Streaming Architecture](../assets/images/protocols/sse_streaming_protocol.jpg)
 
-> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Full-Stack Developers, and SRE Leads.  
+> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Full-Stack Developers, and SRE Leads.
 > **Prerequisites**: Zero prior SSE knowledge required. We begin with foundational physical analogies (The Live News Ticker & FM Radio vs Telephone Calls) and progress systematically through the W3C `EventSource` standard, `text/event-stream` MIME wire protocol, the 4 protocol fields (`event`, `data`, `id`, `retry`), `Last-Event-ID` zero-loss connection resumption, HTTP/2 multiplexing vs HTTP/1.1 6-connection limits, anti-buffering directives (`X-Accel-Buffering: no`), distributed multi-pod scaling with Redis Pub/Sub, OpenAI/Anthropic AI LLM token streaming architectures, `fetch()` `ReadableStream` fallbacks for custom headers, edge cases, beginner vs advanced anti-patterns, real-world Sev-1 outage post-mortems, and an enterprise 30-point audit checklist.
 
 ---
@@ -279,7 +279,7 @@ Imagine you are walking through Times Square watching a massive LED news ticker:
 For over a decade, developers assumed real-time communication automatically meant **WebSockets**. However, the rise of **Generative AI Large Language Models (LLMs)** fundamentally changed real-time architecture:
 
 ### 1. The Generative AI Streaming Revolution (ChatGPT, Claude, Gemini)
-When an LLM generates a 500-word response, generation takes 4 to 8 seconds. 
+When an LLM generates a 500-word response, generation takes 4 to 8 seconds.
 * If you use traditional REST, the user stares at a blank loading spinner for 8 seconds before the full paragraph appears (**terrible user experience**).
 * If you use **SSE**, the model streams tokens the exact millisecond they are decoded by the GPU. The user sees words typing out across the screen in real time ($< 30\text{ms}$ Time-To-First-Token).
 * Because the user does not send data back to the server while reading, **WebSockets are completely unnecessary overhead**! SSE is the universal standard used by OpenAI, Anthropic, Google, and Mistral.

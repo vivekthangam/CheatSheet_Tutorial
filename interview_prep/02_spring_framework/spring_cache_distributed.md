@@ -36,9 +36,9 @@ When `@EnableCaching` is present, Spring registers `CacheInterceptor` as an advi
    - **Cache Miss**: Invokes the target method, receives the database result, verifies the `unless` condition, puts the result into the cache via `cache.put(key, result)`, and returns to caller.
 
 > [!NOTE]
-> **Spring Cache Interception Pipeline**:  
-> `[Client Caller]` ──► `[Spring CGLIB / JDK Proxy]` ──► `[CacheInterceptor (CacheAspectSupport)]` ──► `[Cache Key Evaluation (SpEL / KeyGenerator)]`  
-> • **Cache Hit**: Returns cached `ValueWrapper.get()` immediately (underlying database/service method bypassed)  
+> **Spring Cache Interception Pipeline**:
+> `[Client Caller]` ──► `[Spring CGLIB / JDK Proxy]` ──► `[CacheInterceptor (CacheAspectSupport)]` ──► `[Cache Key Evaluation (SpEL / KeyGenerator)]`
+> • **Cache Hit**: Returns cached `ValueWrapper.get()` immediately (underlying database/service method bypassed)
 > • **Cache Miss**: Invokes target `@Service` method ──► Executes Database Query ──► Calls `cache.put(key, result)` ──► Returns payload to caller
 
 
@@ -469,10 +469,10 @@ return current
 
 #### Technical Deep Dive
 > [!NOTE]
-> **Multi-Tier L1+L2 Read Hierarchy Pipeline**:  
-> `[Application Request]` ──► `[L1 Caffeine (Local JVM RAM)]`  
-> • **Branch A (L1 Hit)**: Returns cached instance directly ($< 200\text{ns}$)  
-> • **Branch B (L1 Miss ➔ L2 Hit)**: Queries `[L2 Redis (Distributed Cluster)]` ──► Backfills local L1 (`L1.put(k, v)`) ──► Returns payload ($< 1\text{ms}$)  
+> **Multi-Tier L1+L2 Read Hierarchy Pipeline**:
+> `[Application Request]` ──► `[L1 Caffeine (Local JVM RAM)]`
+> • **Branch A (L1 Hit)**: Returns cached instance directly ($< 200\text{ns}$)
+> • **Branch B (L1 Miss ➔ L2 Hit)**: Queries `[L2 Redis (Distributed Cluster)]` ──► Backfills local L1 (`L1.put(k, v)`) ──► Returns payload ($< 1\text{ms}$)
 > • **Branch C (L1 Miss ➔ L2 Miss ➔ DB Hit)**: Executes `[Primary Database Query]` ──► Backfills L2 (`L2.put(k, v)`) ──► Backfills L1 (`L1.put(k, v)`) ──► Returns payload (~$25\text{ms}$)
 
 
@@ -558,7 +558,7 @@ Under concurrent read and write operations:
 **Interviewer Evaluation:** Evaluates decoupling caching invalidation from application code.
 
 #### Technical Deep Dive
-> **Debezium CDC Cache Invalidation Pipeline**:  
+> **Debezium CDC Cache Invalidation Pipeline**:
 > `[App Service]` ──(Mutates Data via SQL)──► `[PostgreSQL Master]` ──(Durable Commit to WAL)──► `[Debezium Connector]` ──(CDC Event JSON)──► `[Apache Kafka Invalidation Topic]` ──(Consumer Worker)──► `[Cache Invalidator Worker]` ──(`redis.del(key)`)──► `[Redis Cluster Cache Evicted]`
 
 | Invalidation Architecture Stage | Component / Primitive | Operational Invariant | Consistency & Failure Guarantee |

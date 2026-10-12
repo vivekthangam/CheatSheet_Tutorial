@@ -171,11 +171,11 @@ async function transferFunds(senderId, receiverId, amount) {
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: How does PostgreSQL implement MVCC without in-place row overwrites?
-> **ELI5**: When you edit a word in a document, instead of using white-out, PostgreSQL prints a new page with the revised word and marks the old page as expired.  
+> **ELI5**: When you edit a word in a document, instead of using white-out, PostgreSQL prints a new page with the revised word and marks the old page as expired.
 > **Technical**: An `UPDATE` in PostgreSQL is physically implemented as an `INSERT` of a new version of the tuple accompanied by an update to the old tuple's header setting its `xmax` field to the current transaction ID. Both rows coexist in the heap until vacuum reclaims the dead tuple.
 
 #### Q2: What is the purpose of the Write-Ahead Log (WAL)?
-> **ELI5**: Writing down what you did in a diary before filing the official tax forms, so if your house catches fire, you can recreate everything from the diary.  
+> **ELI5**: Writing down what you did in a diary before filing the official tax forms, so if your house catches fire, you can recreate everything from the diary.
 > **Technical**: WAL guarantees the Durability property of ACID. By appending transaction changes sequentially to disk before flushing randomized 8KB heap pages to disk, PostgreSQL guarantees crash recovery while optimizing disk I/O from slow random writes to fast sequential appends.
 
 ---

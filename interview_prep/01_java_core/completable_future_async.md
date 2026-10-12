@@ -1,12 +1,67 @@
-# CompletableFuture & Asynchronous Orchestration: Enterprise Architecture Guide
+[🏠 Back to Home](../../README.md) | [☕ Core Java Internals](java_interview_master_guide.md) | [🍃 Spring Ecosystem](../02_spring_framework/spring_core_ioc_boot.md) | [🛠️ Concurrency Guide](java_threads_concurrency.md)
 
-> **Curriculum Milestone**: Module 01 - Java Core Engineering  
-> **Topic Coverage**: CompletableFuture State Machine, Treiber Stack Completion Chains, Asynchronous Pipeline Composition, Multi-Future Coordination (`allOf`/`anyOf`), Timeout Resilience, Exception Bubbling, Thread Pool Isolation, and Loom Interoperability.  
-> **Target Depth**: 50+ Progressive Technical Scenarios with Runtime Mechanics, Production Code Walkthroughs, Beginner Traps, and Real-World Outage Post-Mortems.
+# CompletableFuture & Asynchronous Non-Blocking Orchestration: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/01_java_core/completable_future_async.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/01_java_core/completable_future_async.md)  
+> **Topic Domain:** `CompletableFuture` Internal State Machine (`result` volatile CAS), Treiber Stack Completion DAG Chains, Monadic Functor (`thenApply`) vs Monad (`thenCompose`) Composition, Parallel Fan-In/Fan-Out (`allOf` / `anyOf`), ForkJoinPool CommonPool Saturation Defenses, Custom Dedicated Executor Isolation, Timeout Resilience (`orTimeout`), and Project Loom Virtual Thread Interoperability (`J05`)  
+> **Target Framework / Runtime:** OpenJDK HotSpot JVM 17 LTS / 21 LTS / 25 LTS, `java.util.concurrent`  
+> **Architecture Level:** Principal / Staff+ Distributed Systems Architect & High-Throughput Reactive Engineer  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Async Thread Exhaustion Outage Post-Mortems, Treiber Stack Bytecode Mechanics, and Non-Blocking Pipeline Engineering  
 
 ---
 
-## Architecture Blueprint: The CompletableFuture State Machine
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before diving into lock-free Treiber stack CAS node chains, `AltResult` exception sentinel wrappers, ForkJoinPool common-pool work-stealing deque starvation, and asynchronous monadic flatMap unwrapping, here is the essential high-level context: what CompletableFuture represents, why traditional blocking Futures failed in high-scale systems, and where asynchronous non-blocking pipelines anchor modern API gateways.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **`CompletableFuture`** is Java's premier promise-based asynchronous composition primitive. Introduced in Java 8 and significantly hardened in Java 9–21, it represents a value or computation that may not yet be available. Unlike legacy blocking constructs, a `CompletableFuture` allows developers to register non-blocking continuation callbacks (`thenApply`, `thenCompose`, `thenCombine`), coordinate complex Directed Acyclic Graphs (DAGs) of concurrent tasks, and handle errors asynchronously without blocking the calling thread.
+* **Everyday Analogy**: Imagine ordering food at a busy fast-casual gourmet restaurant:
+  - **Legacy Blocking `Future.get()`**: You place your order for a burger at the register. The cashier tells you to stand completely motionless directly in front of the counter until the chef flips the meat, toasts the bun, and wraps the burger (**20 minutes of complete thread blocking**). Nobody behind you can place an order; the line spills out the door.
+  - **`CompletableFuture` (The Vibrating Pager & Kitchen DAG)**: The cashier hands you a wireless vibrating buzzer (**The Future Promise**) and immediately takes the next customer’s order (**Non-Blocking Execution**).
+    - While you sit down to read emails, the kitchen kicks off multiple parallel tasks simultaneously: the grill chef cooks the patty, the fry cook makes french fries, and the barista blends a milkshake (**Fan-Out Concurrency**).
+    - When both the burger and fries finish, the kitchen packs them into a single tray (**`thenCombine` aggregation**).
+    - If the ice cream machine breaks, the kitchen automatically substitutes a slice of cheesecake instead of burning down the restaurant (**`exceptionally` error recovery**).
+    - When your tray is ready, the buzzer vibrates, and you pick up your meal (**Completion Stage trigger**).
+* **Architectural Tier Placement**: Operates at the **Application Asynchronous Concurrency & Gateway Tier**. Sits within API gateways, BFF (Backend-For-Frontend) layers, and microservice aggregation pipelines that coordinate fan-out calls to downstream services and databases.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Fatal Limitations of Java 5 `Future<V>`**: The original `Future` interface introduced in Java 5 was completely crippled for modern distributed microservices. It lacked three vital capabilities:
+  - **No Continuation Callbacks**: A caller could only check `isDone()` in a CPU-burning loop or invoke `.get()`, which blocked the calling OS thread until completion.
+  - **No Pipeline Chaining**: There was no native way to say *"when task A completes, take its result and pass it to task B"*.
+  - **No Multi-Future Coordination**: There was no built-in way to combine 10 concurrent HTTP calls and trigger a callback only when all 10 (or the fastest 1) completed.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The Gateway Thread Exhaustion Outage**: A shopping cart checkout gateway calling 5 downstream services (Inventory, Pricing, Fraud, Shipping, Tax) blocked 5 worker threads per HTTP request using `.get()`, saturating Tomcat's 200-thread pool within seconds during flash sales.
+  - 💥 **Headache 2: The `ForkJoinPool.commonPool()` Catastrophe**: Calling `CompletableFuture.supplyAsync(task)` without passing a custom `Executor` runs the task on the JVM-wide `ForkJoinPool.commonPool()`. When an engineer ran blocking HTTP or JDBC queries on the common pool, all 8 worker threads froze, silently breaking parallel streams and asynchronous event listeners across the entire JVM.
+  - 💥 **Headache 3: Swallowed Asynchronous Exceptions**: In asynchronous pipelines, unhandled exceptions inside worker lambdas fail silently unless chained with `.exceptionally()` or `.handle()`. Requests hung indefinitely without returning HTTP 500 errors to clients.
+* **The Turning Point**: Doug Lea designed `CompletableFuture` (JSR-166) to bring monadic promise composition (inspired by Scala's `Future` and JavaScript's `Promise`) directly into standard Java, transforming Java into a modern non-blocking language.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Scatter-Gather Fan-Out Microservice Aggregation) ➔ Solution 1**: `CompletableFuture.allOf(f1, f2, f3, f4)` executes independent downstream network requests in parallel across dedicated thread pools, collecting all results concurrently and cutting total user response time from serial sum ($t_1 + t_2 + t_3$) to the single slowest call ($\max(t_1, t_2, t_3)$).
+* **Problem 2 (Thread Pool Saturation & Blast Radius Isolation) ➔ Solution 2**: Overloaded methods accept a custom `Executor` (`supplyAsync(supplier, customExecutor)`), allowing architects to isolate high-latency third-party integrations (e.g. PayPal API) to isolated, bounded thread pools without starving internal core services.
+* **Problem 3 (Cascading Downstream Timeout Breaches) ➔ Solution 3**: Java 9+ `.orTimeout(500, TimeUnit.MILLISECONDS)` and `.completeOnTimeout(fallback, 500, TimeUnit.MILLISECONDS)` attach deterministic SLA guards, guaranteeing that slow dependencies cannot hang parent transactions.
+* **Quantifiable Enterprise Metrics**:
+  - **75% P99 Latency Reduction**: Aggregating 4 downstream service calls via `thenCombine` drops endpoint latency from 1,200ms down to 310ms.
+  - **10x Gateway Connection Density**: Non-blocking continuation dispatch frees Tomcat/Netty request threads during network I/O, allowing a single gateway node to sustain 25,000 active concurrent client sessions.
+  - **Zero CommonPool Starvation**: Strict architectural enforcement of dedicated thread pools prevents 100% of JVM-wide worker pool deadlocks.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Used in high-performance API Gateways (Spring Cloud Gateway), financial payment aggregators, travel booking search engines (querying 20 airlines simultaneously), and real-time dashboard data synthesizers.
+* **Developer Workflow & SRE Synergy**: Enables declarative, functional pipeline definition. SREs monitor thread pool queue lengths and rejection metrics (`custom_thread_pool_active`, `custom_thread_pool_queue_depth`) to dynamically detect downstream microservice slowdowns.
+* **Scalability & Evolutionary Runway**: Fully compatible with Java 21 Virtual Threads: `CompletableFuture` pipelines can execute on `Executors.newVirtualThreadPerTaskExecutor()`, combining the expressiveness of promise DAGs with the ultra-low memory overhead of virtual threads.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Asynchronous Technology | Programming Model | Memory / Thread Overhead | Best Enterprise Fit | Primary Production Risk |
+| :--- | :--- | :--- | :--- | :--- |
+| **`CompletableFuture`** | Functional Monadic DAG Pipeline | Low (Driven by custom thread pools) | Scatter-gather API aggregations, fan-out network calls | Blocking on `commonPool`; uncaught async exceptions |
+| **Virtual Threads (Loom)** | Imperative Sequential Code | Ultra-Low (~1KB per thread) | High-concurrency I/O microservices, straightforward workflows | Pinning carrier threads via synchronized blocks |
+| **Spring WebFlux (Reactor)** | Reactive Streams (Backpressure) | Ultra-Low (Event loop based) | Infinite real-time data streams, WebSockets, backpressure | High cognitive curve; stack traces hard to debug |
+| **Legacy `Future.get()`** | Synchronous Blocking | High (1 OS thread blocked per call) | Simple background jobs where caller must wait anyway | Immediate thread pool exhaustion and gateway collapse |
+
+---
+
+## 2. Architecture Blueprint: The CompletableFuture State Machine
 
 ```mermaid
 flowchart TB
@@ -116,6 +171,299 @@ flowchart TB
 ```
 
 </details>
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Resilient Multi-Stage Async Orchestration Engine
+
+> **Attached Domain Project:** `Resilient Multi-Stage Async Orchestration & API Gateway Aggregator Engine` (`com.cheatsheet.async`)  
+> **Target Tooling:** Java 21 / 25 LTS | HotSpot JIT | CompletableFuture | Virtual Threads | Bounded ThreadPoolExecutors  
+> **Companion Code Mirror:** [`code/01_java_core/completable_future_async/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/01_java_core/completable_future_async/)  
+> **Key Technologies Demonstrated:** Non-Blocking DAG Fan-Out / Fan-In with `allOf` & `thenCombine`, Bounded Thread Pool Isolation (`CallerRunsPolicy`), Per-Stage Timeout SLAs (`orTimeout` / `completeOnTimeout`), CompletionException Unwrapping, Monadic Async Fallback Chains (`exceptionallyCompose`), Virtual Thread Per Task Executors.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Async Gateway Aggregator)
+
+The following production-grade implementation demonstrates resilient asynchronous microservice orchestration with bounded resource isolation and failure boundaries:
+
+```java
+package com.cheatsheet.async.engine;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.*;
+
+// ============================================================================
+// RESILIENT ASYNC API GATEWAY AGGREGATOR ENGINE
+// ============================================================================
+public class AsyncGatewayAggregator implements AutoCloseable {
+
+    private final ExecutorService ioThreadPool;
+
+    public AsyncGatewayAggregator(int corePoolSize, int maxPoolSize, int queueCapacity) {
+        // Dedicated, bounded thread pool preventing commonPool starvation
+        this.ioThreadPool = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(queueCapacity),
+                new ThreadFactory() {
+                    private int counter = 0;
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r, "async-gateway-io-" + (++counter));
+                        t.setDaemon(true);
+                        return t;
+                    }
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy() // Backpressure protection
+        );
+    }
+
+    public record UserProfile(String userId, String username, String email) {}
+    public record OrderHistory(String userId, List<String> orderIds) {}
+    public record CreditScore(String userId, int score) {}
+    public record AggregatedAccountDetails(UserProfile profile, OrderHistory orders, CreditScore credit) {}
+
+    // ========================================================================
+    // NON-BLOCKING FAN-OUT / FAN-IN PIPELINE WITH PER-STAGE TIMEOUTS
+    // ========================================================================
+    public CompletableFuture<AggregatedAccountDetails> aggregateAccountDetails(
+            String userId,
+            Duration timeoutSla
+    ) {
+        // Stage 1: Async fetch UserProfile with fallback
+        CompletableFuture<UserProfile> profileFuture = CompletableFuture
+                .supplyAsync(() -> fetchUserProfileRemote(userId), ioThreadPool)
+                .orTimeout(timeoutSla.toMillis(), TimeUnit.MILLISECONDS)
+                .exceptionally(ex -> new UserProfile(userId, "Anonymous Guest", "guest@system.local"));
+
+        // Stage 2: Async fetch OrderHistory with fallback on timeout
+        CompletableFuture<OrderHistory> ordersFuture = CompletableFuture
+                .supplyAsync(() -> fetchOrderHistoryRemote(userId), ioThreadPool)
+                .completeOnTimeout(new OrderHistory(userId, List.of()), timeoutSla.toMillis(), TimeUnit.MILLISECONDS);
+
+        // Stage 3: Async fetch CreditScore
+        CompletableFuture<CreditScore> creditFuture = CompletableFuture
+                .supplyAsync(() -> fetchCreditScoreRemote(userId), ioThreadPool)
+                .orTimeout(timeoutSla.toMillis(), TimeUnit.MILLISECONDS)
+                .exceptionally(ex -> new CreditScore(userId, 600)); // Default score
+
+        // Barrier Fan-In: Combine all 3 futures without blocking worker threads
+        return CompletableFuture.allOf(profileFuture, ordersFuture, creditFuture)
+                .thenApply(v -> new AggregatedAccountDetails(
+                        profileFuture.join(),
+                        ordersFuture.join(),
+                        creditFuture.join()
+                ));
+    }
+
+    // ========================================================================
+    // MONADIC ASYNC ERROR RECOVERY WITH exceptionallyCompose
+    // ========================================================================
+    public CompletableFuture<String> fetchWithSecondaryFailover(String primaryUrl, String secondaryUrl) {
+        return CompletableFuture.supplyAsync(() -> callHttpEndpoint(primaryUrl), ioThreadPool)
+                .exceptionallyCompose(ex -> {
+                    // Transparent asynchronous failover to secondary replica
+                    return CompletableFuture.supplyAsync(() -> callHttpEndpoint(secondaryUrl), ioThreadPool);
+                });
+    }
+
+    // Mock remote I/O methods
+    protected UserProfile fetchUserProfileRemote(String userId) {
+        return new UserProfile(userId, "JaneDoe", "jane.doe@enterprise.com");
+    }
+
+    protected OrderHistory fetchOrderHistoryRemote(String userId) {
+        return new OrderHistory(userId, List.of("ORD-901", "ORD-902"));
+    }
+
+    protected CreditScore fetchCreditScoreRemote(String userId) {
+        return new CreditScore(userId, 785);
+    }
+
+    protected String callHttpEndpoint(String endpoint) {
+        if (endpoint.contains("fail")) throw new RuntimeException("HTTP 500 from " + endpoint);
+        return "SUCCESS from " + endpoint;
+    }
+
+    @Override
+    public void close() {
+        ioThreadPool.shutdown();
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Phase | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Executor Isolation** | Explicit bounded pool (`ArrayBlockingQueue` + `CallerRunsPolicy`) passed to `supplyAsync`. | Default `ForkJoinPool.commonPool()` used for slow I/O; saturates pool, freezes entire JVM. | Check thread names in stack dumps (`async-gateway-io-*`); configure alert for commonPool saturation. |
+| **Timeout Enforcement** | `orTimeout()` or `completeOnTimeout()` attached to every asynchronous network stage. | Pipelines lack timeouts; hung third-party HTTP sockets keep threads suspended indefinitely. | Test pipeline against 60s artificial socket delay; verify `TimeoutException` completes within SLA ($<500\text{ms}$). |
+| **Multi-Future Fan-In** | `CompletableFuture.allOf` registers reactive listener; downstream stages trigger only on completion. | Developer calls `.get()` on each future sequentially; causes head-of-line blocking and thread exhaustion. | Code analysis lint blocking `.get()` / `.join()` inside asynchronous execution threads. |
+| **Exception Handling** | Monadic `exceptionallyCompose()` recovers asynchronously using backup replica services. | Exception bubbles uncaught, causing downstream `join()` to rethrow wrapped `CompletionException`. | Wrap terminal consumer in `.handle((res, ex) -> ...)` and unwrap root cause using `ex.getCause()`. |
+| **Virtual Thread Interop** | High-concurrency I/O pipelines dispatched onto Java 21 `Executors.newVirtualThreadPerTaskExecutor()`. | Heavy CPU-bound computation scheduled on virtual threads; pins carrier OS pthreads indefinitely. | Use JFR `jdk.VirtualThreadPinned` event to identify carrier pin locks (`synchronized` blocks). |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: The Cascading CommonPool Thread Starvation Outage
+* **Outage Incident**: An e-commerce gateway collapsed during peak flash sale. Parallel stream operations, batch processors, and async controllers across the entire microservice hung simultaneously.
+* **Root Cause**: An async notification task invoked `CompletableFuture.runAsync()` without passing a custom executor. The task called a slow external SMS gateway that hung for 30 seconds. Because `runAsync()` defaults to `ForkJoinPool.commonPool()`, all common pool worker threads (equal to $\text{CPU cores} - 1$) were blocked, starving the entire JVM.
+
+```java
+// ❌ BUG: Submits I/O task into JVM-wide ForkJoinPool.commonPool()!
+public void sendSmsNotification(String phone, String msg) {
+    CompletableFuture.runAsync(() -> {
+        smsClient.send(phone, msg); // 30-second network stall blocks common pool!
+    });
+}
+
+// ✅ REFACTORED: Always dispatch external network I/O onto dedicated bounded pool
+private final ExecutorService smsPool = new ThreadPoolExecutor(
+        4, 16, 60L, TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(500),
+        new ThreadPoolExecutor.DiscardOldestPolicy()
+);
+
+public void sendSmsNotification(String phone, String msg) {
+    CompletableFuture.runAsync(() -> smsClient.send(phone, msg), smsPool)
+            .orTimeout(3, TimeUnit.SECONDS)
+            .exceptionally(ex -> {
+                log.warn("SMS dispatch timed out or failed: {}", ex.getMessage());
+                return null;
+            });
+}
+```
+
+#### Bug 2: The Double-Wrapping `CompletionException` Bubble Trap
+* **Outage Incident**: A payment validation service failed to trigger fraud alerts because catch blocks checking `if (e instanceof FraudDetectedException)` were never entered, returning generic 500 errors to users.
+* **Root Cause**: When an exception is thrown inside a `CompletableFuture` stage, HotSpot wraps it in a `CompletionException`. If chained multiple times with nested `.get()`, the root cause gets wrapped in multiple layers (`CompletionException -> ExecutionException -> FraudDetectedException`).
+
+```java
+// ❌ BUG: Direct instanceof check fails because real exception is wrapped!
+try {
+    future.join();
+} catch (Exception e) {
+    if (e instanceof FraudDetectedException) { // NEVER TRUE! e is CompletionException!
+        handleFraud();
+    }
+}
+
+// ✅ REFACTORED: Recursively unwrap CompletionException / ExecutionException to root cause
+public static Throwable unwrapRootCause(Throwable throwable) {
+    Throwable current = throwable;
+    while ((current instanceof CompletionException || current instanceof ExecutionException) 
+           && current.getCause() != null) {
+        current = current.getCause();
+    }
+    return current;
+}
+```
+
+#### Bug 3: Thread-Context & Security Context Dropping across `thenApplyAsync`
+* **Outage Incident**: Multi-tenant database queries executed in async pipelines threw `TenantNotFoundException` or accessed another tenant's data.
+* **Root Cause**: `ThreadLocal` context (e.g. `SecurityContextHolder` or `TenantContext`) does not automatically propagate when an asynchronous stage shifts execution to another thread via `thenApplyAsync()`.
+
+```java
+// ❌ BUG: ThreadLocal tenant context lost when execution switches to background worker thread!
+CompletableFuture.supplyAsync(() -> queryTenantDb(), customPool);
+
+// ✅ REFACTORED: Explicitly capture and restore context in async supplier wrapper
+public static <T> Supplier<T> withContext(Supplier<T> supplier) {
+    String tenantId = TenantContext.getTenantId();
+    return () -> {
+        String previous = TenantContext.getTenantId();
+        try {
+            TenantContext.setTenantId(tenantId);
+            return supplier.get();
+        } finally {
+            TenantContext.setTenantId(previous);
+        }
+    };
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Unbounded Async Task Submission Denial-of-Service
+* **Vulnerability Vector**: An unauthenticated endpoint spawns asynchronous work via `CompletableFuture.runAsync()` backed by an unbounded `LinkedBlockingQueue`. An attacker floods the endpoint with 50,000 requests per second, queuing millions of task objects on the heap until the container crashes via `OutOfMemoryError`.
+
+```java
+// 🚨 VULNERABILITY: Unbounded queue allows infinite pending memory buildup
+ExecutorService vulnerablePool = Executors.newFixedThreadPool(16); // LinkedBlockingQueue unbounded!
+
+// 🛡️ MITIGATION: Strictly bound thread pool queue and reject surplus with backpressure
+ExecutorService securePool = new ThreadPoolExecutor(
+        8, 16, 60L, TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(1000), // Max 1000 queued tasks
+        new ThreadPoolExecutor.AbortPolicy() // Throws RejectedExecutionException
+);
+```
+
+#### Sec 2: Sensitive Data Leakage in AltResult Error Messages
+* **Vulnerability Vector**: When a remote database or microservice fails, the internal exception containing SQL connection strings, tokens, or customer PII is stored inside `CompletableFuture`'s `AltResult` field and directly serialized into HTTP API error responses.
+
+```java
+// 🛡️ MITIGATION: Sanitize AltResult error before serializing to client responses
+public CompletableFuture<String> secureFetchCustomer(String customerId) {
+    return CompletableFuture.supplyAsync(() -> remoteCall(customerId))
+            .exceptionally(ex -> {
+                log.error("Internal remote call error: ", ex); // Log full stack trace internally
+                return "ERR_CUSTOMER_UNAVAILABLE"; // Return sanitized code to external caller!
+            });
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Blocking Inside Asynchronous Callbacks (The `thenApply(f -> f.get())` Trap)
+* **Anti-Pattern**: Using synchronous `.get()` or blocking I/O calls inside a non-async stage callback, tying up the pool thread and defeating the non-blocking architecture.
+
+```java
+// ⚠️ ANTI-PATTERN: Calling get() inside thenApply turns non-blocking pipeline into blocking
+CompletableFuture<User> future = fetchUserAsync()
+        .thenApply(user -> {
+            Order orders = fetchOrdersAsync(user.id()).get(); // ❌ BLOCKING GET!
+            return new UserWithOrders(user, orders);
+        });
+
+// 🏗️ REFACTOR: Use monadic thenCompose to chain asynchronous stages cleanly
+CompletableFuture<UserWithOrders> future = fetchUserAsync()
+        .thenCompose(user -> fetchOrdersAsync(user.id())
+                .thenApply(orders -> new UserWithOrders(user, orders)));
+```
+
+#### Arch 2: Uncoordinated Speculative Races Leaking Background Work
+* **Anti-Pattern**: Using `anyOf()` to race multiple redundant provider calls without cancelling the losing tasks, wasting cloud egress bandwidth and compute.
+
+```java
+// 🏗️ REFACTOR: Coordinate speculative cancellation on first winner
+public static <T> CompletableFuture<T> raceWithCancellation(
+        List<CompletableFuture<T>> futures
+) {
+    CompletableFuture<T> promise = new CompletableFuture<>();
+    for (CompletableFuture<T> f : futures) {
+        f.thenAccept(result -> {
+            if (promise.complete(result)) {
+                // Cancel all other competitors
+                futures.forEach(other -> {
+                    if (other != f) other.cancel(true);
+                });
+            }
+        }).exceptionally(ex -> null);
+    }
+    return promise;
+}
+```
 
 ---
 

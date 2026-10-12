@@ -1174,7 +1174,7 @@
 ### Q68: Virtual Method Table (`vtable`) vs Interface Method Table (`itable`)
 - **Scenario:** How does the JVM physically implement dynamic method dispatch for class inheritance vs interface implementation?
 - **Root Cause & Technical Mechanics:**
-  - **`vtable` (Class Inheritance):** Every class has a virtual method table containing function pointers to its virtual methods. Subclasses share the exact same method offset indexes as their superclasses. Dispatch is an immediate $O(1)$ memory dereference: `vtable[offset]()`.
+  - **`vtable` (Class Inheritance):** Every class has a virtual method table containing function pointers to its virtual methods. Subclasses share the exact same method offset indexes as their superclasses. Dispatch is an immediate $O(1)$ memory dereference: `vtable[offset](#)`.
   - **`itable` (Interface Implementation):** Because a class can implement dozens of interfaces in arbitrary order, fixed method offset indexing is impossible (Interface A's method might be at offset 2 in Class X, but offset 5 in Class Y). The JVM uses an `itable` containing pairs of `(InterfaceID, offsetTable)`. While historically slower, modern HotSpot caches interface call-site targets into Inline Caches, achieving near $O(1)$ performance.
 
 ---
@@ -6905,7 +6905,7 @@
 ### Q403: Kafka Consumer Group Rebalance Storm under Heavy GC Pause
 - **Scenario:** During peak morning traffic, a Kafka consumer application triggers non-stop rebalances. Partitions are constantly revoked and reassigned, throughput drops to zero, and logs show `CommitFailedException: Offset commit cannot be completed since the group has already rebalanced and assigned the partitions to another member`.
 - **Root Cause:** A long GC pause (or slow downstream database write) exceeded `max.poll.interval.ms` (default 300s). The Kafka Coordinator assumed the consumer died and kicked it out, triggering a group-wide rebalance storm across all instances.
-- **Production Solution:** 
+- **Production Solution:**
   1. Decouple message fetching from processing using an internal bounded `ThreadPoolExecutor`.
   2. Increase `max.poll.interval.ms` and decrease `max.poll.records`.
   ```properties
@@ -7012,7 +7012,7 @@
 ### Q410: G1 GC Humongous Object Allocation Flooding Old Generation
 - **Scenario:** A microservice generates frequent 2MB report buffers. The G1 GC logs reveal frequent `G1 Humongous Allocation` messages followed by unexpected concurrent mark cycles and emergency Full GCs, while overall heap is 70% free.
 - **Root Cause:** In G1, any object larger than 50% of the G1 Region size is classified as "Humongous" and allocated directly into contiguous regions of the Old Generation. If Region size is 2MB, any object $> 1\text{MB}$ triggers humongous allocation, causing immediate region fragmentation.
-- **Production Solution:** 
+- **Production Solution:**
   1. Increase G1 region size via `-XX:G1HeapRegionSize=16m` or `32m`.
   2. Refactor report generation to write directly to streaming sinks without intermediate monolithic arrays.
 

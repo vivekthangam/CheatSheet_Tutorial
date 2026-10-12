@@ -155,12 +155,12 @@ MODERN ASYNCHRONOUS PIPELINE (Java 8+ CompletableFuture):
 
 ### 4. `thenCompose(Function<T, CompletionStage<U>>)`
 - **Physical Analogy:** Handing a shipping ticket to a delivery driver, who hands you back a second delivery ticket for the final leg.
-- **Technical Definition:** Flattens nested futures ($T \to \text{Future}<U>$), returning a single flat `CompletableFuture<U>`.
+- **Technical Definition:** Flattens nested futures ($T \to \text{Future}[U]$), returning a single flat `CompletableFuture<U>`.
 - **Topology Diagram:**
   ```
   [ Future<T> ] ──► [ Async Call producing Future<U> ] ──► [ Flat Future<U> ]
   ```
-- **Memory Hook:** *"Equivalent to Stream.flatMap(). Prevents Future<Future<U>> nesting."*
+- **Memory Hook:** *"Equivalent to Stream.flatMap(). Prevents `Future<Future<U>>` nesting."*
 
 ### 5. `thenCombine(CompletionStage<U>, BiFunction<T, U, V>)`
 - **Physical Analogy:** Waiting for both your burger and milkshake to arrive, then packing them into a lunchbox.

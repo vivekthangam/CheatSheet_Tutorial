@@ -25,9 +25,9 @@ An exhaustive, practical manual designed to help English learners and software e
 
 # 1. The Root Word Power Law: Learn 1 Root, Unlock 20 Words
 
-Most language learners try to memorize words like random phone numbers. This leads to quick forgetting. 
+Most language learners try to memorize words like random phone numbers. This leads to quick forgetting.
 
-Over **60% of all English words** (and over **90% of technical and scientific vocabulary**) originate from **Greek and Latin roots**. 
+Over **60% of all English words** (and over **90% of technical and scientific vocabulary**) originate from **Greek and Latin roots**.
 
 ```
                           ┌─── Spectator   (Someone who LOOKS at a game)

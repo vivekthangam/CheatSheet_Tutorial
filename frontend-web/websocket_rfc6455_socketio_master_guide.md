@@ -2,7 +2,7 @@
 
 ![WebSocket RFC 6455 & Socket.IO Real-Time Architecture](../assets/images/protocols/websocket_realtime_protocol.jpg)
 
-> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Senior Full-Stack Developers, and SRE Leads.  
+> **Target Audience**: Staff Distributed Systems Architects, Real-Time Platform Engineers, Senior Full-Stack Developers, and SRE Leads.
 > **Prerequisites**: Zero prior WebSocket knowledge required. We begin with foundational physical analogies (The Open Phone Line vs Sending Letters, Walkie-Talkies) and progress systematically through the HTTP 101 Switching Protocols handshake, SHA-1 magic key hashing, binary frame anatomy (FIN, Opcodes, Payload Length, 4-byte client XOR masking physics), cache poisoning defenses, half-open zombie socket detection, application vs protocol heartbeats, horizontal scaling with Redis Pub/Sub backplanes, the Engine.IO state machine, rooms and namespaces, edge cases, beginner vs advanced anti-patterns, real-world Sev-1 outage post-mortems, and a 40+ term technical glossary.
 
 ---
@@ -147,7 +147,7 @@ WebSockets dismantle the 5 fundamental bottlenecks of HTTP:
 To understand WebSockets, we must first understand the foundational computer networking concept of a **Socket**:
 
 ### 1. The Classical Network Socket (Berkeley / BSD Sockets - 1983)
-In operating systems (Linux, Windows, macOS), a **Socket** is a software abstraction representing an endpoint for sending or receiving data across a computer network. 
+In operating systems (Linux, Windows, macOS), a **Socket** is a software abstraction representing an endpoint for sending or receiving data across a computer network.
 * A socket is uniquely identified by a **5-tuple**:
   $$\text{Socket} = (\text{Source IP},\, \text{Source Port},\, \text{Destination IP},\, \text{Destination Port},\, \text{Transport Protocol [TCP/UDP]})$$
 * Once an operating system creates a TCP socket, it establishes a continuous, bidirectional byte stream between two machines.
@@ -373,7 +373,7 @@ Use Socket.IO   Use Raw WebSocket (RFC 6455)
 ### ❌ 3 Scenarios Where WebSockets are the WRONG Choice:
 1. **Static Data & Standard CRUD**: Fetching a user profile or blog article should always be standard REST `GET`. HTTPS responses are easily cached by browser caches, CDNs, and reverse proxies. WebSockets cannot be cached by CDNs!
 2. **One-Way Server Streams (e.g. AI LLM Token Streaming)**: If the client never sends messages back to the server (e.g. ChatGPT typing out answers), use **Server-Sent Events (SSE)**. SSE runs over standard HTTP/2, auto-reconnects natively, and traverses corporate firewalls with zero friction.
-3. **Infrequent Polling**: If an application checks for new emails once every 10 minutes, keeping an idle TCP socket open 24/7 wastes mobile battery and server file descriptors. Use push notifications or periodic background fetch. 
+3. **Infrequent Polling**: If an application checks for new emails once every 10 minutes, keeping an idle TCP socket open 24/7 wastes mobile battery and server file descriptors. Use push notifications or periodic background fetch.
    If an application checks for new emails once every 10 minutes, keeping an idle TCP socket open 24/7 wastes mobile battery and server file descriptors. Use push notifications or periodic background fetch.
 
 ---
@@ -1123,7 +1123,7 @@ Socket.IO is **not** a raw WebSocket implementation; it is a higher-level framew
 
 ## 6.3 Request-Response Acknowledgements (ACKs) & Offline Buffering
 
-In raw WebSockets, sending a message is purely fire-and-forget. You do not know if the server processed it.  
+In raw WebSockets, sending a message is purely fire-and-forget. You do not know if the server processed it.
 Socket.IO introduces **RPC-style Acknowledgements (ACKs)**:
 
 ```typescript

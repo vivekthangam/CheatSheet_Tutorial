@@ -536,7 +536,7 @@ http {
 > **Answer**: NGINX uses a single-threaded, non-blocking event-driven loop in each worker process, relying on kernel multiplexers (`epoll` on Linux, `kqueue` on BSD). A worker registers thousands of open sockets with the kernel and only processes descriptors that have ready I/O events, eliminating context-switching and stack allocation overhead.
 
 #### Q2: What is the exact evaluation order of `location` blocks?
-> **Answer**: 
+> **Answer**:
 > 1. Exact match (`=`)
 > 2. Preferential prefix match (`^~`)
 > 3. Regular expressions in order of appearance (`~` case-sensitive, `~*` case-insensitive)

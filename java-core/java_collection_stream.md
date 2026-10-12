@@ -81,7 +81,7 @@ import java.util.stream.Collectors;
 public class CollectionsQuickStart {
     public static void main(String[] args) {
         // 1. LIST: Preserves order, allows duplicates
-        List<String> fruits = new ArrayList<>(List.of("Apple", "Banana", "Apple"));
+        `List<String>` fruits = new ArrayList<>(List.of("Apple", "Banana", "Apple"));
         System.out.println("List with duplicates: " + fruits); // [Apple, Banana, Apple]
 
         // 2. SET: Eliminates all duplicates automatically
@@ -95,7 +95,7 @@ public class CollectionsQuickStart {
         System.out.println("Price of Banana: $" + fruitPrices.get("Banana")); // $1
 
         // 4. STREAM PIPELINE: Filter, Transform, and Collect
-        List<String> upperCaseApples = fruits.stream()
+        `List<String>` upperCaseApples = fruits.stream()
             .filter(f -> f.equals("Apple"))
             .map(String::toUpperCase)
             .collect(Collectors.toList());
@@ -171,26 +171,9 @@ public class CollectionsQuickStart {
 
 ### Q8: What does "Lazy Evaluation" mean in Java Streams?
 - **ELI5 Answer:** *"A lazy chef who refuses to chop vegetables until a customer actually sits down and orders the soup."*
-- **Technical Answer:** *"Intermediate operations (like `.filter()` or `.map()`) do not execute immediately when declared. They only execute when a terminal operation (like `.collect()`, `.findFirst()`, or `.count()`) is invoked, allowing the JVM to optimize the pipeline and short-circuit early."*
+- **Technical Answer:** *"Intermediate operations (like `.filter()` or `.map()`) do not execute:"*
 
-### Q9: What is the difference between `Comparable` and `Comparator`?
-- **ELI5 Answer:** *"`Comparable` is how an object naturally judges itself (e.g. 'I am taller than you'). `Comparator` is a third-party judge who ranks contestants by a custom rule (e.g. 'rank players by highest score today')."*
-- **Technical Answer:** *"`Comparable<T>` is implemented inside the class itself via `compareTo(T o)` defining natural ordering. `Comparator<T>` is an external functional interface implemented via `compare(T o1, T o2)` allowing multiple custom sorting strategies without modifying the original class."*
-
-### Q10: What is the difference between `Fail-Fast` and `Fail-Safe` iterators?
-- **ELI5 Answer:** *"`Fail-Fast` screams and stops immediately if anyone touches the cookie jar while you're counting. `Fail-Safe` makes a photocopy of the cookie jar and counts the copy peacefully without caring what happens to the real jar."*
-- **Technical Answer:** *"`Fail-Fast` iterators (e.g., `ArrayList`, `HashMap`) check the internal `modCount`. If the collection is structurally modified during iteration, they throw `ConcurrentModificationException`. `Fail-Safe` iterators (e.g., `CopyOnWriteArrayList`, `ConcurrentHashMap`) operate on a clone or snapshot of the collection, permitting concurrent modification without exceptions."*
-
----
-
-## 📦 Core Data Structures (Scenarios 1-10)
-
-### 1. Ensuring Unique Records (The Event Guest List)
-**Scenario:** You are building an event check-in system. You need to store attendee names as they arrive, but you must guarantee that no duplicate record is stored even if someone checks in twice.
-**The Solution:** HashSet
-* **Why:** Uses a Hash Table to guarantee uniqueness with average (1)$ constant time for insertion and lookup.
-
-`java
+```java
 import java.util.HashSet;
 import java.util.Set;
 
@@ -205,7 +188,7 @@ public class GuestList {
         System.out.println("Guest List: " + guests);
     }
 }
-`
+```
 
 ---
 
@@ -214,7 +197,7 @@ public class GuestList {
 **The Solution:** HashMap
 * **Why:** Stores Key-Value pairs with average (1)$ direct retrieval by key.
 
-`java
+```java
 import java.util.HashMap;
 import java.util.Map;
 
@@ -231,7 +214,7 @@ public class EmployeeRegistry {
         }
     }
 }
-`
+```
 
 ---
 
@@ -240,7 +223,7 @@ public class EmployeeRegistry {
 **The Solution:** ArrayDeque / LinkedList (as a Queue)
 * **Why:** Implements Queue with (1)$ head removal (poll()) and tail insertion (offer()).
 
-`java
+```java
 import java.util.ArrayDeque;
 import java.util.Queue;
 
@@ -256,7 +239,7 @@ public class PrinterQueue {
         }
     }
 }
-`
+```
 
 ---
 
@@ -265,7 +248,7 @@ public class PrinterQueue {
 **The Solution:** TreeMap / TreeSet (with reverse comparator)
 * **Why:** Uses Red-Black self-balancing binary search trees to maintain sorted order in (\log n)$ time.
 
-`java
+```java
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -284,7 +267,7 @@ public class Leaderboard {
         }
     }
 }
-`
+```
 
 ---
 
@@ -293,7 +276,7 @@ public class Leaderboard {
 **The Solution:** PriorityQueue
 * **Why:** Implements a Min/Max binary heap where the highest priority element is always served first in (\log n)$.
 
-`java
+```java
 import java.util.PriorityQueue;
 import java.util.Queue;
 
@@ -309,7 +292,7 @@ public class HospitalTriage {
         System.out.println("First patient treated: " + triage.poll()); // Heart Attack
     }
 }
-`
+```
 
 ---
 
@@ -318,7 +301,7 @@ public class HospitalTriage {
 **The Solution:** ConcurrentHashMap
 * **Why:** Uses lock-free reads and bin-level locking for writes with high concurrent throughput.
 
-`java
+```java
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
@@ -331,15 +314,15 @@ public class SessionCache {
         System.out.println("Cached User: " + user);
     }
 }
-`
+```
 
 ---
 
 ### 7. Recently Viewed Items (LRU Cache)
 **Scenario:** An e-commerce app shows the last 5 products a user viewed, automatically evicting the least recently accessed item when capacity is exceeded.
-**The Solution:** LinkedHashMap (with emoveEldestEntry)
+**The Solution:** LinkedHashMap (with emoveEldestEntry)
 
-`java
+```java
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -367,7 +350,67 @@ public class LruCache<K, V> extends LinkedHashMap<K, V> {
         System.out.println("LRU Cache Keys: " + cache.keySet()); // [P3, P1, P4]
     }
 }
-`
+
+```
+
+---
+
+### 6. Thread-Safe User Session Caching
+**Scenario:** High-concurrency web server needs to store active user sessions across 100+ worker threads without data corruption or global lock bottlenecks.
+**The Solution:** ConcurrentHashMap
+* **Why:** Uses lock-free reads and bin-level locking for writes with high concurrent throughput.
+
+```java
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+
+public class SessionCache {
+    private static final Map<String, String> SESSIONS = new ConcurrentHashMap<>();
+
+    public static void main(String[] args) {
+        SESSIONS.put("sess_abc123", "User: Alice");
+        String user = SESSIONS.computeIfAbsent("sess_def456", k -> "User: Bob");
+        System.out.println("Cached User: " + user);
+    }
+}
+```
+
+---
+
+### 7. Recently Viewed Items (LRU Cache)
+**Scenario:** An e-commerce app shows the last 5 products a user viewed, automatically evicting the least recently accessed item when capacity is exceeded.
+**The Solution:** LinkedHashMap (with
+emoveEldestEntry)
+
+```java
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class LruCache<K, V> extends LinkedHashMap<K, V> {
+    private final int capacity;
+
+    public LruCache(int capacity) {
+        super(capacity, 0.75f, true); // true = access-order
+        this.capacity = capacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > capacity;
+    }
+
+    public static void main(String[] args) {
+        LruCache<String, String> cache = new LruCache<>(3);
+        cache.put("P1", "Laptop");
+        cache.put("P2", "Phone");
+        cache.put("P3", "Tablet");
+        cache.get("P1"); // Access P1 to make it recently used
+        cache.put("P4", "Monitor"); // Evicts P2
+
+        System.out.println("LRU Cache Keys: " + cache.keySet()); // [P3, P1, P4]
+    }
+}
+```
 
 ---
 
@@ -422,7 +465,7 @@ Why: It automatically rejects duplicate IP strings and offers O(1) search/add ti
 7. Scenario: Storing "Discovered" Nodes in a Maze
 Problem: An AI is solving a maze. It needs to keep track of which coordinates it has already visited so it doesn't walk in circles.
 
-Collection: HashSet<Point>
+Collection: `HashSet<Point>`
 
 Why: Rapidly checking if a "Point(x,y)" has been visited is critical for performance.
 
@@ -612,7 +655,7 @@ These are used when you need the efficiency of a Map but require the keys to sta
 
 ### 34. Scenario: Categorizing Employees by Department
 **Problem:** You need to group employees by their department (e.g., "IT" -> [Alice, Bob], "HR" -> [Charlie]).
-* **Collection:** `HashMap<String, List<Employee>>`
+* **Collection:** `HashMap<String, `List<Employee>`>`
 * **Why:** This "Multimap" pattern allows one key to map to a collection of values.
 
 ### 35. Scenario: Flight Schedule by City
@@ -853,7 +896,7 @@ Use `TreeMap` when your keys must stay in a specific order or you need to perfor
 
 ### 32. Scenario: Grouping Employees by Department
 **Problem:** You need a list of all employees working in "Sales", "IT", and "HR".
-* **Collection:** `HashMap<String, List<Employee>>`
+* **Collection:** `HashMap<String, `List<Employee>`>`
 * **Why:** A "Multimap" pattern where one Key maps to a collection of Values.
 
 ### 33. Scenario: Character Frequency (Anagram Check)
@@ -1558,7 +1601,7 @@ Why: It is lock-free and allows adding to the end and removing from the head ver
 85. Scenario: Delayed Task Execution (Scheduled Cleanups)
 Problem: When a temporary file is created, it must be deleted exactly 60 seconds later.
 
-Collection: DelayQueue<DelayedFile>
+Collection: `DelayQueue<DelayedFile>`
 
 Why: The worker thread simply calls queue.take(). It will "sleep" until the 60 seconds are up for the first file, then wake up and process it.
 
@@ -1637,7 +1680,7 @@ These use advanced techniques like "Lock Striping" or "Copy-on-Write" to avoid l
 
 ### 84. Scenario: System Configuration White-list
 **Problem:** A security module checks every incoming request against a list of 1000 "Allowed IP Addresses." The list is updated once a week but read millions of times.
-* **Collection:** `CopyOnWriteArrayList<String>`
+* **Collection:** `CopyOnWriteArray`List<String>``
 * **Explanation:** Since reads are constant and writes are rare, this collection provides maximum performance because readers never need to acquire a lock.
 
 ---
@@ -1660,7 +1703,7 @@ public class ThreadSafeDemo {
                 for (int i = 1; i <= 10; i++) {
                     System.out.println("Producing Task: " + i);
                     queue.put(i); // Blocks if queue is full
-                    Thread.sleep(100); 
+                    Thread.sleep(100);
                 }
             } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         };
@@ -1671,7 +1714,7 @@ public class ThreadSafeDemo {
                 while (true) {
                     Integer task = queue.take(); // Blocks if queue is empty
                     System.out.println("Consuming Task: " + task);
-                    Thread.sleep(500); 
+                    Thread.sleep(500);
                 }
             } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         };
@@ -1903,7 +1946,7 @@ Use this when your application moves from single-threaded to multi-threaded:
 ## ðŸ“ Final Checklist for Implementation
 
 1.  [ ] **Type Safety:** Always use Generics (e.g., `List<String>`, not just `List`).
-2.  [ ] **Interfaces:** Always declare the variable as the Interface (e.g., `List<String> list = new ArrayList<>();`).
+2.  [ ] **Interfaces:** Always declare the variable as the Interface (e.g., ``List<String>` list = new ArrayList<>();`).
 3.  [ ] **Capacity:** If you know you'll store 1,000 items, initialize with that size to avoid "Resizing" overhead: `new ArrayList<>(1000)`.
 4.  [ ] **Immutability:** If the data shouldn't change, wrap it: `Collections.unmodifiableList(myList)`.
 
@@ -1918,7 +1961,7 @@ Here is a README.md formatted guide for Java Streams in Collections.
 
 # ðŸŒŠ Java Streams with Collections: Scenario-Based Guide
 
-Java Streams allow you to process data declaratively (telling the code *what* to do rather than *how* to do it). 
+Java Streams allow you to process data declaratively (telling the code *what* to do rather than *how* to do it).
 
 ---
 
@@ -1938,20 +1981,20 @@ A stream consists of three parts:
 * **Stream Tool:** `filter()`
 * **Code:**
 ```java
-List<User> premiumUsers = users.stream()
+`List<User>` premiumUsers = users.stream()
     .filter(user -> user.getPlan().equals("Premium"))
     .collect(Collectors.toList());
 ```
 
 2. Scenario: Extracting Email Addresses
-Problem: You have a list of Employee objects and you need a List<String> containing only their email addresses for a mailing list.
+Problem: You have a list of Employee objects and you need a `List<String>` containing only their email addresses for a mailing list.
 
 Stream Tool: map()
 
 Code:
 
 ```java
-List<String> emails = employees.stream()
+`List<String>` emails = employees.stream()
     .map(Employee::getEmail)
     .collect(Collectors.toList());
 ```
@@ -1964,7 +2007,7 @@ Stream Tool: distinct() + sorted()
 Code:
 
 ```java
-List<String> uniqueCities = addresses.stream()
+`List<String>` uniqueCities = addresses.stream()
     .map(Address::getCity)
     .distinct()
     .sorted()
@@ -2023,14 +2066,14 @@ boolean hasBannedWord = bannedWords.stream()
 ```
 
 22. Scenario: Converting List to Map
-Problem: You have a List<Employee> and you want to convert it to a Map<Integer, Employee> where the key is the EmployeeID.
+Problem: You have a `List<Employee>` and you want to convert it to a `Map<Integer, Employee>` where the key is the EmployeeID.
 
 Stream Tool: Collectors.toMap()
 
 Code:
 
 ```java
-Map<Integer, Employee> idToEmpMap = employees.stream()
+`Map<Integer, Employee>` idToEmpMap = employees.stream()
     .collect(Collectors.toMap(Employee::getId, emp -> emp));
 ```
 
@@ -2115,7 +2158,7 @@ This guide covers 100+ practical scenarios for using Java Streams with Collectio
 22. **Upper Case:** Converting a list of codes to all uppercase for consistency.
 23. **Math Transformation:** Applying a 10% discount to a list of prices.
 24. **Object Creation:** Mapping a list of Raw Strings from a CSV to `User` objects.
-25. **Flattening:** Converting a `List<List<String>>` (nested tags) into a single flat `List<String>` (`flatMap`).
+25. **Flattening:** Converting a `List<`List<String>`>` (nested tags) into a single flat `List<String>` (`flatMap`).
 
 26. **Map to Int:** Converting a list of numeric strings to primitive `int` to save memory.
 27. **Map to Double:** Calculating tax for each item in a shopping cart.
@@ -2219,7 +2262,7 @@ This guide covers 100+ practical scenarios for using Java Streams with Collectio
 ## ðŸ› ï¸ Essential Stream Code Template
 
 ```java
-List<String> result = myCollection.stream()       // 1. Source
+`List<String>` result = myCollection.stream()       // 1. Source
     .filter(item -> item.isActive())             // 2. Intermediate Op
     .map(Item::getName)                          // 3. Intermediate Op
     .sorted()                                    // 4. Intermediate Op
@@ -2271,7 +2314,7 @@ TreeSet<String> sortedNames = employees.stream()
 Scenario: Group employees by their department.
 
 Java
-Map<String, List<Employee>> byDept = employees.stream()
+Map<String, `List<Employee>`> byDept = employees.stream()
     .collect(Collectors.groupingBy(Employee::getDept));
 45. Counting by Group
 Scenario: Count how many products exist in each category.
@@ -2284,14 +2327,14 @@ Scenario: Find the average salary for each department.
 
 Java
 Map<String, Double> avgSalaryByDept = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.averagingDouble(Employee::getSalary)));
 47. Summing by Group
 Scenario: Total revenue per product category.
 
 Java
 Map<String, Double> revenueByCategory = products.stream()
-    .collect(Collectors.groupingBy(Product::getCategory, 
+    .collect(Collectors.groupingBy(Product::getCategory,
         Collectors.summingDouble(Product::getPrice)));
 48. Partitioning (Binary Split)
 Scenario: Split students into "Passed" (>= 60) and "Failed" (< 60).
@@ -2303,7 +2346,7 @@ Map<Boolean, List<Student>> passedOrFailed = students.stream()
 Scenario: Convert a list to a map using ID as the key.
 
 Java
-Map<Integer, Employee> empMap = employees.stream()
+`Map<Integer, Employee>` empMap = employees.stream()
     .collect(Collectors.toMap(Employee::getId, e -> e));
 50. To Map (Handling Duplicate Keys)
 Scenario: If two employees have the same name, keep the one with the higher salary.
@@ -2311,8 +2354,8 @@ Scenario: If two employees have the same name, keep the one with the higher sala
 Java
 Map<String, Employee> uniqueEmps = employees.stream()
     .collect(Collectors.toMap(
-        Employee::getName, 
-        e -> e, 
+        Employee::getName,
+        e -> e,
         (existing, replacement) -> existing.getSalary() > replacement.getSalary() ? existing : replacement
     ));
 51. Joining Strings
@@ -2342,8 +2385,8 @@ Optional<Product> expensive = products.stream()
 Scenario: Group by Dept, but only store the Employee Names (not objects).
 
 Java
-Map<String, List<String>> deptNames = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+Map<String, `List<String>`> deptNames = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.mapping(Employee::getName, Collectors.toList())));
 55. Multi-level Grouping
 Scenario: Group by City, then within each city, group by Department.
@@ -2361,22 +2404,22 @@ I apologize for the cutoff. Here is the complete implementation code and detaile
 **Scenario:** You need a report showing employees organized first by **City**, and then within each city, subdivided by their **Department**.
 * **Explanation:** This uses "Nested Collectors." The first `groupingBy` creates the primary keys, and the second `groupingBy` (the downstream collector) organizes the values into sub-maps.
 ```java
-Map<String, Map<String, List<Employee>>> geoDeptMap = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getCity, 
+Map<String, Map<String, `List<Employee>`>> geoDeptMap = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getCity,
         Collectors.groupingBy(Employee::getDept)));
 56. Collecting to Unmodifiable List
 Scenario: You are returning a list of "System Constants" from a stream and must ensure that no other part of the app can add or remove items from it.
 
 Java
-List<String> secureList = employees.stream()
+`List<String>` secureList = employees.stream()
     .map(Employee::getName)
     .collect(Collectors.toUnmodifiableList());
 57. Collecting to TreeMap (Sorted Map)
 Scenario: Group employees by Department, but the departments must appear in alphabetical order (A-Z) in the resulting Map.
 
 Java
-TreeMap<String, List<Employee>> sortedDeptMap = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+TreeMap<String, `List<Employee>`> sortedDeptMap = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDept,
         TreeMap::new, Collectors.toList()));
 58. Finding Min (Lowest Value)
 Scenario: Find the employee with the lowest salary to identify the entry-level range.
@@ -2418,21 +2461,21 @@ Scenario: Group employees by Department, but within those groups, only include t
 Note: This is better than filter() before the groupingBy because it ensures even departments with zero high-earners appear in the map (as empty lists).
 
 Java
-Map<String, List<Employee>> highEarnersByDept = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+Map<String, `List<Employee>`> highEarnersByDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.filtering(e -> e.getSalary() > 4000, Collectors.toList())));
 64. MaxBy within Groups (Best Performer)
 Scenario: Find the highest-paid employee per department.
 
 Java
 Map<String, Optional<Employee>> topEarnerPerDept = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.maxBy(Comparator.comparing(Employee::getSalary))));
 65. Collecting to ConcurrentMap
 Scenario: You are processing a massive employee list using a parallelStream() and need to collect results into a thread-safe Map.
 
 Java
-ConcurrentMap<Integer, Employee> concurrentMap = employees.parallelStream()
+Concurrent`Map<Integer, Employee>` concurrentMap = employees.parallelStream()
     .collect(Collectors.toConcurrentMap(Employee::getId, e -> e));
 66. Collecting to a Standard Array
 Scenario: A legacy API requires an Employee[] array instead of a List.
@@ -2451,7 +2494,7 @@ Set<Employee> allEmployees = departments.stream()
 Scenario: You want to see the state of your data at each stage of the pipeline without stopping the stream.
 
 Java
-List<String> results = employees.stream()
+`List<String>` results = employees.stream()
     .filter(e -> e.getSalary() > 3000)
     .peek(e -> System.out.println("Filtered: " + e.getName()))
     .map(Employee::getName)
@@ -2506,7 +2549,7 @@ This section covers the fundamental "search and filter" operations using the Str
 * **Explanation:** `filter` takes a condition and only allows elements that return `true` to pass to the next stage of the pipeline.
 
 ```java
-List<User> premiumUsers = users.stream()
+`List<User>` premiumUsers = users.stream()
     .filter(user -> "PREMIUM".equals(user.getStatus()))
     .collect(Collectors.toList());
 ```
@@ -2519,7 +2562,7 @@ Stream Tool: Objects::nonNull
 Explanation: A specific filter that checks for null references.
 
 ```java
-List<String> cleanNames = names.stream()
+`List<String>` cleanNames = names.stream()
     .filter(Objects::nonNull)
     .collect(Collectors.toList());
 ```
@@ -2532,7 +2575,7 @@ Stream Tool: map() + filter()
 Explanation: We normalize the data to lowercase before checking the prefix.
 
 ```java
-List<String> results = usernames.stream()
+`List<String>` results = usernames.stream()
     .filter(name -> name.toLowerCase().startsWith("adm"))
     .collect(Collectors.toList());
 ```
@@ -2594,7 +2637,7 @@ Stream Tool: distinct()
 Explanation: Uses equals() and hashCode() to filter out duplicate entries.
 
 ```java
-List<String> uniqueZips = customerZips.stream()
+`List<String>` uniqueZips = customerZips.stream()
     .distinct()
     .collect(Collectors.toList());
 ```
@@ -2648,7 +2691,7 @@ This section focuses on the `map()` and `flatMap()` operations, which are used t
 * **Explanation:** `map` transforms each element in the stream. In this case, it converts an `Employee` object into a `String`.
 
 ```java
-List<String> employeeNames = employees.stream()
+`List<String>` employeeNames = employees.stream()
     .map(Employee::getName)
     .collect(Collectors.toList());
 ```
@@ -2661,7 +2704,7 @@ Stream Tool: map(String::toUpperCase)
 Explanation: Applies the string transformation to every element in the pipeline.
 
 ```java
-List<String> normalizedCodes = productCodes.stream()
+`List<String>` normalizedCodes = productCodes.stream()
     .map(String::toUpperCase)
     .collect(Collectors.toList());
 ```
@@ -2680,14 +2723,14 @@ List<Double> finalPrices = netPrices.stream()
 ```
 
 14. Scenario: Flattening Nested Collections (List of Lists)
-Problem: You have a List<Order>, and each Order contains a List<Item>. You want a single flat List<Item> of every item sold across all orders.
+Problem: You have a `List<Order>`, and each Order contains a `List<Item>`. You want a single flat `List<Item>` of every item sold across all orders.
 
 Stream Tool: flatMap(Function)
 
 Explanation: flatMap takes a stream of streams and flattens it into a single stream.
 
 ```java
-List<Item> allItems = orders.stream()
+`List<Item>` allItems = orders.stream()
     .flatMap(order -> order.getItems().stream())
     .collect(Collectors.toList());
 ```
@@ -2726,13 +2769,13 @@ Stream Tool: map()
 Explanation: Allows you to combine multiple source fields into a single output field.
 
 ```java
-List<String> fullNames = users.stream()
+`List<String>` fullNames = users.stream()
     .map(user -> user.getFirstName() + " " + user.getLastName())
     .collect(Collectors.toList());
 ```
 
 18. Scenario: Handling Optional Values in Streams
-Problem: You have a list of User objects, but getAddress() returns an Optional<Address>. You want a list of all existing addresses, skipping users who don't have one.
+Problem: You have a list of User objects, but getAddress() returns an `Optional<Address>`. You want a list of all existing addresses, skipping users who don't have one.
 
 Stream Tool: flatMap(Optional::stream)
 
@@ -2752,7 +2795,7 @@ Stream Tool: IntStream.rangeClosed()
 Explanation: Creates a primitive stream of integers which can then be mapped to objects.
 
 ```java
-List<String> taskList = IntStream.rangeClosed(1, 10)
+`List<String>` taskList = IntStream.rangeClosed(1, 10)
     .mapToObj(i -> "Task " + i)
     .collect(Collectors.toList());
 ```
@@ -2765,7 +2808,7 @@ Stream Tool: flatMap() + distinct()
 Explanation: Combines flattening (for multiple authors) with de-duplication.
 
 ```java
-List<String> uniqueAuthors = books.stream()
+`List<String>` uniqueAuthors = books.stream()
     .flatMap(book -> book.getAuthors().stream())
     .distinct()
     .collect(Collectors.toList());
@@ -2789,7 +2832,7 @@ This section focuses on the `sorted()` operation and how to use `Comparator` to 
 * **Explanation:** Uses the "natural order" of Strings (lexicographical).
 
 ```java
-List<String> sortedCities = cities.stream()
+`List<String>` sortedCities = cities.stream()
     .sorted()
     .collect(Collectors.toList());
 ```
@@ -2815,7 +2858,7 @@ Stream Tool: thenComparing()
 Explanation: Allows you to chain comparators to handle "ties" in the primary sort.
 
 ```java
-List<Employee> organizedEmps = employees.stream()
+`List<Employee>` organizedEmps = employees.stream()
     .sorted(Comparator.comparing(Employee::getDept)
                       .thenComparing(Employee::getName))
     .collect(Collectors.toList());
@@ -2829,7 +2872,7 @@ Stream Tool: Comparator.comparingInt()
 Explanation: Sorts based on a calculated integer property (length) rather than alphabetical order.
 
 ```java
-List<String> tagsByLength = tags.stream()
+`List<String>` tagsByLength = tags.stream()
     .sorted(Comparator.comparingInt(String::length))
     .collect(Collectors.toList());
 ```
@@ -2842,8 +2885,8 @@ Stream Tool: Comparator.nullsLast()
 Explanation: Explicitly tells the stream how to handle null values by pushing them to the end of the list.
 
 ```java
-List<Employee> safeSort = employees.stream()
-    .sorted(Comparator.comparing(Employee::getMiddleName, 
+`List<Employee>` safeSort = employees.stream()
+    .sorted(Comparator.comparing(Employee::getMiddleName,
                Comparator.nullsLast(Comparator.naturalOrder())))
     .collect(Collectors.toList());
 ```
@@ -2856,7 +2899,7 @@ Stream Tool: String.CASE_INSENSITIVE_ORDER
 Explanation: Ignores the ASCII value difference between capital and lowercase letters.
 
 ```java
-List<String> properNames = names.stream()
+`List<String>` properNames = names.stream()
     .sorted(String.CASE_INSENSITIVE_ORDER)
     .collect(Collectors.toList());
 ```
@@ -2882,7 +2925,7 @@ Stream Tool: sorted() + limit()
 Explanation: First organize the data in descending order, then truncate the stream.
 
 ```java
-List<Employee> topEarners = employees.stream()
+`List<Employee>` topEarners = employees.stream()
     .sorted(Comparator.comparing(Employee::getSalary).reversed())
     .limit(3)
     .collect(Collectors.toList());
@@ -2909,7 +2952,7 @@ Stream Tool: sorted()
 Explanation: Java Streams use a "stable" sort (TimSort), meaning the relative order of equal elements is preserved.
 
 ```java
-List<Item> categorySorted = dateSortedItems.stream()
+`List<Item>` categorySorted = dateSortedItems.stream()
     .sorted(Comparator.comparing(Item::getCategory))
     .collect(Collectors.toList());
 
@@ -3076,7 +3119,7 @@ This section covers the `collect()` terminal operation, specifically focusing on
 
 
 ```java
-Map<String, List<Employee>> byDept = employees.stream()
+Map<String, `List<Employee>`> byDept = employees.stream()
     .collect(Collectors.groupingBy(Employee::getDept));
 ```
 
@@ -3097,7 +3140,7 @@ Problem: You have a list of Student exam scores and want to split them into exac
 
 Stream Tool: Collectors.partitioningBy()
 
-Explanation: A specialized version of grouping that always returns a Map<Boolean, List<T>>.
+Explanation: A specialized version of grouping that always returns a `Map<Boolean, List<T>>`.
 
 ```java
 Map<Boolean, List<Student>> results = students.stream()
@@ -3112,8 +3155,8 @@ Stream Tool: groupingBy() + mapping()
 Explanation: Allows you to transform the values inside the collector.
 
 ```java
-Map<String, List<String>> deptNames = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+Map<String, `List<String>`> deptNames = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.mapping(Employee::getName, Collectors.toList())));
 ```
 
@@ -3126,7 +3169,7 @@ Explanation: Aggregates numeric data within each identified group.
 
 ```java
 Map<String, Double> avgPriceByCategory = products.stream()
-    .collect(Collectors.groupingBy(Product::getCategory, 
+    .collect(Collectors.groupingBy(Product::getCategory,
         Collectors.averagingDouble(Product::getPrice)));
 ```
 
@@ -3138,20 +3181,20 @@ Stream Tool: Nested groupingBy()
 Explanation: The "downstream" collector of the first grouping is another grouping collector.
 
 ```java
-Map<String, Map<String, List<Employee>>> regionalMap = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getCountry, 
+Map<String, Map<String, `List<Employee>`>> regionalMap = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getCountry,
         Collectors.groupingBy(Employee::getCity)));
 ```
 
 47. Scenario: Converting a List to a Map (Unique Keys)
-Problem: You have a List<User> and want to convert it into a Map<Long, User> where the User's ID is the key for O(1) lookup.
+Problem: You have a `List<User>` and want to convert it into a `Map<Long, User>` where the User's ID is the key for O(1) lookup.
 
 Stream Tool: Collectors.toMap()
 
 Explanation: Converts a stream into a Map. This assumes IDs are unique.
 
 ```java
-Map<Long, User> userRegistry = users.stream()
+`Map<Long, User>` userRegistry = users.stream()
     .collect(Collectors.toMap(User::getId, user -> user));
 ```
 
@@ -3164,7 +3207,7 @@ Explanation: Finds the maximum element within each group based on a comparator.
 
 ```java
 Map<String, Optional<Employee>> topEarnerPerDept = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.maxBy(Comparator.comparingDouble(Employee::getSalary))));
 ```
 
@@ -3189,7 +3232,7 @@ Explanation: Sums up an integer property for each category.
 
 ```java
 Map<String, Integer> weightByMaterial = items.stream()
-    .collect(Collectors.groupingBy(Item::getMaterial, 
+    .collect(Collectors.groupingBy(Item::getMaterial,
         Collectors.summingInt(Item::getWeight)));
 ```
 
@@ -3201,8 +3244,8 @@ Stream Tool: groupingBy() + filtering()
 Explanation: (Java 9+) Filters elements after grouping, ensuring empty departments still appear in the Map.
 
 ```java
-Map<String, List<Employee>> seniorsByDept = employees.stream()
-    .collect(Collectors.groupingBy(Employee::getDept, 
+Map<String, `List<Employee>`> seniorsByDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDept,
         Collectors.filtering(e -> e.isSenior(), Collectors.toList())));
 ```
 
@@ -3214,7 +3257,7 @@ Stream Tool: Collectors.toCollection()
 Explanation: Allows you to specify the exact implementation of the Collection.
 
 ```java
-LinkedList<String> linkedNames = names.stream()
+Linked`List<String>` linkedNames = names.stream()
     .collect(Collectors.toCollection(LinkedList::new));
 ```
 
@@ -3227,7 +3270,7 @@ Explanation: Returns a IntSummaryStatistics object for every key in the Map.
 
 ```java
 Map<String, IntSummaryStatistics> subjectStats = exams.stream()
-    .collect(Collectors.groupingBy(Exam::getSubject, 
+    .collect(Collectors.groupingBy(Exam::getSubject,
         Collectors.summarizingInt(Exam::getGrade)));
 ```
 
@@ -3241,8 +3284,8 @@ Explanation: The merge function decides which value to keep when keys collide.
 ```java
 Map<String, Double> nameToSalary = employees.stream()
     .collect(Collectors.toMap(
-        Employee::getName, 
-        Employee::getSalary, 
+        Employee::getName,
+        Employee::getSalary,
         (oldVal, newVal) -> Math.max(oldVal, newVal)));
 ```
 
@@ -3269,8 +3312,8 @@ Stream Tool: partitioningBy() + mapping()
 Explanation: Combines a boolean split with a value transformation.
 
 ```java
-Map<Boolean, List<String>> saleNames = products.stream()
-    .collect(Collectors.partitioningBy(Product::isOnSale, 
+Map<Boolean, `List<String>`> saleNames = products.stream()
+    .collect(Collectors.partitioningBy(Product::isOnSale,
         Collectors.mapping(Product::getName, Collectors.toList())));
 ```
 
@@ -3282,13 +3325,13 @@ Stream Tool: Collectors.toUnmodifiableList()
 Explanation: (Java 10+) Returns a list that throws UnsupportedOperationException on modification.
 
 ```java
-List<String> secureRoles = users.stream()
+`List<String>` secureRoles = users.stream()
     .map(User::getRole)
     .collect(Collectors.toUnmodifiableList());
 ```
 
 58. Scenario: FlatMapping in Collectors
-Problem: Each Author has a List<String> genres. You want to group authors by city, but instead of the authors, you want a flat Set of all Genres represented in that city.
+Problem: Each Author has a `List<String>` genres. You want to group authors by city, but instead of the authors, you want a flat Set of all Genres represented in that city.
 
 Stream Tool: groupingBy() + flatMapping()
 
@@ -3296,7 +3339,7 @@ Explanation: (Java 9+) Flattens nested collections during the collection phase.
 
 ```java
 Map<String, Set<String>> cityGenres = authors.stream()
-    .collect(Collectors.groupingBy(Author::getCity, 
+    .collect(Collectors.groupingBy(Author::getCity,
         Collectors.flatMapping(a -> a.getGenres().stream(), Collectors.toSet())));
 ```
 
@@ -3321,7 +3364,7 @@ Explanation: Applies a reduction operation to the elements of each group.
 
 ```java
 Map<Character, Optional<String>> joinedByLetter = words.stream()
-    .collect(Collectors.groupingBy(w -> w.charAt(0), 
+    .collect(Collectors.groupingBy(w -> w.charAt(0),
         Collectors.reducing((s1, s2) -> s1 + "|" + s2)));
 
 **Next Step:** Would you like to proceed with **Scenarios 61â€“80**, focusing on **Parallel Streams, Custom Collectors, and Performance Optimization**?
@@ -3383,7 +3426,7 @@ Stream Tool: dropWhile(Predicate)
 Explanation: (Java 9+) Discards elements until the predicate first returns false, then keeps everything else.
 
 ```java
-List<String> dataOnly = rawLines.stream()
+`List<String>` dataOnly = rawLines.stream()
     .dropWhile(line -> line.startsWith("#"))
     .collect(Collectors.toList());
 ```
@@ -3409,7 +3452,7 @@ Stream Tool: peek(Consumer)
 Explanation: An intermediate operation that performs an action (like logging) without modifying the stream.
 
 ```java
-List<String> names = users.stream()
+`List<String>` names = users.stream()
     .filter(u -> u.getAge() > 18)
     .peek(u -> System.out.println("After Filter: " + u))
     .map(User::getName)
@@ -3444,7 +3487,7 @@ List<Integer> fibonacci = Stream.iterate(new int[]{0, 1}, f -> new int[]{f[1], f
 ```
 
 69. Scenario: Performance Optimization with Primitive Streams
-Problem: You are summing 1 million integers. Using Stream<Integer> causes "Boxing" overhead (converting int to Integer).
+Problem: You are summing 1 million integers. Using `Stream<Integer>` causes "Boxing" overhead (converting int to Integer).
 
 Stream Tool: IntStream / LongStream
 
@@ -3462,7 +3505,7 @@ Stream Tool: Wrapper method / Try-Catch block
 Explanation: You must handle or wrap checked exceptions inside the lambda function.
 
 ```java
-List<String> contents = filePaths.stream()
+`List<String>` contents = filePaths.stream()
     .map(path -> {
         try { return Files.readString(path); }
         catch (IOException e) { return ""; }
@@ -3539,14 +3582,14 @@ try (Stream<String> lines = Files.lines(Paths.get("app.log"))) {
 ```
 
 76. Scenario: Mapping with a Map (Lookup)
-Problem: You have a List<ID> and a Map<ID, Name>. You want to transform the IDs into a list of Names.
+Problem: You have a `List<ID>` and a `Map<ID, Name>`. You want to transform the IDs into a list of Names.
 
 Stream Tool: map(map::get)
 
 Explanation: Using a Map's lookup function directly inside the mapping phase.
 
 ```java
-List<String> names = ids.stream()
+`List<String>` names = ids.stream()
     .map(idToNameMap::get)
     .filter(Objects::nonNull)
     .collect(Collectors.toList());
@@ -3567,21 +3610,21 @@ List<Player> middleTier = players.stream()
 ```
 
 78. Scenario: FlatMapping with Arrays
-Problem: You have a List<String[]> (where each array is a list of words in a sentence) and want a single List<String> of all unique words.
+Problem: You have a List<String[]> (where each array is a list of words in a sentence) and want a single `List<String>` of all unique words.
 
 Stream Tool: flatMap(Arrays::stream)
 
 Explanation: Converts arrays into streams so they can be flattened.
 
 ```java
-List<String> allWords = sentences.stream()
+`List<String>` allWords = sentences.stream()
     .flatMap(Arrays::stream)
     .distinct()
     .collect(Collectors.toList());
 ```
 
 79. Scenario: Checking for Any Match across Multiple Lists
-Problem: You have a List<List<Permission>>. You need to know if any permission anywhere is "ADMIN_WRITE".
+Problem: You have a List<`List<Permission>`>. You need to know if any permission anywhere is "ADMIN_WRITE".
 
 Stream Tool: flatMap() + anyMatch()
 
@@ -3637,7 +3680,7 @@ Stream Tool: map()
 Explanation: Transforms sensitive data into a safe format for logs or UI.
 
 ```java
-List<String> maskedPhones = customers.stream()
+`List<String>` maskedPhones = customers.stream()
     .map(c -> c.getPhone().replaceAll("(\\d{3})\\d{6}(\\d{2})", "$1******$2"))
     .collect(Collectors.toList());
 ```
@@ -3650,7 +3693,7 @@ Stream Tool: filter(list::contains)
 Explanation: Filters the first stream based on the existence of elements in a second collection.
 
 ```java
-List<String> matchingSkills = requiredSkills.stream()
+`List<String>` matchingSkills = requiredSkills.stream()
     .filter(candidateSkills::contains)
     .collect(Collectors.toList());
 ```
@@ -3726,14 +3769,14 @@ Stock topMover = openingPrices.stream()
 ```
 
 89. Scenario: Converting a Map back to a Stream
-Problem: You have a Map<String, Integer> of Inventory. You want to filter out items with 0 stock and return a List<String> of names.
+Problem: You have a Map<String, Integer> of Inventory. You want to filter out items with 0 stock and return a `List<String>` of names.
 
 Stream Tool: Map.entrySet().stream()
 
 Explanation: Accesses the key and value pairs as a stream for processing.
 
 ```java
-List<String> inStock = inventoryMap.entrySet().stream()
+`List<String>` inStock = inventoryMap.entrySet().stream()
     .filter(entry -> entry.getValue() > 0)
     .map(Map.Entry::getKey)
     .collect(Collectors.toList());
@@ -3747,8 +3790,8 @@ Stream Tool: Tertiary source selection.
 Explanation: Determines the stream's origin based on business logic.
 
 ```java
-Stream<Record> recordStream = currentUser.isAdmin() ? 
-    allRecords.stream() : 
+Stream<Record> recordStream = currentUser.isAdmin() ?
+    allRecords.stream() :
     allRecords.stream().filter(r -> r.getOwnerId() == currentUser.getId());
 ```
 
@@ -3762,8 +3805,8 @@ Explanation: Using a Map to enforce uniqueness based on a field other than the o
 ```java
 Collection<Log> uniqueLogs = logs.stream()
     .collect(Collectors.toMap(
-        Log::getCorrelationId, 
-        l -> l, 
+        Log::getCorrelationId,
+        l -> l,
         (existing, replacement) -> existing // Keep the first one found
     )).values();
 ```
@@ -3790,7 +3833,7 @@ Stream Tool: groupingBy() with custom classifier logic.
 Explanation: Dynamically determines the map key based on value thresholds.
 
 ```java
-Map<String, List<User>> ageGroups = users.stream()
+Map<String, `List<User>`> ageGroups = users.stream()
     .collect(Collectors.groupingBy(u -> {
         if (u.getAge() < 20) return "Under 20";
         if (u.getAge() <= 40) return "20-40";
@@ -3826,17 +3869,17 @@ String theme = Optional.ofNullable(jsonMap.get("user"))
 ```
 
 96. Scenario: Building a Search Index (One-to-Many Map)
-Problem: You have List<Article>. Each article has a List<String> tags. Create a search index Map<Tag, List<Article>>.
+Problem: You have `List<Article>`. Each article has a `List<String>` tags. Create a search index Map<Tag, `List<Article>`>.
 
 Stream Tool: flatMap() + groupingBy()
 
 Explanation: Flattens the tags so each tag-article pair can be grouped.
 
 ```java
-Map<String, List<Article>> tagIndex = articles.stream()
+Map<String, `List<Article>`> tagIndex = articles.stream()
     .flatMap(article -> article.getTags().stream()
         .map(tag -> new AbstractMap.SimpleEntry<>(tag, article)))
-    .collect(Collectors.groupingBy(Map.Entry::getKey, 
+    .collect(Collectors.groupingBy(Map.Entry::getKey,
         Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
 ```
 
@@ -3885,7 +3928,7 @@ Stream Tool: The complete toolkit.
 Explanation: Demonstrates the power of composing multiple operations into one readable chain.
 
 ```java
-Map<String, List<Order>> finalReport = Files.lines(path)
+Map<String, `List<Order>`> finalReport = Files.lines(path)
     .skip(1) // Header
     .filter(line -> !line.isBlank())
     .map(Order::parseCsv)
@@ -4025,7 +4068,7 @@ This guide condenses the 100 scenarios into the most critical concepts frequentl
 
 
 ### Q14. What is `Collectors.partitioningBy()`?
-* A specialized version of `groupingBy` that always returns a `Map<Boolean, List<T>>`. It splits data into exactly two groups based on a predicate.
+* A specialized version of `groupingBy` that always returns a ``Map<Boolean, List<T>>``. It splits data into exactly two groups based on a predicate.
 
 ### Q15. How do you handle exceptions inside a Stream Lambda?
 * Lambdas cannot throw checked exceptions. You must either wrap the logic in a `try-catch` block inside the lambda or use a wrapper utility function.
@@ -4077,14 +4120,14 @@ Methods: synchronizedList(), synchronizedMap(), synchronizedSet().
 Note: Use these for simple synchronization; for high performance, use java.util.concurrent.
 
 Java
-List<String> syncList = Collections.synchronizedList(new ArrayList<>());
+`List<String>` syncList = Collections.synchronizedList(new ArrayList<>());
 3. Read-Only (Immutable) Collections
 Scenario: You want to share a list with another module but ensure they cannot modify it.
 
 Methods: unmodifiableList(), unmodifiableMap().
 
 Java
-List<String> readOnly = Collections.unmodifiableList(originalList);
+`List<String>` readOnly = Collections.unmodifiableList(originalList);
 4. Search & Extreme Values
 Scenario: Finding the max/min without writing a loop.
 
@@ -4102,7 +4145,7 @@ Scenario: You have a list of employees and want to group them by Department.
 Method: groupingBy().
 
 Java
-Map<Department, List<Employee>> byDept = employees.stream()
+Map<Department, `List<Employee>`> byDept = employees.stream()
     .collect(Collectors.groupingBy(Employee::getDept));
 6. Partitioning Data
 Scenario: Split a list into exactly two groups: "Passed" and "Failed".
@@ -4120,8 +4163,8 @@ Method: toMap().
 Java
 Map<Integer, User> userMap = users.stream()
     .collect(Collectors.toMap(
-        User::getId, 
-        u -> u, 
+        User::getId,
+        u -> u,
         (existing, replacement) -> existing // Keep the first one found
     ));
 8. Joining Strings
@@ -4131,7 +4174,7 @@ Method: joining().
 
 Java
 String csv = names.stream()
-    .collect(Collectors.joining(", ", "[", "]")); 
+    .collect(Collectors.joining(", ", "[", "]"));
 // Result: [Alice, Bob, Charlie]
 9. Multi-Tasking (Teeing)
 Scenario: Get the Sum and the Average in a single stream pass (Java 12+).
@@ -4157,7 +4200,7 @@ You can use Collections methods inside Collectors to get unique behaviors:
 
 Java
 // Collect into a list and then make it unmodifiable
-List<String> list = names.stream()
+`List<String>` list = names.stream()
     .collect(Collectors.collectingAndThen(Collectors.toList(), Collections::unmodifiableList));
 
 **Would you like me to create a "Common Errors" section to help you avoid `UnsupportedOperationException` and `NullPointerException` when using these utilities?**
@@ -4175,12 +4218,12 @@ This section covers the most common runtime exceptions and logical errors develo
 **The Scenario:** You create an unmodifiable list or use `List.of()` (Java 9+), then try to add an item to it later.
 
 ```java
-List<String> list = List.of("Java", "Spring");
+`List<String>` list = List.of("Java", "Spring");
 list.add("Hibernate"); // âŒ Throws UnsupportedOperationException
 The Fix: If you need to modify the result of a stream or an immutable list, wrap it in a new ArrayList.
 
 Java
-List<String> modifiableList = new ArrayList<>(List.of("Java", "Spring"));
+`List<String>` modifiableList = new ArrayList<>(List.of("Java", "Spring"));
 modifiableList.add("Hibernate"); // âœ… Works
 2. NullPointerException in Collectors.toMap
 The Scenario: You are converting a stream to a Map, but one of the values in the stream is null.
@@ -4200,15 +4243,15 @@ The Scenario: You use toMap on a list where two items have the same key.
 
 Java
 // If two employees have the same ID
-Map<Integer, Employee> map = employees.stream()
+`Map<Integer, Employee>` map = employees.stream()
     .collect(Collectors.toMap(Employee::getId, e -> e)); // âŒ Throws IllegalStateException
 The Fix: Always provide a Merge Function to tell Java which one to keep.
 
 Java
-Map<Integer, Employee> map = employees.stream()
+`Map<Integer, Employee>` map = employees.stream()
     .collect(Collectors.toMap(
-        Employee::getId, 
-        e -> e, 
+        Employee::getId,
+        e -> e,
         (existing, replacement) -> existing // âœ… Keeps the first one found
     ));
 4. ConcurrentModificationException
@@ -4226,7 +4269,7 @@ list.removeIf(s -> s.equals("DeleteMe")); // âœ… Safe and efficient
 The Scenario: You think a synchronized list makes your for loop safe. It doesn't.
 
 Java
-List<String> syncList = Collections.synchronizedList(new ArrayList<>());
+`List<String>` syncList = Collections.synchronizedList(new ArrayList<>());
 // ... another thread adds data ...
 for (String s : syncList) { // âŒ Still requires manual synchronization!
     System.out.println(s);
@@ -4240,19 +4283,19 @@ synchronized (syncList) {
     }
 }
 // OR USE:
-CopyOnWriteArrayList<String> safeList = new CopyOnWriteArrayList<>(); // âœ… Safe to iterate
+CopyOnWriteArray`List<String>` safeList = new CopyOnWriteArrayList<>(); // âœ… Safe to iterate
 6. The "Side-Effect" Bug
 The Scenario: Using peek() or forEach() to modify an external variable instead of using a proper collector.
 
 Java
-List<String> results = new ArrayList<>();
+`List<String>` results = new ArrayList<>();
 list.stream()
     .filter(s -> s.length() > 5)
     .forEach(results::add); // âŒ Bad practice (especially in parallel)
 The Fix: Always use collect(). It is thread-safe and follows functional programming principles.
 
 Java
-List<String> results = list.stream()
+`List<String>` results = list.stream()
     .filter(s -> s.length() > 5)
     .collect(Collectors.toList()); // âœ… Correct
 7. Sorting a Stream multiple times
@@ -4329,7 +4372,7 @@ This master reference combines the core logic of the 100+ scenarios into a high-
 *The most powerful utility for restructuring data:*
 
 ```java
-// 1. Grouping: Map<Category, List<Item>>
+// 1. Grouping: Map<Category, `List<Item>`>
 Map<String, List<Product>> grouped = list.stream()
     .collect(Collectors.groupingBy(Product::getCategory));
 
@@ -4341,7 +4384,7 @@ Map<String, Long> counts = list.stream()
 Map<Integer, User> map = list.stream()
     .collect(Collectors.toMap(User::getId, u -> u, (old, latest) -> latest));
 
-// 4. Partitioning: Map<Boolean, List<Item>>
+// 4. Partitioning: Map<Boolean, `List<Item>`>
 Map<Boolean, List<Student>> split = list.stream()
     .collect(Collectors.partitioningBy(s -> s.getGrade() >= 60));
 ðŸš¨ 4. The "Never Do" List (Red Flags)
@@ -4367,7 +4410,7 @@ Stream Filter/Map: O(n)
 Stream Sort: O(nlogn)
 
 
-**Final Step:** We have covered 100 scenarios, thread safety, utilities, and common pitfalls. This concludes the full Java Collections & Streams Mastery series! 
+**Final Step:** We have covered 100 scenarios, thread safety, utilities, and common pitfalls. This concludes the full Java Collections & Streams Mastery series!
 
 **Is there anything else I can help you with today, or would you like to explore a new topic like Spring Boot or Database integration?**
 Streams classes utility classes
@@ -4429,7 +4472,7 @@ The `Stream` interface itself contains static utility methods to **create** stre
 ```
 * **Stream.iterate():** Create an infinite sequence (e.g., powers of 2).
     ```java
-    Stream.iterate(1, n -> n * 2).limit(10); 
+    Stream.iterate(1, n -> n * 2).limit(10);
 ```
 * **Stream.concat():** Merge two separate streams into one.
     ```java
@@ -4611,7 +4654,7 @@ This example demonstrates a pipeline using multiple functions to process a list 
 ```java
 List<Transaction> transactions = getTransactions();
 
-List<String> result = transactions.stream()
+`List<String>` result = transactions.stream()
     .filter(t -> t.getAmount() > 1000)               // 1. Filter high values
     .distinct()                                     // 2. Remove duplicates
     .sorted(Comparator.comparing(Transaction::getDate)) // 3. Sort by date
@@ -4839,13 +4882,13 @@ int totalLength = names.stream()
     .mapToInt(String::length)
     .sum();
 
-// Converting IntStream to Stream<Integer> (Primitive -> Object)
-Stream<Integer> objectStream = IntStream.range(1, 5).boxed();
+// Converting IntStream to `Stream<Integer>` (Primitive -> Object)
+`Stream<Integer>` objectStream = IntStream.range(1, 5).boxed();
 ðŸš€ Performance Why: Memory Layout
-A Stream<Integer> stores a list of pointers to Integer objects scattered in memory. An IntStream stores raw bits in a contiguous block.
+A `Stream<Integer>` stores a list of pointers to Integer objects scattered in memory. An IntStream stores raw bits in a contiguous block.
 
 Stream Type	Memory Usage	Speed	Best For...
-Stream<Integer>	High (Object Overhead)	Slower	Small lists, complex objects
+`Stream<Integer>`	High (Object Overhead)	Slower	Small lists, complex objects
 IntStream	Low (Raw bits)	Fastest	Math, massive datasets, ranges
 
 **Next Step:** Would you like to see how to use `DoubleStream` to perform **Standard Deviation** or other statistical calculations on a dataset?
@@ -4887,14 +4930,14 @@ System.out.println("Standard Deviation: " + standardDeviation);
 2. Scenario: Data Normalization (Min-Max Scaling)
 Problem: You need to scale a list of values to a range between 0 and 1 (common in Machine Learning).
 
-The Formula: x 
+The Formula: x
 new
 â€‹
- = 
+ =
 maxâˆ’min
 xâˆ’min
 â€‹
- 
+
 
 ```java
 DoubleSummaryStatistics stats = DoubleStream.of(readings).summaryStatistics();
@@ -4915,7 +4958,7 @@ class Grade { double score; double weight; }
 
 double finalGrade = grades.stream()
     .mapToDouble(g -> g.score * g.weight)
-    .sum(); 
+    .sum();
 // Assumes weights sum to 1.0
 ```
 
@@ -4948,18 +4991,29 @@ When summing a vast amount of doubles, floating-point errors can accumulate. Jav
 
 #### Q1: What is the difference between intermediate and terminal stream operations?
 > **Answer & Explanation:**
-> - **Intermediate Operations (ilter(), map(), latMap(), distinct(), sorted()):** Lazy and pipeline-based. They do not execute immediately; instead, they build an internal execution graph using Spliterator and Sink pipelines.
-> - **Terminal Operations (collect(), educe(), count(), orEach(), indFirst()):** Eagerly trigger data consumption through the pipeline and produce a non-stream result or side-effect. Once a terminal operation executes, the stream is closed and cannot be reused.
+> - **Intermediate Operations (
+ilter(), map(),
+latMap(), distinct(), sorted()):** Lazy and pipeline-based. They do not execute immediately; instead, they build an internal execution graph using Spliterator and Sink pipelines.
+> - **Terminal Operations (collect(),
+educe(), count(),
+orEach(),
+indFirst()):** Eagerly trigger data consumption through the pipeline and produce a non-stream result or side-effect. Once a terminal operation executes, the stream is closed and cannot be reused.
 
 #### Q2: How does Stream.reduce() differ from Stream.collect()?
 > **Answer & Explanation:**
-> - educe() is designed for **Immutable Accumulation**. It creates a new object on every step (e.g., (a, b) -> a + b). Using educe() to accumulate into a mutable collection (e.g., (list, item) -> { list.add(item); return list; }) has disastrous (n^2)$ copying costs in parallel streams.
-> - collect() is designed for **Mutable Reduction** via Collector<T, A, R> (Supplier, Accumulator, Combiner, Finisher). It mutates a single accumulator container in place, making it (n)$ and optimal for memory.
+> -
+educe() is designed for **Immutable Accumulation**. It creates a new object on every step (e.g., (a, b) -> a + b). Using
+educe() to accumulate into a mutable collection (e.g., (list, item) -> { list.add(item); return list; }) has disastrous (n^2)$ copying costs in parallel streams.
+> - collect() is designed for **Mutable Reduction** via `Collector<T, A, R>` (Supplier, Accumulator, Combiner, Finisher). It mutates a single accumulator container in place, making it (n)$ and optimal for memory.
 
-#### Q3: What is the internal difference between indFirst() and indAny()?
+#### Q3: What is the internal difference between
+indFirst() and
+indAny()?
 > **Answer & Explanation:**
 > - In sequential streams, both typically return the first encountered element.
-> - In **Parallel Streams (parallelStream())**, indFirst() enforces strict encounter order across all partitioned threads, requiring thread synchronization. indAny() returns the element from whichever parallel worker thread finishes first, offering significantly higher throughput.
+> - In **Parallel Streams (parallelStream())**,
+indFirst() enforces strict encounter order across all partitioned threads, requiring thread synchronization.
+indAny() returns the element from whichever parallel worker thread finishes first, offering significantly higher throughput.
 
 ---
 
@@ -4971,7 +5025,7 @@ When summing a vast amount of doubles, floating-point errors can accumulate. Jav
 > **Senior Architect Answer:**
 > - Never load the entire file into memory using Files.readAllLines() (which consumes 10GB+ Heap).
 > - Use Files.lines(path) which lazily streams lines from the disk using a BufferedReader and memory-mapped file buffers:
-> `java
+> ```java
 > try (Stream<String> lines = Files.lines(Paths.get("transactions.csv"))) {
 >     Map<String, Double> totalByMcc = lines
 >         .skip(1) // Skip CSV Header
@@ -4981,7 +5035,7 @@ When summing a vast amount of doubles, floating-point errors can accumulate. Jav
 >             Collectors.summingDouble(tokens -> Double.parseDouble(tokens[3])) // Amount
 >         ));
 > }
-> `
+> ```
 > - **Memory Footprint:** Only a single line is held in memory at any millisecond, keeping JVM Heap usage $< 50\text{MB}$.
 
 ---
@@ -4990,7 +5044,9 @@ When summing a vast amount of doubles, floating-point errors can accumulate. Jav
 
 The functional map-filter-reduce paradigm popularized by the Java Stream API is foundational across modern data systems:
 
-1. **Apache Spark / Flink Distributed Computing:** Spark's Resilient Distributed Datasets (RDD) and Dataset transformations (ilter, map, educeByKey) mirror Java Streams over terabytes of distributed cluster nodes.
+1. **Apache Spark / Flink Distributed Computing:** Spark's Resilient Distributed Datasets (RDD) and Dataset transformations (
+ilter, map,
+educeByKey) mirror Java Streams over terabytes of distributed cluster nodes.
 2. **Database Query Optimizers (SQL Pushdown):** Stream pipelines allow query projection and predicate pushdown (e.g., applying .filter() before .map() to discard irrelevant rows immediately).
 3. **Kafka Streams / Reactive Streams (Project Reactor, RxJava):** Non-blocking push-based stream processing for real-time fraud detection and analytics pipelines.
 

@@ -1,15 +1,63 @@
-# Spring for Apache Kafka & Event-Driven Architecture: Enterprise Interview Guide
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-resilient-payment-event-streaming)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Engineering  
-> **Topic Coverage**: Kafka Producer Internals (`RecordAccumulator`, `Sender`, `acks`), Consumer Group Rebalancing, `@KafkaListener`, Manual Acknowledgment, Dead Letter Topics (DLT), Exactly-Once Semantics (EOS), Idempotent Producer, `max.poll.interval.ms`, Partition Assignment, `CooperativeStickyAssignor`, Kafka Transactions, and Poison-Pill Remediation.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, Staff & Principal Engineers.  
-> **Target Depth**: 50 Progressive Technical Scenarios with Runtime Mechanics, Production Code Walkthroughs, Beginner Traps, and Real-World Outage Post-Mortems.
+# Spring for Apache Kafka & Event-Driven Architecture: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_kafka_events.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_kafka_events.md)  
+> **Topic Domain:** Kafka Producer Internals (`RecordAccumulator`, `Sender`, `acks`), Consumer Group Rebalancing, `@KafkaListener`, Manual Immediate Acknowledgment (`AckMode.MANUAL_IMMEDIATE`), Dead Letter Topics (DLT), Exactly-Once Semantics (EOS), Idempotent Producer, Partition Assignment (`CooperativeStickyAssignor`), Kafka Transactions, and Poison-Pill Remediation (`S05`)  
+> **Target Framework / Runtime:** Spring Boot 3.3+, Spring for Apache Kafka 3.2+, Apache Kafka Clients 3.7+, OpenJDK HotSpot JVM 17/21 LTS  
+> **Architecture Level:** Principal / Staff+ Distributed Systems Architect & Event-Driven Engineering Lead  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Outage Post-Mortems, HotSpot/OS Zero-Copy `sendfile()`, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Payment Event Streaming Cheatsheet](#-real-world-production-project--code-cheatsheet-resilient-payment-event-streaming) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_kafka_events/)
 
 ---
 
-## Architecture Blueprint: The Kafka Distributed Event System
+## 1. Foundational Primer: What, Why & Where? (The "Head")
 
-> **Kafka Distributed Event Pipeline**:  
+*Before diving into Kafka broker page cache sequential disk writes, consumer group rebalance protocols, idempotent producer epoch sequence validation, and transactional outbox state machines, here is the essential high-level context: what Apache Kafka represents, why distributed append-only commit logs replaced traditional message queues, and where event streaming anchors modern distributed enterprises.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: Apache Kafka is a horizontally distributed, partitioned, replicated, append-only commit log and stream-processing substrate. Unlike traditional message brokers that treat messages as transient packets destroyed upon consumption, Kafka retains events immutably on disk across time windows. **Spring for Apache Kafka** provides high-level Spring abstractions (`KafkaTemplate`, `@KafkaListener`, `DefaultErrorHandler`, `ConcurrentKafkaListenerContainerFactory`) that encapsulate thread lifecycles, connection pooling, serialization, manual offset acknowledgment, and dead-letter topic routing.
+* **Everyday Analogy**: Imagine a global financial stock exchange:
+  - **Traditional Message Queue (RabbitMQ / ActiveMQ)**: A company mailroom where a delivery clerk brings a sealed envelope to your desk. As soon as you open it and read it, the clerk immediately runs it through a paper shredder (**Destructive Consumption**). If another department (e.g. Fraud Detection or Analytics) also needs to see that message, the sender had to explicitly address duplicate envelopes to every department in advance.
+  - **Apache Kafka**: A bulletproof, immutable Wall Street financial ledger carved into granite. When a trade occurs, the ticker clerk writes a new entry at the bottom of the page (**Append-Only Log**). Fifty independent departments—Order Execution, Risk Management, Fraud Scoring, Machine Learning, and Regulatory Compliance—can all stand side-by-side reading the same ledger simultaneously. Each department uses its own personal bookmark (**Consumer Offset**) to track how far down the page it has read, at its own individual speed, without ever deleting words or interfering with each other. If a fraud detection algorithm crashes, it simply restarts and moves its bookmark back 2 hours to re-read history (**Time-Travel Event Replay**).
+* **Architectural Tier Placement**: Operates across the **Distributed Messaging & Event Backbone Tier**. Sits directly between decoupled microservices, database change-data-capture (Debezium CDC) streams, and downstream analytical data lakes (Snowflake, BigQuery).
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Legacy Message Broker Scalability Wall**: Traditional brokers (JMS, AMQP) maintain complex per-message index states (acknowledged, unacknowledged, redelivered, in-flight). As message queues grew to millions of records, broker memory exploded, leading to aggressive disk paging, throughput collapse, and broker OOM crashes.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: Point-to-Point Coupling & Fan-Out Friction**: In large microservice networks, if the Order Service must notify Inventory, Payment, Shipping, Analytics, and Notifications via synchronous REST calls, a 1-second latency blip in Shipping cascades backward, freezing the entire checkout funnel.
+  - 💥 **Headache 2: Destructive Consumption & Inability to Replay**: When a downstream accounting bug corrupts financial records in traditional queues, the processed messages are already destroyed from the queue; teams faced catastrophic data loss with no way to rewind and reprocess.
+  - 💥 **Headache 3: The Eager Rebalance Outage ("Stop-The-World" Storm)**: Early Kafka consumer assignors (`RangeAssignor`, `RoundRobinAssignor`) revoked every single partition from all consumers whenever one consumer joined or left, freezing message consumption across the entire cluster for minutes (**Eager Rebalance Storm**).
+* **The Turning Point**: Developed at LinkedIn in 2010 to handle hundreds of gigabytes of event data per second, Kafka replaced complex in-memory queue broker states with simple, linear filesystem disk structures backed by the OS Page Cache and hardware DMA zero-copy network sockets.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Million-Scale Event Throughput without Memory Bloat) ➔ Solution 1**: Kafka writes sequentially to append-only disk segments (`.log`). Modern NVMe SSDs sustain 3GB/s sequential writes. Consumers read directly from the Linux OS Page Cache via the `sendfile()` system call, completely bypassing Java JVM user-space heap copying (**Zero-Copy DMA Transfer**).
+* **Problem 2 (Consumer Group Failover Without Freezing Streams) ➔ Solution 2**: The `CooperativeStickyAssignor` performs incremental, non-disruptive partition rebalances. If a consumer crashes, only its unassigned partitions migrate, while remaining consumers continue processing without interruption.
+* **Problem 3 (Distributed Partial Failures & Poison Pills) ➔ Solution 3**: Spring Kafka's `DefaultErrorHandler` combined with `DeadLetterPublishingRecoverer` isolates malformed payloads ("poison pills") into dedicated DLT topics with exponential backoff retries, preventing bad messages from blocking valid production traffic.
+* **Quantifiable Enterprise Metrics**:
+  - **100x Throughput Advantage**: A 3-node Kafka cluster sustains 500,000+ messages per second, compared to 15,000 msg/sec for traditional AMQP brokers.
+  - **Zero Payload Copying Overhead**: Zero-copy network transfer drops CPU utilization from 45% down to under 5% during gigabit network saturation.
+  - **Sub-10ms End-to-End Latency**: Producer micro-batching (`linger.ms=5`, `batch.size=32768`) yields sub-10ms p99 transit latencies while achieving 90%+ network packet utilization.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Sits as the event broker for asynchronous financial ledger reconciliation, transactional outbox pattern implementations, real-time IoT ingestion pipelines, and event-driven choreography.
+* **Developer Workflow & SRE Synergy**: SREs track `records-lag-max` (consumer lag) to trigger Kubernetes Horizontal Pod Autoscalers (KEDA). Developers consume messages via clean declarative `@KafkaListener` methods with typed POJO deserialization.
+* **Scalability & Evolutionary Runway**: Partitioning enables linear horizontal scalability: increasing a topic from 10 to 60 partitions allows the consumer fleet to instantly scale from 10 to 60 worker pods without application redesign.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Messaging Engine | Data Retention Model | Read Scalability | Message Routing Flexibility | Best Enterprise Fit |
+| :--- | :--- | :--- | :--- | :--- |
+| **Apache Kafka** | Immutable Append-Only Log (Days/Years) | Ultra-High (Partitioned, Zero-Copy DMA) | Topic & Key-based partition routing | High-throughput event streaming, event sourcing, CDC |
+| **RabbitMQ (AMQP)** | Destructive Queues (Ephemeral) | Medium (Tied to broker queue RAM) | Very High (Direct, Topic, Headers, Fanout exchanges) | Complex RPC routing, low-latency task queues |
+| **ActiveMQ (JMS)** | Destructive Queues & Topics | Low-Medium | High (Selector-based routing) | Legacy enterprise Java EE, XA distributed 2PC transactions |
+| **AWS SQS / SNS** | Managed Ephemeral Queue (14 Days) | High (Fully managed cloud scaling) | Basic (SNS topic fan-out to SQS) | Cloud-native serverless, low operational overhead |
+
+---
+
+## 2. Architecture Blueprint: The Kafka Distributed Event System
+
+> **Kafka Distributed Event Pipeline**:
 > `[Producer: KafkaTemplate]` ──(`RecordAccumulator` / NIO Sockets)──► `[Kafka Brokers: Leaders P0, P1, P2 + Page Cache]` ──(Consumer Group Polling)──► `[Consumer: @KafkaListener]`
 
 | Subsystem Layer | Core Primitives & Components | Wire Protocol & Runtime Mechanics | Reliability & Performance Characteristics |
@@ -24,6 +72,364 @@
 | `record-send-rate` | Records dispatched per second from `KafkaProducer` | Confirms outbound publishing health and pipeline throughput. | Matches expected business transaction load. |
 | `request-latency-avg` | Broker round-trip response time (ms) | Measures network latency and broker disk/page-cache write performance. | $< 15\text{ms}$ on low-latency LAN clusters. |
 | `rebalance-rate` | Partition rebalances per minute | Detects consumer group instability or thread poll timeouts (`max.poll.interval.ms`). | 0 during steady-state operation; alerts immediately on $>0$. |
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Resilient Payment Event Streaming
+
+> **Attached Domain Project:** `Mission-Critical Financial Payment Event Streaming Engine` (`com.cheatsheet.kafka`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring for Apache Kafka 3.2+ | Apache Kafka Clients 3.7+  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_kafka_events/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_kafka_events/)  
+> **Key Technologies Demonstrated:** Idempotent Producer, Exactly-Once Semantics (EOS), `CooperativeStickyAssignor`, Manual Immediate Acknowledgment (`AckMode.MANUAL_IMMEDIATE`), `DefaultErrorHandler` with Exponential DLT Routing, Poison-Pill Deserialization Armor, Transactional Outbox Pattern Bridge.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Payment Event Streaming)
+
+The following runnable configuration and processing engine demonstrates production-grade producer micro-batching, consumer group tuning, dead letter topic failover, and idempotent processing:
+
+```java
+package com.cheatsheet.kafka.engine;
+
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.*;
+import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.stereotype.Service;
+import org.springframework.util.backoff.ExponentialBackOff;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+// ============================================================================
+// 1. FINANCIAL PAYMENT DOMAIN EVENTS
+// ============================================================================
+public class PaymentEventStreamingEngine {
+
+    public record PaymentInitiatedEvent(
+        String paymentId,
+        String sourceAccount,
+        String targetAccount,
+        BigDecimal amount,
+        String currency,
+        Instant timestamp
+    ) {}
+
+    public record PaymentSettledEvent(String paymentId, String status, Instant settledAt) {}
+
+    // ============================================================================
+    // 2. HARDENED PRODUCER CONFIGURATION (Zero-Data-Loss & Micro-Batching)
+    // ============================================================================
+    @Configuration
+    public static class ResilientProducerConfig {
+
+        @Bean
+        public ProducerFactory<String, Object> producerFactory() {
+            Map<String, Object> props = new HashMap<>();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+
+            // Staff-Grade Durability & Ordering
+            props.put(ProducerConfig.ACKS_CONFIG, "all"); // Requires ISR acknowledgment
+            props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); // PID & Sequence numbers
+            props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5); // Safe with idempotence
+            props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE); // Retry until delivery.timeout.ms
+            props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120_000); // 2 minutes max timeout
+
+            // High-Throughput Micro-Batching
+            props.put(ProducerConfig.BATCH_SIZE_CONFIG, 65536); // 64 KB batches
+            props.put(ProducerConfig.LINGER_MS_CONFIG, 20); // 20ms accumulation window
+            props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "zstd"); // Optimal CPU vs compression ratio
+            props.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 67108864); // 64 MB buffer memory
+
+            return new DefaultKafkaProducerFactory<>(props);
+        }
+
+        @Bean
+        public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> factory) {
+            return new KafkaTemplate<>(factory);
+        }
+    }
+
+    // ============================================================================
+    // 3. HARDENED CONSUMER CONFIGURATION (Poison-Pill Armor & DLT Failover)
+    // ============================================================================
+    @Configuration
+    @EnableKafka
+    public static class ResilientConsumerConfig {
+
+        @Bean
+        public ConsumerFactory<String, PaymentInitiatedEvent> consumerFactory() {
+            Map<String, Object> props = new HashMap<>();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+            props.put(ConsumerConfig.GROUP_ID_CONFIG, "payment-settlement-service");
+            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+            props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false); // Strict manual acknowledgment
+
+            // Cooperative Sticky Rebalance Protocol (Eliminates Stop-The-World freezes)
+            props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG,
+                    "org.apache.kafka.clients.consumer.CooperativeStickyAssignor");
+
+            // Heartbeat & Poll Boundaries
+            props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 45_000);
+            props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10_000);
+            props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 300_000); // 5 minutes max batch processing
+            props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 250);
+
+            // Poison Pill Deserialization Armor
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+            props.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class.getName());
+            props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class.getName());
+            props.put(JsonDeserializer.TRUSTED_PACKAGES, "com.cheatsheet.kafka.*");
+
+            return new DefaultKafkaConsumerFactory<>(props);
+        }
+
+        @Bean
+        public ConcurrentKafkaListenerContainerFactory<String, PaymentInitiatedEvent> kafkaListenerContainerFactory(
+                ConsumerFactory<String, PaymentInitiatedEvent> consumerFactory,
+                KafkaTemplate<String, Object> kafkaTemplate) {
+
+            var factory = new ConcurrentKafkaListenerContainerFactory<String, PaymentInitiatedEvent>();
+            factory.setConsumerFactory(consumerFactory);
+            factory.setConcurrency(3); // 3 worker threads matching partition layout
+            factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+
+            // Exponential Backoff DLT Dead-Letter Recoverer
+            DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate,
+                    (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition()));
+
+            ExponentialBackOff backOff = new ExponentialBackOff(1000L, 2.0);
+            backOff.setMaxElapsedTime(10000L); // Max 10 seconds total retry delay
+
+            DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+            // Do not retry poison pill deserialization errors; send directly to DLT
+            errorHandler.addNotRetryableExceptions(org.springframework.kafka.support.serializer.DeserializationException.class);
+
+            factory.setCommonErrorHandler(errorHandler);
+            return factory;
+        }
+    }
+
+    // ============================================================================
+    // 4. IDEMPOTENT TRANSACTION CONSUMER SERVICE
+    // ============================================================================
+    @Service
+    public static class PaymentProcessingConsumer {
+
+        private final Set<String> processedTransactions = ConcurrentHashMap.newKeySet();
+        private final KafkaTemplate<String, Object> kafkaTemplate;
+
+        public PaymentProcessingConsumer(KafkaTemplate<String, Object> kafkaTemplate) {
+            this.kafkaTemplate = kafkaTemplate;
+        }
+
+        @KafkaListener(
+            topics = "payments.initiated",
+            groupId = "payment-settlement-service",
+            containerFactory = "kafkaListenerContainerFactory"
+        )
+        public void processPaymentEvent(ConsumerRecord<String, PaymentInitiatedEvent> record, Acknowledgment ack) {
+            PaymentInitiatedEvent event = record.value();
+
+            // Idempotency Gate (Prevents duplicate settlement on consumer rebalance replay)
+            if (!processedTransactions.add(event.paymentId())) {
+                System.out.println("Duplicate payment skipped via Idempotency Cache: " + event.paymentId());
+                ack.acknowledge();
+                return;
+            }
+
+            // Execute core business settlement logic
+            System.out.println("Settling payment " + event.paymentId() + " for " + event.amount() + " " + event.currency());
+
+            // Emit downstream payment settled event
+            kafkaTemplate.send("payments.settled", event.paymentId(),
+                    new PaymentSettledEvent(event.paymentId(), "COMPLETED", Instant.now()));
+
+            // Commit Kafka offset immediately upon successful execution
+            ack.acknowledge();
+        }
+
+        @KafkaListener(topics = "payments.initiated.DLT", groupId = "payment-dlt-monitoring")
+        public void processDeadLetterQueue(ConsumerRecord<String, Object> record, Acknowledgment ack) {
+            System.err.println("ALARM: Poison Pill routed to DLT from offset: " + record.offset() +
+                    " on partition: " + record.partition());
+            ack.acknowledge();
+        }
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Pipeline Phase | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Producer Record Dispatch** | `acks=all` waits for quorum of In-Sync Replicas; message committed in $< 5\text{ms}$. | Network partition isolates broker; message pending in `RecordAccumulator`. | Producer retries with exponential backoff up to `delivery.timeout.ms=120s`; throws `TimeoutException` if ISR unreachable. |
+| **Consumer Partition Balancing** | Rolling deployment triggers incremental migration via `CooperativeStickyAssignor`. | Eager rebalance causes Stop-The-World pause across all consumers for 45s. | GroupCoordinator only revokes displaced partitions in 2-phase non-blocking handshake; unaffected partitions continue streaming. |
+| **Corrupt Payload Ingress** | Well-formed JSON deserialized into typed Java record. | Bad producer emits malformed byte array ("Poison Pill"). | `ErrorHandlingDeserializer` catches parse error before listener; routes directly to `.DLT` without crashing consumer thread. |
+| **Long-Running Database I/O** | Downstream processing finishes within 200ms; thread polls next batch. | Downstream DB locks for 350s ($> \text{max.poll.interval.ms}=300\text{s}$). | Heartbeat thread stays alive, but Coordinator evicts consumer from group; logs `CommitFailedException`. |
+| **Offset Commit Integrity** | Offsets committed synchronously upon database commit (`AckMode.MANUAL_IMMEDIATE`). | Auto-commit fires every 5s; application crashes while batch half-processed. | Strict manual acknowledgment ensures uncommitted messages are safely re-delivered to another healthy consumer instance. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Blocking Long I/O Inside `@KafkaListener` Exceeding `max.poll.interval.ms`
+* **Outage Incident**: During month-end invoice processing, the payment consumer group entered a permanent rebalance storm. Consumer lag grew to over 2,000,000 messages, freezing order fulfillment for 4 hours.
+* **Root Cause**: The developer fetched a batch of 500 records and called an external third-party tax API synchronously for each record. 500 records $\times$ 1 second = 500 seconds, exceeding the default `max.poll.interval.ms` of 300 seconds. Kafka assumed the consumer was dead and triggered a rebalance. When the next consumer took over, it fetched the same batch, timed out again, and rebalanced in an infinite loop.
+
+```java
+// ❌ BUG: Sequential blocking I/O breaches max.poll.interval.ms, causing infinite rebalance loops
+@KafkaListener(topics = "invoices.process")
+public void processInvoices(List<InvoiceRecord> records, Acknowledgment ack) {
+    for (InvoiceRecord invoice : records) {
+        // 💥 Synchronous HTTP call takes 1,000ms. 500 records = 500 seconds! Breaches max.poll.interval.ms!
+        externalTaxApiClient.calculateTaxSync(invoice);
+    }
+    ack.acknowledge();
+}
+
+// ✅ REFACTORED: Parallel worker pool or tuned batch sizing with strict timeout guards
+@KafkaListener(topics = "invoices.process")
+public void processInvoicesHardened(List<InvoiceRecord> records, Acknowledgment ack) {
+    // Process batch concurrently using bounded parallel streams or reactive offloading
+    records.parallelStream().forEach(invoice -> {
+        externalTaxApiClient.calculateTaxWithTimeout(invoice, Duration.ofMillis(800));
+    });
+    ack.acknowledge();
+}
+```
+
+#### Bug 2: `acks=all` Configured with Default `min.insync.replicas=1` Losing Data
+* **Outage Incident**: A financial ledger lost 1,200 transaction events during an AWS availability zone maintenance event despite the producer explicitly configuring `acks=all`.
+* **Root Cause**: While the producer requested `acks=all`, the broker topic had `min.insync.replicas=1` (the default). When two broker replicas went down, the leader satisfied `acks=all` alone ($1 \ge 1$), acknowledged the producer, and then terminated before the second broker rejoined.
+
+```properties
+# ❌ BUG: Broker configuration renders acks=all useless against single-node failures
+min.insync.replicas=1
+replication.factor=3
+
+# ✅ REFACTORED: Enforce at least 2 in-sync replicas before accepting acks=all writes
+min.insync.replicas=2
+replication.factor=3
+```
+
+#### Bug 3: Poison Pill Halting Consumer Group with Infinite Deserialization Loop
+* **Outage Incident**: A rogue deployment sent an unparseable JSON string to the production events topic. The consumer threw `SerializationException`, crashed, and Spring's default container restarted the poll at the exact same offset, causing a 100% CPU lockup and total pipeline stall.
+
+```java
+// ❌ BUG: Default Deserializer crashes the polling loop on any malformed byte array
+props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+
+// ✅ REFACTORED: Wrap with ErrorHandlingDeserializer to catch poison pills and delegate to DLT
+props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class.getName());
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Unauthenticated Plaintext Kafka Transport (Eavesdropping & Packet Injection)
+* **Vulnerability Vector**: An attacker in the same VPC or Kubernetes cluster sniffs Kafka traffic on port 9092, capturing plaintext credit card numbers and injecting unauthorized fake transactions.
+
+```properties
+# 🚨 VULNERABILITY: Plaintext listener over untrusted cluster network
+listeners=PLAINTEXT://0.0.0.0:9092
+
+# 🛡️ MITIGATION: Enforce mTLS (Mutual TLS) with SASL/SCRAM-SHA-512 Authentication
+listeners=SSL://0.0.0.0:9093
+ssl.keystore.location=/var/private/ssl/kafka.keystore.jks
+ssl.keystore.password=${SECURE_KEYSTORE_PW}
+ssl.truststore.location=/var/private/ssl/kafka.truststore.jks
+ssl.truststore.password=${SECURE_TRUSTSTORE_PW}
+ssl.client.auth=required
+```
+
+#### Sec 2: Replay Attack on Transaction Consumers
+* **Vulnerability Vector**: An attacker replays previously captured `PaymentInitiatedEvent` messages from an alternate testing client, executing double payouts.
+
+```java
+// 🛡️ MITIGATION: Cryptographic Nonce & Distributed Idempotency Key Verification
+@Service
+public class SecurePaymentConsumer {
+    private final RedisTemplate<String, String> redisTemplate;
+
+    public SecurePaymentConsumer(RedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    public boolean verifyAndLockTransaction(String paymentId, String nonce, long timestamp) {
+        // Reject events older than 5 minutes to prevent stale replay
+        if (Math.abs(System.currentTimeMillis() - timestamp) > 300_000) {
+            throw new SecurityException("Expired transaction timestamp replay rejected");
+        }
+        // Atomic SETNX in Redis ensures each payment nonce is processed exactly once globally
+        Boolean isFirstSeen = redisTemplate.opsForValue()
+                .setIfAbsent("tx_nonce:" + paymentId + ":" + nonce, "LOCKED", Duration.ofHours(24));
+        return Boolean.TRUE.equals(isFirstSeen);
+    }
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Publishing Directly to Kafka Inside a Relational Database Transaction
+* **Anti-Pattern**: Calling `kafkaTemplate.send()` inside `@Transactional`. If the database commit fails, the Kafka event was already emitted to consumers, creating permanent state inconsistency.
+
+```java
+// ⚠️ ANTI-PATTERN: Dual-Write Hazard — Kafka sends even if DB transaction rolls back!
+@Transactional
+public void createOrder(Order order) {
+    orderRepository.save(order);
+    kafkaTemplate.send("orders.created", order.getId(), order); // 💥 If DB throws on commit, Kafka event already gone!
+}
+
+// 🏗️ REFACTOR: Transactional Outbox Pattern with Debezium CDC or TransactionSynchronizationManager
+@Transactional
+public void createOrderHardened(Order order) {
+    orderRepository.save(order);
+    // Write outbox record into the SAME database transaction
+    outboxRepository.save(new OutboxEvent("orders.created", order.getId(), toJson(order)));
+    // Debezium CDC reads Postgres WAL and publishes to Kafka with 100% atomicity guarantee
+}
+```
+
+#### Arch 2: Unkeyed Messages Leading to Partition Imbalance & Out-of-Order Execution
+* **Anti-Pattern**: Sending stateful entity updates without a partition key (`kafkaTemplate.send(topic, payload)`), causing concurrent consumer partitions to process updates out of order.
+
+```java
+// ⚠️ ANTI-PATTERN: Null partition key round-robins across partitions; race condition on status updates!
+kafkaTemplate.send("order-updates", orderUpdate);
+
+// 🏗️ REFACTOR: Use domain identity (orderId) as partition key to guarantee strict partition ordering
+kafkaTemplate.send("order-updates", orderUpdate.orderId(), orderUpdate);
+```
 
 ---
 

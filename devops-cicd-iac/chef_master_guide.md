@@ -48,7 +48,7 @@
 
 ## 1.1 Intuitive Mental Model: The Master Executive Chef & Sous-Chef Inspector
 
-Imagine a Michelin-starred restaurant chain operating 5,000 dining rooms across the world. 
+Imagine a Michelin-starred restaurant chain operating 5,000 dining rooms across the world.
 
 If the Head Chef tried to physically pick up a frying pan in Tokyo, then fly to London to stir a sauce, and then sprint to New York to inspect an oven, the entire franchise would collapse. Instead, modern commercial kitchens operate on a strict **declarative standard operating procedure**:
 
@@ -97,7 +97,7 @@ The **Chef Infra Server** acts as the central hub, state authority, and cross-no
 #### Component 3: Managed Node Runtime & Cryptographic Authentication
 The managed server runs the **Chef Infra Client** (`chef-client`), executing as a persistent daemon or scheduled systemd timer:
 - **Scheduled Polling Interval**: The client wakes up periodically (typically every 30 minutes, randomized with a configurable `splay` interval to prevent thundering herd spikes against Erchef).
-- **RSA Asymmetric Authentication**: The node authenticates its identity against the Chef Server using an asymmetric RSA private key located at `/etc/chef/client.pem`. 
+- **RSA Asymmetric Authentication**: The node authenticates its identity against the Chef Server using an asymmetric RSA private key located at `/etc/chef/client.pem`.
 - **Wire-Level Request Signing**: Every outgoing HTTP request to Erchef is cryptographically signed. The request includes custom authentication headers (`X-Ops-Sign`, `X-Ops-UserId`, `X-Ops-Timestamp`, `X-Ops-Content-Hash`, `X-Ops-Authorization-1` through `6`). Erchef verifies the signature against the client's public key stored in PostgreSQL and rejects any request with a timestamp discrepancy greater than 15 minutes to defend against replay attacks.
 
 ---

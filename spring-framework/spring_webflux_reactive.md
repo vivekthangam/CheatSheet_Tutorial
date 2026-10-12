@@ -181,7 +181,7 @@ record ProductDto(String id, String name, Double price) {}
 
 ### Q7: What is the difference between `map()` and `flatMap()` in Project Reactor?
 - **ELI5 Answer:** *"`map` is painting an apple red ($1 \to 1$). `flatMap` is opening a bag of 5 apples and putting each apple onto the conveyor belt asynchronously ($1 \to \text{Publisher}$)."*
-- **Technical Answer:** *"`map()` is synchronous 1-to-1 transformation ($T \to R$). `flatMap()` is asynchronous 1-to-$N$ transformation ($T \to \text{Publisher}<R>$) that subscribes to inner publishers concurrently, flattening emissions into a single output stream."*
+- **Technical Answer:** *"`map()` is synchronous 1-to-1 transformation ($T \to R$). `flatMap()` is asynchronous 1-to-$N$ transformation ($T \to \text{Publisher}[R]$) that subscribes to inner publishers concurrently, flattening emissions into a single output stream."*
 
 ### Q8: What are `Schedulers` in Project Reactor?
 - **ELI5 Answer:** *"The manager who decides which room and desk each worker should sit at to do their chores."*

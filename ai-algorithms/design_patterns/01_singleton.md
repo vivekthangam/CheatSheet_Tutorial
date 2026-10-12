@@ -10,7 +10,7 @@
 
 ## 🧠 The Real-World Mental Model (Explain Like I'm 5)
 
-Imagine the **President of a Country**. At any given moment, there is only **one** person occupying the Office of the President. 
+Imagine the **President of a Country**. At any given moment, there is only **one** person occupying the Office of the President.
 - If citizen Alice asks to speak with the President, she is directed to the current occupant.
 - If citizen Bob across the nation asks to speak with the President, he is directed to that exact same person.
 - Nobody can create a second "new President" simply by calling an inauguration function; all government branches refer back to the exact same executive authority.

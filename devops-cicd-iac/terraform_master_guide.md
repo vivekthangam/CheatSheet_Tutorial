@@ -1028,7 +1028,7 @@ resource "aws_security_group" "db" {
 ```
 
 ### 3. Deep Root Cause Analysis (RCA)
-Terraform’s compiler uses Tarjan's Strongly Connected Components algorithm to validate the Directed Acyclic Graph (DAG). 
+Terraform’s compiler uses Tarjan's Strongly Connected Components algorithm to validate the Directed Acyclic Graph (DAG).
 Because `aws_security_group.app` referenced `aws_security_group.db.id` inside its inline block, and `aws_security_group.db` referenced `aws_security_group.app.id`, a **Circular Dependency Loop** was formed. Neither resource could be created first, breaking topological sort compilation and causing Terraform to crash before making a single API call.
 
 ### 4. Immediate Mitigation & Permanent Architectural Fix

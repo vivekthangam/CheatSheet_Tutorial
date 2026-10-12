@@ -1,6 +1,6 @@
 # 🌌 Omni-Protocol Real-Time Enterprise Platform
 
-> **A Production-Grade Multi-Protocol Engine Unifying Modern Distributed Communication Paradigms**  
+> **A Production-Grade Multi-Protocol Engine Unifying Modern Distributed Communication Paradigms**
 > Covering **REST (OpenAPI 3.1 & Swagger UI)**, **GraphQL (SDL & In-Memory DataLoader)**, **gRPC (Protobuf 3 with all 4 RPC patterns)**, **Server-Sent Events (SSE with `Last-Event-ID` resume)**, **Raw WebSockets (RFC 6455 binary framing & heartbeats)**, and **Socket.IO (Engine.IO state machine & ACKs)**, unified by an **Enterprise Universal Event Message Envelope Standard**.
 
 ---

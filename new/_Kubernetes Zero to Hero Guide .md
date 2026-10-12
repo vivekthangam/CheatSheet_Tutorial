@@ -200,7 +200,7 @@ Here is your structured, phase-by-phase architectural guide to Kubernetes.
 * **The Root Cause:** The container tried to use more memory than its `limit`. In Fintech apps (Java), this often happens because the JVM heap size isn't aware of K8s limits.
 * **The Solution:** Increase the memory limit or tune the JVM.
   ```bash
-  kubectl describe pod <pod-name> # Check 'Last State' for Reason: OOMKilled
+  kubectl describe pod `<pod-name>` # Check 'Last State' for Reason: OOMKilled
   ```
 
 ### Scenario 2: Service Unreachable (Endpoints Missing)
@@ -208,7 +208,7 @@ Here is your structured, phase-by-phase architectural guide to Kubernetes.
 * **The Root Cause:** **Label Selector Mismatch**. The Service is looking for `app: backend`, but your Pod is labeled `app: backend-api`.
 * **The Solution:**
   ```bash
-  kubectl get endpoints <service-name> # If this is <none>, your labels are wrong.
+  kubectl get endpoints `<service-name>` # If this is `&lt;none&gt;`, your labels are wrong.
   ```
 
 ### Scenario 3: The "ImagePullBackOff"
@@ -229,7 +229,7 @@ Here is your structured, phase-by-phase architectural guide to Kubernetes.
 | **Port Forward** | `kubectl port-forward pod/<name> 8080:8080` (Test local apps) |
 
 ### Pro-Tip: The "Golden Rule"
-**Requests** are what the scheduler uses to find a home for your pod. **Limits** are the "hard ceiling." If you set your limits too low, your app crashes. If you set your requests too high, you waste money. 
+**Requests** are what the scheduler uses to find a home for your pod. **Limits** are the "hard ceiling." If you set your limits too low, your app crashes. If you set your requests too high, you waste money.
 
 **Target:** Set `requests` to what your app uses during normal load, and `limits` to $2 \times$ that value to handle spikes.
 
@@ -308,11 +308,11 @@ In this phase, we move from "running a container" to "orchestrating a workload."
 ---
 
 ## Your First "Senior" Task
-To master Phase 1, you must be able to explain the "Heartbeat." 
+To master Phase 1, you must be able to explain the "Heartbeat."
 
-> **The Heartbeat Logic:** The Kubelet on a Worker Node sends a "Heartbeat" to the API Server every 10 seconds. If the API Server doesn't hear from a Node for 40 seconds (default), it marks the Node as `NotReady` and the Controller Manager starts rescheduling those Pods to healthy nodes. 
+> **The Heartbeat Logic:** The Kubelet on a Worker Node sends a "Heartbeat" to the API Server every 10 seconds. If the API Server doesn't hear from a Node for 40 seconds (default), it marks the Node as `NotReady` and the Controller Manager starts rescheduling those Pods to healthy nodes.
 
-**Next Step:** Once you are comfortable with how the brain talks to the muscle, we move to **Phase 2: Controllers & Traffic**, where we actually make these Pods accessible to the internet. 
+**Next Step:** Once you are comfortable with how the brain talks to the muscle, we move to **Phase 2: Controllers & Traffic**, where we actually make these Pods accessible to the internet.
 
 Shall we proceed to Phase 2, or do you want a deep-dive YAML example for a Phase 1 Pod?
 
@@ -358,12 +358,12 @@ Nodes are the "workers" that actually run your code.
 
 ### **A. The Kubelet (The Node Agent)**
 * **What it is:** An agent that runs on each node in the cluster. It ensures that containers are running in a Pod.
-* **Mechanism:** It receives a **PodSpec** (a YAML/JSON object describing a pod) from the API Server and tells the Container Runtime (Docker/Containerd) to start the containers. 
+* **Mechanism:** It receives a **PodSpec** (a YAML/JSON object describing a pod) from the API Server and tells the Container Runtime (Docker/Containerd) to start the containers.
 * **Key Duty:** It performs **Liveness** and **Readiness** probes to make sure your Spring Boot or Go apps are actually healthy.
 
 ### **B. kube-proxy (The Networker)**
 * **What it is:** A network proxy that runs on each node, implementing part of the Kubernetes Service concept.
-* **Mechanism:** It maintains network rules on nodes. These rules allow network communication to your Pods from inside or outside of your cluster. 
+* **Mechanism:** It maintains network rules on nodes. These rules allow network communication to your Pods from inside or outside of your cluster.
 * **Evolution:** Most modern clusters use **IPVS** or **eBPF** mode for `kube-proxy` because the old `iptables` mode becomes slow when you have thousands of services.
 
 ---
@@ -444,7 +444,7 @@ In Phase 1, we learned that **Pods** are ephemeral (they die and don't come back
 ### 2. Deployments: The Version Manager
 * **What it is:** A higher-level object that manages ReplicaSets. This is the **standard** way to deploy stateless apps.
 * **The Problem:** How do you update your code from `v1` to `v2` without stopping the service?
-* **Mechanism (Rolling Update):** The Deployment creates a *new* ReplicaSet for `v2`. it slowly scales `v2` up to 1 unit, then scales `v1` down to 2 units, repeating until only `v2` remains. 
+* **Mechanism (Rolling Update):** The Deployment creates a *new* ReplicaSet for `v2`. it slowly scales `v2` up to 1 unit, then scales `v1` down to 2 units, repeating until only `v2` remains.
 * **Under the Hood:** It keeps a history of ReplicaSets, allowing you to perform a **Rollback** (`kubectl rollout undo`) if the new version has a bug.
 
 
@@ -506,7 +506,7 @@ for above has any types under any topic add them o
 
 # gemini response
 
-As a Senior Architect, I never look at a feature as a single tool. Everything in Kubernetes has "flavors" (Types) designed for specific architectural constraints. 
+As a Senior Architect, I never look at a feature as a single tool. Everything in Kubernetes has "flavors" (Types) designed for specific architectural constraints.
 
 Let's break down the **Types** for each core topic in Phase 2. This is what separates someone who "knows K8s" from someone who can "design K8s."
 
@@ -515,7 +515,7 @@ Let's break down the **Types** for each core topic in Phase 2. This is what sepa
 ## 1. Deployment Strategies (The "How" of Updates)
 When you update your **API Hub** or **Fintech service**, you have to choose a strategy.
 
-* **RollingUpdate (Default):** Gradually replaces old Pods with new ones. 
+* **RollingUpdate (Default):** Gradually replaces old Pods with new ones.
     * *When to use:* Most web apps where you want zero downtime.
 * **Recreate:** Kills all old Pods first, then starts new ones.
     * *When to use:* If your app cannot run two versions at the same time (e.g., a database migration that isn't backward compatible).
@@ -560,7 +560,7 @@ Kubernetes doesn't just check if a process is running; it checks if it's *actual
     * *Why:* To fix "deadlocked" apps that are running but frozen.
 * **Readiness Probe:** "Are you ready for traffic?" If this fails, K8s **removes the Pod from the Service**.
     * *Why:* To stop users from hitting an app that is still loading its cache or connecting to a database.
-* **Startup Probe:** "Are you still waking up?" 
+* **Startup Probe:** "Are you still waking up?"
     * *Why:* For "heavy" apps (like some legacy Java monoliths) that take 2 minutes to start. It disables Liveness/Readiness until the app is officially "up."
 
 
@@ -576,7 +576,7 @@ This is a "hidden" type you must know. When you create a **Service**, K8s automa
 ---
 
 ### Are you ready for Phase 3: Storage & Persistence?
-In Phase 2, we treated Pods as "cattle" (disposable). In **Phase 3**, we deal with "pets"—Databases and files that **must** survive even if a Pod or Node dies. 
+In Phase 2, we treated Pods as "cattle" (disposable). In **Phase 3**, we deal with "pets"—Databases and files that **must** survive even if a Pod or Node dies.
 
 **Should we start Phase 3?**
 
@@ -635,7 +635,7 @@ To solve this, we use the **Storage Stack**.
 * **The Problem:** You don't want to bake your `DB_PASSWORD` or `FINTECH_API_KEY` into your Docker image.
 * **The Mechanism:**
     * **ConfigMaps:** For non-sensitive data (e.g., `application.properties`).
-    * **Secrets:** For sensitive data (Base64 encoded). 
+    * **Secrets:** For sensitive data (Base64 encoded).
 * **Senior Note:** By default, Secrets are only Base64 encoded, **not encrypted**. In production, you must use **Encryption at Rest** or integrate with a tool like **HashiCorp Vault**.
 
 ---
@@ -651,7 +651,7 @@ To solve this, we use the **Storage Stack**.
 ---
 
 ## Summary for the Senior Developer
-In Phase 2, we learned how to route traffic. In Phase 3, we learned how to protect the data that traffic generates. 
+In Phase 2, we learned how to route traffic. In Phase 3, we learned how to protect the data that traffic generates.
 
 **Wait! One final check:**
 If you delete a **StatefulSet**, K8s **does not** delete the PVCs. This is a safety feature to prevent accidental data loss. You must delete the PVCs manually if you truly want the data gone.
@@ -741,7 +741,7 @@ kubectl get sc
 Look for the `(default)` tag. If you see multiple classes, you can "steer" your **StatefulSets** to use the right hardware by setting the `storageClassName` field in the `volumeClaimTemplates`.
 
 ### Troubleshooting Tip: The "Wrong Zone" Error
-If your Pod is stuck in `Pending` with the error `Node has taints that the pod didn't tolerate` or `Volume node affinity conflict`, it usually means your StorageClass created a disk in **Zone A**, but your Pod was scheduled in **Zone B**. 
+If your Pod is stuck in `Pending` with the error `Node has taints that the pod didn't tolerate` or `Volume node affinity conflict`, it usually means your StorageClass created a disk in **Zone A**, but your Pod was scheduled in **Zone B**.
 * **Fix:** Use `volumeBindingMode: WaitForFirstConsumer`.
 
 **Are you ready to move to Phase 4: Security & Ecosystem? We will cover RBAC (who can do what) and Network Policies (which Pod can talk to which Pod).**
@@ -777,7 +777,7 @@ In this phase, we focus on the "Hardening" of your infrastructure.
 ## 2. Network Policies (The Internal Firewall)
 * **The Feature:** Controlling the "East-West" traffic between Pods.
 * **The Problem:** By default, every Pod in Kubernetes can talk to every other Pod. If your Frontend is hacked, the hacker can directly "ping" your internal Database.
-* **Mechanism:** It works at Layer 3/4. You define rules based on labels. 
+* **Mechanism:** It works at Layer 3/4. You define rules based on labels.
     * *Example:* "Only Pods with label `app: backend` can talk to Pods with label `app: database` on port 5432."
 * **Real-World Application:** Isolating your **Fintech** payment processing pods so they cannot be reached by the public-facing "Marketing" pods.
 
@@ -857,8 +857,8 @@ As a **Senior Architect**, your value isn't just in knowing the commands, but in
 | **Port Forward** | `kubectl port-forward svc/<name> 8080:80` | Access internal services (like a DB) without an Ingress. |
 
 ### 2. Networking & Labels
-* **List Endpoints:** `kubectl get ep <service-name>` — If this is empty, your Service labels don't match your Pod labels.
-* **Check DNS:** `kubectl exec -i -t <pod-name> -- nslookup kubernetes.default` — Verifies if CoreDNS is functioning.
+* **List Endpoints:** `kubectl get ep `<service-name>`` — If this is empty, your Service labels don't match your Pod labels.
+* **Check DNS:** `kubectl exec -i -t `<pod-name>` -- nslookup kubernetes.default` — Verifies if CoreDNS is functioning.
 * **Labeling:** `kubectl label pods <name> healthy=false` — Useful for manually pulling a "bad" pod out of a Service rotation for debugging.
 
 ---
@@ -1134,7 +1134,7 @@ spec:
 | **CronJob** | Backups / Reports | Runs on a schedule. |
 
 ### The Architect's Perspective
-In a production cluster, you will likely use **all** of these. 
+In a production cluster, you will likely use **all** of these.
 * **Deployment** for your API Hub.
 * **StatefulSet** for your Redis cache.
 * **DaemonSet** for your Splunk/ELK logging.
@@ -1168,7 +1168,7 @@ Here is a phase-by-phase, scenario-based masterclass for Kubernetes.
 * **Example:**
     ```bash
     # Diagnose
-    kubectl describe pod <pod-name> 
+    kubectl describe pod `<pod-name>` 
     # Look for: "FailedScheduling: 0/3 nodes are available: 3 Insufficient cpu."
     
     # Fix: Update your Deployment YAML to a realistic request
@@ -1189,8 +1189,8 @@ Here is a phase-by-phase, scenario-based masterclass for Kubernetes.
 * **Example:**
     ```bash
     # Diagnose
-    kubectl get endpoints <service-name>
-    # If ENDPOINTS is <none>, it's a label issue.
+    kubectl get endpoints `<service-name>`
+    # If ENDPOINTS is `&lt;none&gt;`, it's a label issue.
     
     # Fix: Align labels in Service YAML
     spec:
@@ -1211,11 +1211,11 @@ Here is a phase-by-phase, scenario-based masterclass for Kubernetes.
 * **Example:**
     ```bash
     # Diagnose
-    kubectl describe pod <db-pod>
+    kubectl describe pod `<db-pod>`
     # Look for: "Multi-Attach error for volume..."
     
     # Fix: Ensure the old node is not "NotReady". If it is, you may need to:
-    kubectl delete pod <old-pod-name> --grace-period=0 --force
+    kubectl delete pod `<old-pod-name>` --grace-period=0 --force
     ```
 
 
@@ -1254,7 +1254,7 @@ Here is a phase-by-phase, scenario-based masterclass for Kubernetes.
 * **Example:**
     ```bash
     # Diagnose
-    kubectl get pod <pod-name> -o yaml
+    kubectl get pod `<pod-name>` -o yaml
     # Look for: "lastState: terminated: reason: OOMKilled"
     
     # Fix: Adjust limits in Deployment
@@ -1433,7 +1433,7 @@ Example:
 Bash
 
 # Diagnose
-kubectl describe pod <pod-name> # Look for: "FailedScheduling: 0/3 nodes are available: 3 Insufficient cpu."# Fix: Update your Deployment YAML to a realistic request
+kubectl describe pod `<pod-name>` # Look for: "FailedScheduling: 0/3 nodes are available: 3 Insufficient cpu."# Fix: Update your Deployment YAML to a realistic request
 resources:
   requests:
     cpu: "250m" # Down from 2000m
@@ -1447,7 +1447,7 @@ Example:
 Bash
 
 # Diagnose
-kubectl get endpoints <service-name># If ENDPOINTS is <none>, it's a label issue.# Fix: Align labels in Service YAML
+kubectl get endpoints `<service-name>`# If ENDPOINTS is `&lt;none&gt;`, it's a label issue.# Fix: Align labels in Service YAML
 spec:
   selector:
     app: payment-api # Must match Pod labels
@@ -1461,8 +1461,8 @@ Example:
 Bash
 
 # Diagnose
-kubectl describe pod <db-pod># Look for: "Multi-Attach error for volume..."# Fix: Ensure the old node is not "NotReady". If it is, you may need to:
-kubectl delete pod <old-pod-name> --grace-period=0 --force
+kubectl describe pod `<db-pod>`# Look for: "Multi-Attach error for volume..."# Fix: Ensure the old node is not "NotReady". If it is, you may need to:
+kubectl delete pod `<old-pod-name>` --grace-period=0 --force
 Phase 4: Security & Networking Failures (The "Locked Out" Phase)
 Scenario: The "Silent" Forbidden Error
 The Problem: Your application needs to list other pods (for service discovery), but it keeps getting a 403 Forbidden error.
@@ -1487,7 +1487,7 @@ Example:
 Bash
 
 # Diagnose
-kubectl get pod <pod-name> -o yaml# Look for: "lastState: terminated: reason: OOMKilled"# Fix: Adjust limits in Deployment
+kubectl get pod `<pod-name>` -o yaml# Look for: "lastState: terminated: reason: OOMKilled"# Fix: Adjust limits in Deployment
 resources:
   limits:
     memory: "1Gi" # Increase limit to handle spikes
@@ -1586,7 +1586,7 @@ command: ["/bin/sh", "-c", "python app.py && tail -f /dev/null"]
 **Example:**
 ```bash
 # Diagnose sidecar logs
-kubectl logs <pod-name> -c logging-sidecar
+kubectl logs `<pod-name>` -c logging-sidecar
 ```
 
 ### Scenario 7: The "Ephemeral Disk" Wipe
@@ -1610,7 +1610,7 @@ volumes:
 **Example:**
 ```bash
 # Force delete (Extreme measure)
-kubectl delete pod <pod-name> --grace-period=0 --force
+kubectl delete pod `<pod-name>` --grace-period=0 --force
 ```
 
 ### Scenario 9: The "Noisy Neighbor" CPU Stealing
@@ -1689,7 +1689,7 @@ volumes:
 **Example:**
 ```bash
 # Diagnose
-kubectl logs <pod-name> -c <init-container-name>
+kubectl logs `<pod-name>` -c <init-container-name>
 ```
 
 ### Scenario 13: The "Image Tag" Confusion
@@ -1773,7 +1773,7 @@ docker buildx build --platform linux/amd64 -t my-app:v1 .
 **Example:**
 ```bash
 # Diagnose
-kubectl describe pod <pod-name> # Check Events for PostStartHook failure
+kubectl describe pod `<pod-name>` # Check Events for PostStartHook failure
 ```
 
 ### Scenario 19: The "Orphaned" PID 1
@@ -2927,7 +2927,7 @@ To deliver a **200-point High-Density Cheat Sheet**, I have organized this into 
 
 
 
-This 200-point list is your survival kit. Since you're working on an **Authorization team** in **Fintech**, I strongly suggest moving to **Zone 5 (Security)** next to deep-dive into how OPA or RBAC can protect your payment APIs. 
+This 200-point list is your survival kit. Since you're working on an **Authorization team** in **Fintech**, I strongly suggest moving to **Zone 5 (Security)** next to deep-dive into how OPA or RBAC can protect your payment APIs.
 
 What’s the first real-world task you want to apply this to?
 
@@ -2935,7 +2935,7 @@ What’s the first real-world task you want to apply this to?
 
 # you asked
 
-i want all kubernets commands so give me commds like kubert commnds wit opiotns explnationa with example and ex,mplan commnds with all options and exmaplanation and example like below and category all and share by phase by phase 
+i want all kubernets commands so give me commds like kubert commnds wit opiotns explnationa with example and ex,mplan commnds with all options and exmaplanation and example like below and category all and share by phase by phase
 docker context create
 
 Purpose: Defines a new connection to a remote Docker engine via SSH or TCP.
@@ -3390,7 +3390,7 @@ Here are the next 20 commands focusing on **Networking and Traffic Management**.
 
 ### 42. `kubectl describe service`
 * **Purpose:** Show detailed configuration and active endpoints of a service.
-* **Description:** The most important part of this command is the **Endpoints** section. If Endpoints is `<none>`, your service selector doesn't match your Pod labels.
+* **Description:** The most important part of this command is the **Endpoints** section. If Endpoints is ``&lt;none&gt;``, your service selector doesn't match your Pod labels.
 * **Example:** `kubectl describe svc payment-gateway`
 
 ### 43. `kubectl expose`
@@ -3935,7 +3935,7 @@ Here are the next 20 commands for **Phase 7: The Expert's Toolkit**.
 
 ### 124. `kubectl get pods -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}'`
 * **Purpose:** Filter pods using advanced JSONPath "Questions" (Conditional logic).
-* **Description:** Returns only the names of pods that are currently in the `Running` phase. 
+* **Description:** Returns only the names of pods that are currently in the `Running` phase.
 * **Example:** `kubectl get pods -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}'`
 
 ### 125. `kubectl patch node <node-name> -p '{"spec":{"unschedulable":true}}'`
@@ -4019,7 +4019,7 @@ Here are the next 20 commands for **Phase 7: The Expert's Toolkit**.
 * **Description:** The fastest way to check if your ConfigMaps were correctly injected without opening an interactive shell.
 * **Example:** `kubectl exec api-pod-v1 -- printenv | grep DB_`
 
-### 140. `kubectl get pod <pod-name> -o yaml | kubectl replace --force -f -`
+### 140. `kubectl get pod `<pod-name>` -o yaml | kubectl replace --force -f -`
 * **Purpose:** "Nuke and Pave" a specific pod using its own definition.
 * **Description:** Useful for clearing strange internal container states without changing the Deployment.
 * **Example:** `kubectl get pod api-pod -o yaml | kubectl replace --force -f -`
@@ -4066,7 +4066,7 @@ Here are the next 20 commands for **Phase 8: Automation & Scripting**.
 * **Description:** (Requires `kubectl-neat` plugin). Essential when you want to "get" a live pod's YAML and use it as a template for a new one without all the "junk" data.
 * **Example:** `kubectl get pod api-pod -o yaml | kubectl neat > clean-pod.yaml`
 
-### 145. `kubectl sniff <pod-name>`
+### 145. `kubectl sniff `<pod-name>``
 * **Purpose:** Start a remote packet capture (Wireshark) on a pod's network interface.
 * **Description:** (Requires `ksniff` plugin). The ultimate network debugging tool. It uploads a static `tcpdump` binary to the pod and streams packets back to your local Wireshark.
 * **Example:** `kubectl sniff payment-api-v1 -n finance`

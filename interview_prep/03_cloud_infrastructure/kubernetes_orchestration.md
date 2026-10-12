@@ -1,9 +1,10 @@
 # Kubernetes & Container Orchestration: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 03 — Cloud Infrastructure  
-> **Topic Coverage**: Pod Lifecycle, Deployments vs StatefulSets vs DaemonSets, Services (ClusterIP/NodePort/LoadBalancer/ExternalName), Kube-Proxy (iptables vs IPVS vs eBPF), ConfigMaps & Secrets, Resource Requests/Limits & CFS Bandwidth Quotas, HPA/KEDA/VPA/Karpenter, PodDisruptionBudgets, RBAC & ServiceAccount Tokens, Ingress vs Gateway API, Health Probes (Liveness/Readiness/Startup), `kube-scheduler` Extender Framework, etcd Architecture & Raft Consensus, CNI Plugins (Calico, Flannel, Cilium), PersistentVolumes/CSI, NetworkPolicies, Operators/CRDs, and Zero-Downtime Rolling Updates.  
-> **Target Audience**: Senior Software Engineers, Lead Architects, DevOps/Platform/SRE Engineers.  
+> **Curriculum Milestone**: Module 03 — Cloud Infrastructure
+> **Topic Coverage**: Pod Lifecycle, Deployments vs StatefulSets vs DaemonSets, Services (ClusterIP/NodePort/LoadBalancer/ExternalName), Kube-Proxy (iptables vs IPVS vs eBPF), ConfigMaps & Secrets, Resource Requests/Limits & CFS Bandwidth Quotas, HPA/KEDA/VPA/Karpenter, PodDisruptionBudgets, RBAC & ServiceAccount Tokens, Ingress vs Gateway API, Health Probes (Liveness/Readiness/Startup), `kube-scheduler` Extender Framework, etcd Architecture & Raft Consensus, CNI Plugins (Calico, Flannel, Cilium), PersistentVolumes/CSI, NetworkPolicies, Operators/CRDs, and Zero-Downtime Rolling Updates.
+> **Target Audience**: Senior Software Engineers, Lead Architects, DevOps/Platform/SRE Engineers.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World Outage Post-Mortems, and Rapid-Fire Interview Matrix.
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Production Kubernetes Cheatsheet](#-real-world-production-project--code-cheatsheet-zero-downtime-kubernetes-orchestrator) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/03_cloud_infrastructure/kubernetes_orchestration/)
 
 ---
 
@@ -40,6 +41,414 @@
 |  |  └─ volumes (/etc/config mount) |   |  └─ volumes               |   |  └─ volumes               | |  |
 |  +---------------------------------+   +---------------------------+   +---------------------------+ |  |
 +---------------------------------------------------------------------------------------------------------+
+```
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Zero-Downtime Kubernetes Orchestrator
+
+> **Attached Domain Project:** `Production Kubernetes Zero-Downtime Canary Reconciler & Manifest Suite` (`com.cheatsheet.k8s`)  
+> **Target Tooling:** Kubernetes v1.28–v1.31+ | Fabric8 Kubernetes Client 6.13+ | Kube-Proxy eBPF / iptables  
+> **Companion Code Mirror:** [`code/03_cloud_infrastructure/kubernetes_orchestration/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/03_cloud_infrastructure/kubernetes_orchestration/)  
+> **Key Technologies Demonstrated:** Zero-Downtime Rolling Deployments, PreStop Hook (`sleep 15`), PodDisruptionBudget (`maxUnavailable: 1`), TopologySpreadConstraints across AZs, Startup/Readiness/Liveness Probes, Restricted Pod Security Standards (`runAsNonRoot`, `readOnlyRootFilesystem`), Default-Deny Egress/Ingress NetworkPolicies, Fabric8 Canary Rollout Watch Controller.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Fabric8 Reconciler & Hardened Manifest)
+
+The following runnable Fabric8 Java controller continuously inspects canary deployments, evaluates replica health against PodDisruptionBudgets, and executes automated rollbacks when container readiness probes fail:
+
+```java
+package com.cheatsheet.k8s.engine;
+
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+// ============================================================================
+// FABRIC8 CANARY RECONCILER & HEALTH VERIFIER
+// ============================================================================
+@Component
+public class KubernetesCanaryReconciler implements CommandLineRunner {
+
+    private final KubernetesClient client;
+
+    public KubernetesCanaryReconciler() {
+        this.client = new KubernetesClientBuilder().build();
+    }
+
+    public record CanaryRolloutStatus(boolean isHealthy, int readyReplicas, int desiredReplicas, String message) {}
+
+    public CanaryRolloutStatus evaluateCanaryHealth(String namespace, String deploymentName) {
+        Deployment deployment = client.apps().deployments()
+                .inNamespace(namespace)
+                .withName(deploymentName)
+                .get();
+
+        if (deployment == null) {
+            return new CanaryRolloutStatus(false, 0, 0, "Deployment not found: " + deploymentName);
+        }
+
+        int desired = deployment.getSpec().getReplicas() != null ? deployment.getSpec().getReplicas() : 1;
+        Integer ready = deployment.getStatus() != null && deployment.getStatus().getReadyReplicas() != null
+                ? deployment.getStatus().getReadyReplicas() : 0;
+
+        // Fetch individual pod probe statuses
+        PodList podList = client.pods().inNamespace(namespace)
+                .withLabels(Map.of("app", deploymentName))
+                .list();
+
+        long crashLoopCount = podList.getItems().stream()
+                .filter(this::isPodInCrashLoop)
+                .count();
+
+        if (crashLoopCount > 0) {
+            return new CanaryRolloutStatus(false, ready, desired,
+                    "Detected " + crashLoopCount + " pods in CrashLoopBackOff! Rollback required.");
+        }
+
+        boolean healthy = ready.equals(desired);
+        return new CanaryRolloutStatus(healthy, ready, desired,
+                healthy ? "Canary stable: all " + ready + " replicas Ready." : "Canary warming up: " + ready + "/" + desired);
+    }
+
+    private boolean isPodInCrashLoop(Pod pod) {
+        if (pod.getStatus() == null || pod.getStatus().getContainerStatuses() == null) return false;
+        return pod.getStatus().getContainerStatuses().stream()
+                .anyMatch(status -> status.getState() != null &&
+                        status.getState().getWaiting() != null &&
+                        "CrashLoopBackOff".equalsIgnoreCase(status.getState().getWaiting().getReason()));
+    }
+
+    public void rollbackDeployment(String namespace, String deploymentName) {
+        System.err.println("🚨 INITIATING AUTOMATED ROLLBACK for " + deploymentName + " in " + namespace);
+        client.apps().deployments()
+                .inNamespace(namespace)
+                .withName(deploymentName)
+                .rolling()
+                .undo();
+        System.out.println("✅ Rollback command dispatched to kube-apiserver.");
+    }
+
+    @Override
+    public void run(String... args) {
+        System.out.println("Kubernetes Canary Reconciler initialized with cluster apiserver: " +
+                client.getMasterUrl());
+    }
+}
+```
+
+#### Production-Grade Hardened Kubernetes Manifest (`hardened-production-deployment.yaml`)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-gateway
+  namespace: production
+  labels:
+    app: payment-gateway
+    tier: api
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%        # 1 extra pod allowed during rollout
+      maxUnavailable: 0    # ZERO pod drop during rolling deployment
+  selector:
+    matchLabels:
+      app: payment-gateway
+  template:
+    metadata:
+      labels:
+        app: payment-gateway
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: [payment-gateway]
+                topologyKey: "topology.kubernetes.io/zone" # Spread pods across AWS/GCP AZs
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: internal-registry.company.com/payment-gateway:v2.4.1
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"] # Crucial: Drains in-flight requests while iptables updates
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1024Mi"
+            limits:
+              cpu: "2000m"     # Prevent CFS bandwidth starvation while protecting node
+              memory: "1536Mi"  # Hard cap prevents runaway leaks triggering host OOM
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # 1. Startup Probe: Allows JVM 45s warmup without triggering premature liveness restart
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+          # 2. Liveness Probe: Detects internal thread deadlocks; triggers container restart
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          # 3. Readiness Probe: Cuts traffic from Service endpoints if DB pool is exhausted
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 2
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-gateway-pdb
+  namespace: production
+spec:
+  minAvailable: 3 # Guarantees minimum 3 pods always serving during cluster node drains/upgrades
+  selector:
+    matchLabels:
+      app: payment-gateway
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payment-gateway-netpol
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: payment-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ingress-controller
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres-payment-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32 # Block AWS Instance Metadata Service SSRF!
+      ports:
+        - protocol: TCP
+          port: 443
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Phase | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Rolling Deployment** | `maxUnavailable: 0` spins up new replica first; `readinessProbe` passes; traffic seamlessly routes. | New replica starts taking traffic immediately without warmup; client gets `502 Bad Gateway`. | `startupProbe` buffers JVM startup; `preStop: sleep 15` ensures kube-proxy flushes iptables before `SIGTERM`. |
+| **CFS CPU Quota Throttling** | Container runs with properly sized CPU requests and generous limits. | Strict CPU limit (`cpu: 200m`) hits CFS quota period ($100\text{ms}$); thread stalls 80ms per tick. | Monitored via `container_cpu_cfs_throttled_periods_total`; eliminate artificial CPU limits or increase allocation. |
+| **Node Maintenance Drain** | `kubectl drain node-1` respects PodDisruptionBudget (`minAvailable: 3`); pods migrate cleanly. | `minAvailable: 100%` configured on single-replica service; drain command hangs indefinitely. | PDB eviction API rejects eviction with `429 Too Many Requests`; alert platform SRE on persistent drain locks. |
+| **Database Network Outage** | Downstream Postgres DB drops; `readinessProbe` fails on `/actuator/health/readiness`. | Pod fails `livenessProbe` on DB failure; kubelet restarts all 100 pods simultaneously (Thundering Herd). | Separate Liveness (process health) from Readiness (traffic availability); endpoints removed without crash loop. |
+| **Metadata SSRF Exfiltration** | Web application has SSRF vulnerability; egress NetworkPolicy blocks `169.254.169.254`. | Workload fetches IAM role credentials from Cloud Metadata endpoint; cluster hijacked. | NetworkPolicy drops metadata IP egress; IMDSv2 requires PUT hop-limit tokens. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Missing `preStop` Hook Causing 502 Bad Gateway Spikes During Rolling Deployments
+* **Outage Incident**: Every deployment of the shopping cart service produced a 30-second spike of $502\text{ Bad Gateway}$ and $504\text{ Gateway Timeout}$ errors on the API Gateway, impacting $4.2\%$ of checkout requests.
+* **Root Cause**: When a Pod is terminated, `kubelet` sends `SIGTERM` concurrently while `kube-apiserver` notifies endpoints controllers. In distributed nodes, `kube-proxy` takes 2 to 5 seconds to update Linux `iptables`/IPVS rules across the cluster. The container shut down immediately, dropping incoming connections that were still being routed to its IP.
+
+```yaml
+# ❌ BUG: Container terminates immediately upon SIGTERM while iptables still routes traffic to it
+containers:
+  - name: api
+    image: company/api:v1
+
+# ✅ REFACTORED: Add preStop sleep to allow endpoints and kube-proxy to converge first
+containers:
+  - name: api
+    image: company/api:v1
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 15"] # Allows kube-proxy 15s to prune endpoints
+```
+
+#### Bug 2: PodDisruptionBudget Deadlocking Node Drain & Autoscaling Operations
+* **Outage Incident**: An automated security patching pipeline attempting to drain an EKS node pool hung for 14 hours, blocking critical CVE kernel patches.
+* **Root Cause**: A team configured `minAvailable: 2` on a Deployment that only had `replicas: 2`. When the cluster autoscaler or node drain attempted to evict pod 1, the eviction API refused ($1 < 2$), resulting in an unresolvable PDB deadlock.
+
+```yaml
+# ❌ BUG: minAvailable equals replicas; node drain CANNOT evict ANY pod without breaching PDB!
+spec:
+  minAvailable: 2 # deployment only has 2 replicas!
+
+# ✅ REFACTORED: Use maxUnavailable: 1 or size minAvailable to allow at least 1 pod eviction
+spec:
+  maxUnavailable: 1
+```
+
+#### Bug 3: Coupling Liveness Probe to Downstream Database Health
+* **Outage Incident**: When the primary PostgreSQL database slowed down under heavy write load, all 50 microservice pods failed their liveness probes, causing `kubelet` to restart every pod simultaneously. The simultaneous restart stampeded the database, causing a 3-hour cascade outage.
+
+```yaml
+# ❌ BUG: Liveness probe checks external database; causes cascading restart storm
+livenessProbe:
+  httpGet:
+    path: /actuator/health # Checks DB, Redis, RabbitMQ!
+    port: 8080
+
+# ✅ REFACTORED: Liveness checks ONLY internal process health; Readiness checks dependencies
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness # Checks JVM thread health & internal runtime only
+    port: 8080
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness # Removes traffic if DB down, but NEVER kills the pod!
+    port: 8080
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Root Container Breakout & Host Filesystem Compromise
+* **Vulnerability Vector**: An attacker exploits a Remote Code Execution (RCE) flaw in a public API running as UID 0 (root). The container filesystem is writable, allowing the attacker to mount host devices or overwrite container binaries.
+
+```yaml
+# 🚨 VULNERABILITY: Default securityContext permits root execution and filesystem modifications
+spec:
+  containers:
+    - name: api
+      image: company/api:v1
+
+# 🛡️ MITIGATION: Enforce Restricted Pod Security Standard with Read-Only Root Filesystem
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: api
+      image: company/api:v1
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+```
+
+#### Sec 2: SSRF Token Theft via AWS Instance Metadata Service (IMDS)
+* **Vulnerability Vector**: An application with an SSRF vulnerability queries `http://169.254.169.254/latest/meta-data/iam/security-credentials/` and extracts the node's IAM credentials, gaining full control over AWS VPC, S3, and RDS resources.
+
+```yaml
+# 🛡️ MITIGATION: Default-Deny Egress NetworkPolicy with Metadata Exclusion
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-cloud-metadata
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32 # Explicitly deny Cloud Metadata IP!
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Missing Resource Requests Leading to Node-Wide Cascading OOMKills
+* **Anti-Pattern**: Omitting `resources.requests` allows the Kubernetes scheduler to place 100 memory-hungry pods on a single 32GB node based purely on initial footprint. When all pods ramp up memory under load, the Linux kernel OOM Killer terminates critical node processes.
+
+```yaml
+# ⚠️ ANTI-PATTERN: No requests specified; scheduler blindly overcommits node
+resources: {}
+
+# 🏗️ REFACTOR: Explicit Guaranteed or Burstable QoS Requests and Limits
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1024Mi"
+```
+
+#### Arch 2: StatefulSets with Ephemeral Node-Pinned Storage
+* **Anti-Pattern**: Running a distributed database on StatefulSets using `hostPath` without node affinity or CSI provisioners. If the node fails, Kubernetes cannot reschedule the pod because its data is trapped on the dead host.
+
+```yaml
+# ⚠️ ANTI-PATTERN: hostPath volume traps stateful workload on single physical machine
+volumes:
+  - name: data
+    hostPath:
+      path: /data/db
+
+# 🏗️ REFACTOR: Dynamic PersistentVolumeClaim backed by Cloud CSI (EBS gp3 / Ceph RBD)
+volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "ebs-gp3-sc"
+      resources:
+        requests:
+          storage: 100Gi
 ```
 
 ---
@@ -166,7 +575,7 @@ You are tasked with deploying: (1) A stateless REST API, (2) A 3-node Apache Kaf
 
 ##### 3. Standout Technical Answer
 - **Stateless REST API -> `Deployment`**: Pods are interchangeable and ephemeral. Pod names are random hashes (`order-api-7b9c4-x1y2z`). Scaled up or down arbitrarily without ordering guarantees.
-- **Kafka Cluster -> `StatefulSet`**: Each Pod requires persistent, distinct identity and dedicated storage. 
+- **Kafka Cluster -> `StatefulSet`**: Each Pod requires persistent, distinct identity and dedicated storage.
   - Generates ordinal hostnames: `kafka-0`, `kafka-1`, `kafka-2`.
   - Pairs with a **Headless Service** (`clusterIP: None`) so CoreDNS provides deterministic SRV and A records: `kafka-0.kafka-headless.prod.svc.cluster.local`.
   - Uses `volumeClaimTemplates` to allocate an independent PersistentVolume per ordinal index that survives pod recreation.

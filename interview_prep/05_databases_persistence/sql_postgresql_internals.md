@@ -1,8 +1,8 @@
 # SQL, PostgreSQL & Database Internals: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 05 — Databases & Persistence  
-> **Topic Coverage**: ACID Properties, MVCC (`xmin`, `xmax`, `ctid`), Transaction Isolation Levels (Read Committed, Repeatable Read, Serializable, SSI), B-Tree / GIN / GiST / BRIN Indexes, `EXPLAIN (ANALYZE, BUFFERS)` Execution Plans, Query Planner Cost Model, Write-Ahead Logging (WAL) & ARIES Crash Recovery, Join Algorithms (Nested Loop, Hash Join, Merge Join), Window Functions & Framing, Common Table Expressions (`WITH RECURSIVE`), Normalization (1NF→3NF→BCNF) vs Denormalization, Declarative Partitioning, PostgreSQL JSONB vs MongoDB Document Model, Connection Pooling (HikariCP, PgBouncer), Optimistic/Pessimistic Locking (`SELECT FOR UPDATE`), Deadlock Resolution, Zero-Downtime Schema Migrations (Flyway), Streaming vs Logical Replication, TimescaleDB, and Disaster Recovery.  
-> **Target Audience**: Senior Software Engineers, Lead Database Architects, Staff Backend Engineers, SREs.  
+> **Curriculum Milestone**: Module 05 — Databases & Persistence
+> **Topic Coverage**: ACID Properties, MVCC (`xmin`, `xmax`, `ctid`), Transaction Isolation Levels (Read Committed, Repeatable Read, Serializable, SSI), B-Tree / GIN / GiST / BRIN Indexes, `EXPLAIN (ANALYZE, BUFFERS)` Execution Plans, Query Planner Cost Model, Write-Ahead Logging (WAL) & ARIES Crash Recovery, Join Algorithms (Nested Loop, Hash Join, Merge Join), Window Functions & Framing, Common Table Expressions (`WITH RECURSIVE`), Normalization (1NF→3NF→BCNF) vs Denormalization, Declarative Partitioning, PostgreSQL JSONB vs MongoDB Document Model, Connection Pooling (HikariCP, PgBouncer), Optimistic/Pessimistic Locking (`SELECT FOR UPDATE`), Deadlock Resolution, Zero-Downtime Schema Migrations (Flyway), Streaming vs Logical Replication, TimescaleDB, and Disaster Recovery.
+> **Target Audience**: Senior Software Engineers, Lead Database Architects, Staff Backend Engineers, SREs.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World War-Room Outages, and Rapid-Fire Interview Matrix.
 
 ---

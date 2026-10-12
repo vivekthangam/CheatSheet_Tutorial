@@ -2803,7 +2803,7 @@ export class CouponWidgetComponent implements AfterViewInit {
   }
 }
 ```
-- **The Root Cause**: Angular enforces **Unidirectional Data Flow**: data must flow strictly down the component tree from parent to child during a change detection cycle. 
+- **The Root Cause**: Angular enforces **Unidirectional Data Flow**: data must flow strictly down the component tree from parent to child during a change detection cycle.
   When `CheckoutSummaryComponent` rendered, Angular verified and committed `totalAmount = 500`. Then it checked the child `CouponWidgetComponent`. During `ngAfterViewInit`, the child mutated `parent.totalAmount = 450`. In development mode, Angular runs a second verification pass; finding that `totalAmount` shifted from 500 to 450 in the same cycle, it threw `NG0100`.
 
 ### The Permanent Engineering Remediation
@@ -2852,7 +2852,7 @@ Following an update to an SSR e-commerce site, user conversions plummeted by 22%
     } @else {
       <span>Guest User</span>
     }
-  `
+  ```
 })
 export class UserBadgeComponent implements OnInit {
   isLoggedIn = false;
@@ -3344,12 +3344,12 @@ When the client boots up, the client `HttpClient` checks the transfer cache firs
 <!-- Reserved Dimensions to prevent CLS -->
 <div class="product-grid" style="min-height: 800px;">
   <!-- Modern image optimization with automatic layout reservation -->
-  <img 
-    [ngSrc]="product.heroImage" 
-    width="400" 
-    height="300" 
-    priority 
-    alt="Product Preview" 
+  <img
+    [ngSrc]="product.heroImage"
+    width="400"
+    height="300"
+    priority
+    alt="Product Preview"
   />
 
   <!-- Non-critical widgets deferred until visible in browser -->
@@ -3707,10 +3707,10 @@ export interface PatientSearchResult {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="search-container">
-      <input 
-        [formControl]="queryControl" 
-        type="search" 
-        placeholder="Search patient by name or MRN..." 
+      <input
+        [formControl]="queryControl"
+        type="search"
+        placeholder="Search patient by name or MRN..."
       />
 
       @if (searchError()) {
@@ -3817,7 +3817,7 @@ export class SafeHtmlPipe implements PipeTransform {
 ##### 3. Enforcing W3C Trusted Types with Angular
 Configure your enterprise reverse proxy (Nginx / Cloudflare) to return strict CSP headers:
 ```http
-Content-Security-Policy: 
+Content-Security-Policy:
   default-src 'self';
   script-src 'self';
   style-src 'self' 'nonce-random123';
@@ -4015,9 +4015,9 @@ export class EnterpriseButtonComponent {
 
 Consumers use the button with full type safety:
 ```html
-<app-enterprise-button 
-  tooltipText="Submit Wire Transfer" 
-  rippleColor="#3b82f6" 
+<app-enterprise-button
+  tooltipText="Submit Wire Transfer"
+  rippleColor="#3b82f6"
   [trapFocus]="true">
   Confirm Transfer
 </app-enterprise-button>
@@ -4049,7 +4049,7 @@ addEventListener('message', ({ data }: { data: { buffer: ArrayBuffer } }) => {
   // Executes on dedicated background OS thread - main thread NEVER freezes!
   const textDecoder = new TextDecoder('utf-8');
   const csvContent = textDecoder.decode(data.buffer);
-  
+
   const rows = csvContent.split('\n');
   const parsedRecords = [];
 
@@ -4319,3 +4319,4 @@ export const BILLING_ROUTES: Routes = [
 ---
 *Angular Architecture Master Guide — Production Reference Handbook (2026 Edition).*
 
+```

@@ -2,7 +2,7 @@
 
 # 📖 The Architect's Technical Glossary (2026 Edition)
 
-> 💡 **Looking for complete coverage of Authentication, Authorization, Microservices, and Infrastructure terms?**  
+> 💡 **Looking for complete coverage of Authentication, Authorization, Microservices, and Infrastructure terms?**
 > Explore the dedicated [Security, Microservices & Infrastructure Master Dictionary & Tools Guide](../security_infra_tools_glossary_master_guide.md) containing 120+ terms with analogies, complete enterprise tools directory, and from-scratch setups for Istio, OAuth Server, NGINX LB, Vault, and OPA!
 
 ---
@@ -102,7 +102,7 @@
 | **Exit Code 137** | Process terminated by SIGKILL (OOMKilled). | Container exceeded Linux cgroups memory limit. |
 | **CrashLoopBackOff** | K8s pod repeatedly starting, failing, and restarting. | Diagnosed via `kubectl logs --previous` and `describe pod`. |
 | **iowait (`wa`)** | CPU time spent waiting for outstanding disk I/O. | Diagnosed via `iotop` and `lsof`. |
-| **File Descriptor Leak** | Unclosed sockets/files reaching process `ulimit -n`. | Diagnosed via `lsof -p <PID> | wc -l`. |
+| **File Descriptor Leak** | Unclosed sockets/files reaching process `ulimit -n`. | Diagnosed via `lsof -p <PID>` | wc -l`. |
 
 ---
 

@@ -279,7 +279,7 @@ COMMIT;
 * **DELETE**: Removes rows.
     * *Syntax:* `DELETE FROM table WHERE condition;`
 * **MERGE (Upsert)**: Performs an update if a record exists, otherwise performs an insert.
-    * *Syntax:* 
+    * *Syntax:*
     ```sql
         MERGE INTO target t USING source s ON (t.id = s.id)
         WHEN MATCHED THEN UPDATE SET t.val = s.val
@@ -479,7 +479,7 @@ This document is a comprehensive guide to all features, syntax, and concepts in 
 ## 🚀 7. Implementation Steps
 
 ### **Step 1: Setup**
-Execute the **DDL** script to create your tables and constraints. 
+Execute the **DDL** script to create your tables and constraints.
 ### **Step 2: Data Load**
 Execute the **DML** script. Always load parent tables (e.g., Departments) before child tables (e.g., Employees).
 ### **Step 3: Verification**
@@ -529,7 +529,8 @@ This document is a comprehensive guide to all features, syntax, and concepts in 
     * *Syntax:* `UPDATE table SET col = val WHERE condition;`
 * **DELETE**: Removes rows based on condition.
 * **MERGE (Upsert)**: Performs an update if a record exists, otherwise performs an insert.
-    * *Syntax:* ```sql
+    * *Syntax:*
+```sql
     MERGE INTO target t USING source s ON (t.id = s.id)
     WHEN MATCHED THEN UPDATE SET t.val = s.val
     WHEN NOT MATCHED THEN INSERT (id, val) VALUES (s.id, s.val);
@@ -748,17 +749,17 @@ BEGIN
 
     -- Insert the audit trail
     INSERT INTO audit_log (
-        acc_id, 
-        old_bal, 
-        new_bal, 
-        change_amount, 
+        acc_id,
+        old_bal,
+        new_bal,
+        change_amount,
         tx_type
     )
     VALUES (
-        :OLD.acc_id, 
-        :OLD.balance, 
-        :NEW.balance, 
-        ABS(:NEW.balance - :OLD.balance), 
+        :OLD.acc_id,
+        :OLD.balance,
+        :NEW.balance,
+        ABS(:NEW.balance - :OLD.balance),
         v_change_type
     );
 END;
@@ -772,14 +773,14 @@ END;
 Initialize Account:
 
 ```SQL
-INSERT INTO accounts (acc_id, holder_name, balance) 
+INSERT INTO accounts (acc_id, holder_name, balance)
 VALUES (101, 'John Smith', 5000.00);
 Perform a Transaction:
 ```
 ```SQL
 -- John withdraws $1,200
-UPDATE accounts 
-SET balance = balance - 1200 
+UPDATE accounts
+SET balance = balance - 1200
 WHERE acc_id = 101;
 Verify Audit Trail:
 ```
@@ -894,7 +895,7 @@ PL/SQL allows you to write programs (loops, variables, conditions) that live ins
        v_tax_rate CONSTANT NUMBER := 0.15;
     BEGIN
        FOR rec IN (SELECT inv_id, amount FROM invoices WHERE region = 'TX') LOOP
-          UPDATE invoices SET tax_amount = rec.amount * v_tax_rate 
+          UPDATE invoices SET tax_amount = rec.amount * v_tax_rate
           WHERE inv_id = rec.inv_id;
        END LOOP;
        COMMIT;
@@ -1007,7 +1008,7 @@ This section focuses on data integrity, ACID properties (Atomicity, Consistency,
         v_transfer_amt NUMBER := 500;
     BEGIN
         SELECT balance INTO v_sender_bal FROM accounts WHERE acc_id = 'A' FOR UPDATE;
-        
+
         IF v_sender_bal >= v_transfer_amt THEN
             UPDATE accounts SET balance = balance - v_transfer_amt WHERE acc_id = 'A';
             UPDATE accounts SET balance = balance + v_transfer_amt WHERE acc_id = 'B';
@@ -1135,18 +1136,18 @@ This section focuses on inventory flow, dynamic pricing logic, and customer life
     * **Requirement:** Calculate a discount based on customer spend: 5% for >$500, 10% for >$1000, and 15% for >$2000.
     * **Code:**
     ```sql
-    CREATE OR REPLACE FUNCTION fn_get_discount(p_customer_id IN INT) 
+    CREATE OR REPLACE FUNCTION fn_get_discount(p_customer_id IN INT)
     RETURN NUMBER IS
         v_total_spend NUMBER;
         v_discount_pct NUMBER := 0;
     BEGIN
         SELECT SUM(total_amount) INTO v_total_spend FROM orders WHERE customer_id = p_customer_id;
-        
+
         IF v_total_spend > 2000 THEN v_discount_pct := 0.15;
         ELSIF v_total_spend > 1000 THEN v_discount_pct := 0.10;
         ELSIF v_total_spend > 500 THEN v_discount_pct := 0.05;
         END IF;
-        
+
         RETURN v_discount_pct;
     END;
     ```
@@ -1162,7 +1163,7 @@ This section focuses on inventory flow, dynamic pricing logic, and customer life
     SELECT c.customer_name, c.email, i.product_name, i.added_at
     FROM customers c
     JOIN cart_items i ON c.customer_id = i.customer_id
-    WHERE i.status = 'In-Cart' 
+    WHERE i.status = 'In-Cart'
     AND i.added_at < SYSDATE - 1;
     ```
 
@@ -1200,10 +1201,10 @@ This section focuses on data privacy (HIPAA compliance), scheduling constraints,
     * **Code:**
     ```sql
     CREATE VIEW billing_patient_view AS
-    SELECT 
-        patient_id, 
-        first_name, 
-        last_name, 
+    SELECT
+        patient_id,
+        first_name,
+        last_name,
         'XXX-XX-' || SUBSTR(ssn, -4) AS masked_ssn,
         provider_id
     FROM patients;
@@ -1224,7 +1225,7 @@ This section focuses on data privacy (HIPAA compliance), scheduling constraints,
     DECLARE
         v_overlap_count INT;
     BEGIN
-        SELECT COUNT(*) INTO v_overlap_count 
+        SELECT COUNT(*) INTO v_overlap_count
         FROM appointments
         WHERE doctor_id = :NEW.doctor_id
         AND appt_date = :NEW.appt_date
@@ -1250,11 +1251,11 @@ This section focuses on data privacy (HIPAA compliance), scheduling constraints,
         v_latest_bp NUMBER;
     BEGIN
         -- Get average of previous visits
-        SELECT AVG(systolic_bp) INTO v_avg_old_bp 
+        SELECT AVG(systolic_bp) INTO v_avg_old_bp
         FROM (SELECT systolic_bp FROM vitals WHERE patient_id = p_patient_id ORDER BY check_date DESC OFFSET 1 ROWS FETCH NEXT 3 ROWS ONLY);
-        
+
         -- Get latest visit
-        SELECT systolic_bp INTO v_latest_bp 
+        SELECT systolic_bp INTO v_latest_bp
         FROM vitals WHERE patient_id = p_patient_id ORDER BY check_date DESC FETCH FIRST 1 ROWS ONLY;
 
         IF v_latest_bp > v_avg_old_bp * 1.20 THEN
@@ -1302,7 +1303,7 @@ This final section covers high-performance PL/SQL, security administration, and 
 
         -- Batch update back to the SQL engine
         FORALL i IN 1..v_emps.COUNT
-            UPDATE employees SET salary = salary * 1.03 
+            UPDATE employees SET salary = salary * 1.03
             WHERE employee_id = v_emps(i).employee_id;
         COMMIT;
     END;
@@ -1415,8 +1416,8 @@ This repository contains a step-by-step, scenario-based approach to learning Dat
 
 * **SQL Logic:**
     ```sql
-    ALTER TABLE bank_accounts 
-    ADD CONSTRAINT chk_positive_balance 
+    ALTER TABLE bank_accounts
+    ADD CONSTRAINT chk_positive_balance
     CHECK (balance >= 0);
     ```
 * **Explanation:** The `CHECK` constraint acts as a "Gatekeeper." Whenever an `UPDATE` or `INSERT` is attempted, the database validates the rule. If the balance would become negative, the transaction is automatically rejected.
@@ -1503,9 +1504,9 @@ This repository contains a step-by-step, scenario-based approach to learning Dat
     DECLARE
         v_total NUMBER;
     BEGIN
-        SELECT SUM(amount) INTO v_total FROM transactions 
+        SELECT SUM(amount) INTO v_total FROM transactions
         WHERE account_id = :NEW.account_id AND TRUNC(tx_date) = TRUNC(SYSDATE);
-        
+
         IF (v_total + :NEW.amount) > 2000 THEN
             RAISE_APPLICATION_ERROR(-20001, 'Limit Exceeded.');
         END IF;
@@ -1522,7 +1523,7 @@ This repository contains a step-by-step, scenario-based approach to learning Dat
     ```sql
     SELECT account_id FROM bank_accounts a
     WHERE NOT EXISTS (
-        SELECT 1 FROM transactions t 
+        SELECT 1 FROM transactions t
         WHERE t.account_id = a.account_id AND t.tx_date > SYSDATE - 365
     );
     ```
@@ -1624,7 +1625,7 @@ This module covers advanced operational logic, including how to handle database 
     CREATE VIEW view_security_alerts AS
     SELECT username, COUNT(*) as failed_attempts
     FROM login_logs
-    WHERE status = 'FAILED' 
+    WHERE status = 'FAILED'
     AND attempt_time > SYSDATE - 1/24
     GROUP BY username
     HAVING COUNT(*) > 3;
@@ -1698,7 +1699,7 @@ This module covers advanced operational logic, including how to handle database 
         LOOP
             DELETE FROM sessions WHERE expiry_date < SYSDATE - 30
             AND ROWNUM <= 5000; -- Small batches
-            
+
             EXIT WHEN SQL%NOTFOUND;
             COMMIT; -- Clear logs after every batch
         END LOOP;
@@ -1730,7 +1731,7 @@ This module covers advanced operational logic, including how to handle database 
 
 * **SQL Logic:**
     ```sql
-    SELECT o.order_id 
+    SELECT o.order_id
     FROM orders o
     LEFT JOIN customers c ON o.customer_id = c.customer_id
     WHERE c.customer_id IS NULL;
@@ -1759,12 +1760,12 @@ This module focuses on data iteration and memory-based data structures, which ar
 * **PL/SQL Logic:**
     ```sql
     DECLARE
-        CURSOR c_emp IS 
+        CURSOR c_emp IS
             SELECT first_name, salary FROM employees;
         v_avg_sal NUMBER;
     BEGIN
         SELECT AVG(salary) INTO v_avg_sal FROM employees;
-        
+
         FOR r IN c_emp LOOP
             IF r.salary > v_avg_sal THEN
                 DBMS_OUTPUT.PUT_LINE(r.first_name || ': Above Average');
@@ -1803,11 +1804,11 @@ This module focuses on data iteration and memory-based data structures, which ar
 * **PL/SQL Logic:**
     ```sql
     DECLARE
-        CURSOR c_review IS 
+        CURSOR c_review IS
             SELECT salary FROM employees WHERE department_id = 10 FOR UPDATE;
     BEGIN
         FOR r IN c_review LOOP
-            UPDATE employees SET salary = salary * 1.05 
+            UPDATE employees SET salary = salary * 1.05
             WHERE CURRENT OF c_review;
         END LOOP;
         COMMIT;
@@ -1828,7 +1829,7 @@ This module focuses on data iteration and memory-based data structures, which ar
         v_ids t_id_list;
     BEGIN
         SELECT product_id BULK COLLECT INTO v_ids FROM products;
-        
+
         DBMS_OUTPUT.PUT_LINE('Total products loaded: ' || v_ids.COUNT);
     END;
     ```
@@ -1847,7 +1848,7 @@ This module focuses on data iteration and memory-based data structures, which ar
     BEGIN
         v_depts(10) := 'Administration';
         v_depts(20) := 'Marketing';
-        
+
         DBMS_OUTPUT.PUT_LINE('Dept 10 is: ' || v_depts(10));
     END;
     ```
@@ -1912,9 +1913,9 @@ This module focuses on data iteration and memory-based data structures, which ar
         );
         v_item t_prod_rectype;
     BEGIN
-        SELECT product_id, product_name, price INTO v_item 
+        SELECT product_id, product_name, price INTO v_item
         FROM products WHERE product_id = 500;
-        
+
         DBMS_OUTPUT.PUT_LINE(v_item.name || ' costs ' || v_item.price);
     END;
     ```
@@ -1932,7 +1933,7 @@ This module focuses on data iteration and memory-based data structures, which ar
         v_ids t_id_list := t_id_list(101, 102, 103, 104);
     BEGIN
         FORALL i IN 1..v_ids.COUNT
-            UPDATE orders SET status = 'PROCESSED' 
+            UPDATE orders SET status = 'PROCESSED'
             WHERE order_id = v_ids(i);
         COMMIT;
     END;
@@ -1994,8 +1995,8 @@ This module focuses on advanced data retrieval techniques. These tools allow you
     SELECT e.first_name, e.salary, e.department_id
     FROM employees e
     WHERE e.salary > (
-        SELECT AVG(salary) 
-        FROM employees 
+        SELECT AVG(salary)
+        FROM employees
         WHERE department_id = e.department_id
     );
     ```
@@ -2069,7 +2070,7 @@ This module focuses on advanced data retrieval techniques. These tools allow you
 
 * **SQL Logic:**
     ```sql
-    SELECT customer_name 
+    SELECT customer_name
     FROM customers c
     WHERE EXISTS (
         SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
@@ -2085,7 +2086,7 @@ This module focuses on advanced data retrieval techniques. These tools allow you
 
 * **SQL Logic:**
     ```sql
-    SELECT department_id, 
+    SELECT department_id,
            LISTAGG(first_name, ', ') WITHIN GROUP (ORDER BY first_name) as employee_list
     FROM employees
     GROUP BY department_id;
@@ -2188,7 +2189,7 @@ This module focuses on professional-grade code organization. In real-world envir
 
 * **PL/SQL Logic:**
     ```sql
-    CREATE OR REPLACE FUNCTION cm_to_inch(p_cm NUMBER) 
+    CREATE OR REPLACE FUNCTION cm_to_inch(p_cm NUMBER)
     RETURN NUMBER DETERMINISTIC IS
     BEGIN
         RETURN p_cm / 2.54;
@@ -2203,7 +2204,7 @@ This module focuses on professional-grade code organization. In real-world envir
 
 * **PL/SQL Logic:**
     ```sql
-    CREATE OR REPLACE FUNCTION get_dates(p_start DATE, p_end DATE) 
+    CREATE OR REPLACE FUNCTION get_dates(p_start DATE, p_end DATE)
     RETURN date_table_type PIPELINED IS
     BEGIN
         FOR i IN 0 .. (p_end - p_start) LOOP
@@ -2238,7 +2239,7 @@ This module focuses on professional-grade code organization. In real-world envir
 
 * **PL/SQL Logic:**
     ```sql
-    CREATE OR REPLACE FUNCTION get_holidays(p_year NUMBER) 
+    CREATE OR REPLACE FUNCTION get_holidays(p_year NUMBER)
     RETURN holiday_list_type RESULT_CACHE IS
     BEGIN
         -- Complex query here
@@ -2253,7 +2254,7 @@ This module focuses on professional-grade code organization. In real-world envir
 
 * **PL/SQL Logic:**
     ```sql
-    CREATE OR REPLACE PROCEDURE clear_my_logs 
+    CREATE OR REPLACE PROCEDURE clear_my_logs
     AUTHID CURRENT_USER IS
     BEGIN
         EXECUTE IMMEDIATE 'TRUNCATE TABLE session_logs';
@@ -2270,8 +2271,8 @@ This module focuses on professional-grade code organization. In real-world envir
 * **PL/SQL Logic:**
     ```sql
     CREATE OR REPLACE PROCEDURE get_prod_info (
-        p_id IN NUMBER, 
-        p_price OUT NUMBER, 
+        p_id IN NUMBER,
+        p_price OUT NUMBER,
         p_qty OUT NUMBER
     ) IS
     BEGIN
@@ -2318,14 +2319,14 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
         v_current_stock NUMBER;
     BEGIN
         -- Update the stock
-        UPDATE products 
+        UPDATE products
         SET stock_qty = stock_qty - :NEW.quantity
         WHERE product_id = :NEW.product_id
         RETURNING stock_qty INTO v_current_stock;
 
         -- If stock is now zero, update status
         IF v_current_stock <= 0 THEN
-            UPDATE products SET status = 'OUT_OF_STOCK' 
+            UPDATE products SET status = 'OUT_OF_STOCK'
             WHERE product_id = :NEW.product_id;
         END IF;
     END;
@@ -2341,19 +2342,19 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 * **PL/SQL Logic:**
     ```sql
     CREATE OR REPLACE FUNCTION fn_validate_coupon(
-        p_code VARCHAR2, 
+        p_code VARCHAR2,
         p_cust_id NUMBER
     ) RETURN VARCHAR2 IS
         v_count NUMBER;
         v_expiry DATE;
     BEGIN
         SELECT expiry_date INTO v_expiry FROM coupons WHERE code = p_code;
-        
+
         IF v_expiry < SYSDATE THEN
             RETURN 'EXPIRED';
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM order_history 
+        SELECT COUNT(*) INTO v_count FROM order_history
         WHERE customer_id = p_cust_id AND coupon_used = p_code;
 
         IF v_count > 0 THEN
@@ -2375,7 +2376,7 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 
 * **SQL Logic:**
     ```sql
-    SELECT cart_id, 
+    SELECT cart_id,
            subtotal,
            (subtotal * 0.10) as tax,
            CASE WHEN subtotal < 50 THEN 5 ELSE 0 END as shipping,
@@ -2391,9 +2392,9 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 
 * **SQL Logic:**
     ```sql
-    UPDATE products 
-    SET reserved_qty = reserved_qty + 1 
-    WHERE product_id = 505 
+    UPDATE products
+    SET reserved_qty = reserved_qty + 1
+    WHERE product_id = 505
     AND (stock_qty - reserved_qty) > 0;
     ```
 * **Explanation:** This logic uses **Optimistic Locking** principles. It only allows the update if there is "available" stock (Total Stock - Reserved). This prevents over-selling products.
@@ -2428,9 +2429,9 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
     FOR EACH ROW
     WHEN (NEW.is_default = 'Y')
     BEGIN
-        UPDATE addresses 
-        SET is_default = 'N' 
-        WHERE customer_id = :NEW.customer_id 
+        UPDATE addresses
+        SET is_default = 'N'
+        WHERE customer_id = :NEW.customer_id
         AND address_id <> :NEW.address_id;
     END;
     ```
@@ -2462,14 +2463,14 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 
 * **SQL Logic:**
     ```sql
-    SELECT order_id, 
-           quantity, 
+    SELECT order_id,
+           quantity,
            price,
-           CASE 
+           CASE
              WHEN quantity > 5 THEN price * 0.80
              WHEN quantity BETWEEN 3 AND 5 THEN price * 0.90
              WHEN quantity = 2 THEN price * 0.95
-             ELSE price 
+             ELSE price
            END as discounted_price
     FROM order_items;
     ```
@@ -2486,7 +2487,7 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 
     CREATE OR REPLACE FUNCTION fn_generate_order_id RETURN VARCHAR2 IS
     BEGIN
-        RETURN 'ORD-' || TO_CHAR(SYSDATE, 'YYYY') || '-' || 
+        RETURN 'ORD-' || TO_CHAR(SYSDATE, 'YYYY') || '-' ||
                LPAD(seq_order_no.NEXTVAL, 4, '0');
     END;
     ```
@@ -2499,7 +2500,7 @@ This module explores the high-concurrency world of E-Commerce. We focus on how t
 
 * **SQL Logic:**
     ```sql
-    SELECT order_id, 
+    SELECT order_id,
            (shipped_date - payment_date) * 24 as hours_to_ship
     FROM orders
     WHERE (shipped_date - payment_date) * 24 > 24;
@@ -2531,7 +2532,7 @@ This module focuses on relational algebra—how to blend and compare data from m
 
 * **SQL Logic:**
     ```sql
-    SELECT e.first_name AS Employee, 
+    SELECT e.first_name AS Employee,
            m.first_name AS Manager
     FROM employees e
     LEFT JOIN employees m ON e.manager_id = m.employee_id;
@@ -2641,9 +2642,9 @@ This module focuses on relational algebra—how to blend and compare data from m
 
 * **SQL (Join approach):**
     ```sql
-    SELECT DISTINCT c.customer_name 
-    FROM customers c 
-    JOIN orders o ON c.id = o.cust_id 
+    SELECT DISTINCT c.customer_name
+    FROM customers c
+    JOIN orders o ON c.id = o.cust_id
     WHERE o.item = 'Laptop';
     ```
 * **Explanation:** Joins are generally preferred for data retrieval across tables, but if you only need columns from the first table, an `EXISTS` subquery might be faster as it doesn't have to build a full joined result set in memory.
@@ -2655,8 +2656,8 @@ This module focuses on relational algebra—how to blend and compare data from m
 
 * **SQL Logic:**
     ```sql
-    SELECT cat.category_name, 
-           COUNT(p.product_id) as total_prods, 
+    SELECT cat.category_name,
+           COUNT(p.product_id) as total_prods,
            SUM(p.price * p.stock_qty) as total_value
     FROM categories cat
     LEFT JOIN products p ON cat.category_id = p.category_id
@@ -2714,7 +2715,7 @@ This module focuses on Performance Tuning. It is not enough to get the "right an
 * **SQL Logic:**
     ```sql
     EXPLAIN PLAN FOR
-    SELECT e.name, d.dept_name 
+    SELECT e.name, d.dept_name
     FROM employees e JOIN departments d ON e.dept_id = d.dept_id;
 
     SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
@@ -2904,7 +2905,7 @@ This module dives into advanced data structures. We move beyond simple tables an
         v_order_rec active_orders%ROWTYPE;
     BEGIN
         SELECT * INTO v_order_rec FROM active_orders WHERE id = 500;
-        
+
         INSERT INTO archive_orders VALUES v_order_rec;
         DELETE FROM active_orders WHERE id = 500;
         COMMIT;
@@ -3060,7 +3061,7 @@ This module focuses on the "Gatekeeper" role of the database. You will learn how
 * **SQL Logic:**
     ```sql
     -- Grant general update on all columns except salary
-    GRANT UPDATE (first_name, last_name, email, hire_date) 
+    GRANT UPDATE (first_name, last_name, email, hire_date)
     ON hr.employees TO finance_clerk;
     ```
 * **Explanation:** SQL allows you to restrict permissions down to specific columns. This prevents a clerk from accidentally (or intentionally) changing their own pay while still allowing them to update contact information.
@@ -3086,7 +3087,7 @@ This module focuses on the "Gatekeeper" role of the database. You will learn how
     CREATE PROFILE secure_user_profile LIMIT
         FAILED_LOGIN_ATTEMPTS 3
         PASSWORD_LOCK_TIME 1; -- Locked for 1 day
-    
+
     ALTER USER analyst_bob PROFILE secure_user_profile;
     ```
 * **Explanation:** A **Profile** defines password policies. This is a crucial security layer that protects the database at the login level.
@@ -3182,7 +3183,7 @@ This module explores the sensitive world of Healthcare IT. The focus here is on 
 * **SQL Logic:**
     ```sql
     CREATE VIEW view_research_data AS
-    SELECT 
+    SELECT
         patient_id,
         'XXX-XX-' || SUBSTR(ssn, -4) AS masked_ssn,
         EXTRACT(YEAR FROM SYSDATE) - EXTRACT(YEAR FROM dob) AS age,
@@ -3239,14 +3240,14 @@ This module explores the sensitive world of Healthcare IT. The focus here is on 
 * **PL/SQL Procedure:**
     ```sql
     CREATE OR REPLACE PROCEDURE proc_emergency_access (
-        p_doc_id NUMBER, 
-        p_pat_id NUMBER, 
+        p_doc_id NUMBER,
+        p_pat_id NUMBER,
         p_reason VARCHAR2
     ) IS
     BEGIN
         INSERT INTO emergency_access_logs (doctor_id, patient_id, access_time, reason)
         VALUES (p_doc_id, p_pat_id, SYSDATE, p_reason);
-        
+
         -- Code to grant temporary view permission here...
         COMMIT;
     END;
@@ -3260,7 +3261,7 @@ This module explores the sensitive world of Healthcare IT. The focus here is on 
 
 * **SQL Virtual Column:**
     ```sql
-    ALTER TABLE patient_vitals 
+    ALTER TABLE patient_vitals
     ADD (bmi AS (ROUND(weight_kg / ((height_cm/100) * (height_cm/100)), 2)));
     ```
 * **Explanation:** A **Virtual Column** is perfect for this. The database calculates the value on-the-fly. This ensures the BMI is always mathematically correct and up-to-date based on the latest height and weight entries.
@@ -3291,7 +3292,7 @@ This module explores the sensitive world of Healthcare IT. The focus here is on 
 
 * **SQL Logic:**
     ```sql
-    SELECT department_name, 
+    SELECT department_name,
            AVG(discharge_date - admission_date) as avg_stay_days
     FROM admissions
     WHERE discharge_date IS NOT NULL
@@ -3362,7 +3363,7 @@ This module focuses on the administrative backbone of any organization: Managing
 
 * **SQL Logic:**
     ```sql
-    SELECT employee_id, 
+    SELECT employee_id,
            monthly_salary,
            hire_date,
            (monthly_salary / LAST_DAY(SYSDATE) - TRUNC(SYSDATE, 'MM') + 1) * (LAST_DAY(hire_date) - hire_date + 1) AS prorated_pay
@@ -3430,7 +3431,7 @@ This module focuses on the administrative backbone of any organization: Managing
     FROM employees e
     LEFT JOIN performance_reviews r ON e.employee_id = r.employee_id
     GROUP BY e.first_name, e.last_name
-    HAVING MAX(r.review_date) < ADD_MONTHS(SYSDATE, -12) 
+    HAVING MAX(r.review_date) < ADD_MONTHS(SYSDATE, -12)
        OR MAX(r.review_date) IS NULL;
     ```
 * **Explanation:** Using a `LEFT JOIN` ensures we don't forget new employees who have *never* had a review. The `MAX` function finds the most recent date, and `ADD_MONTHS` filters for the one-year gap.
@@ -3444,7 +3445,7 @@ This module focuses on the administrative backbone of any organization: Managing
     ```sql
     UPDATE employees
     SET salary = LEAST(salary * 1.02, 40000)
-    WHERE job_level = 1 
+    WHERE job_level = 1
     AND TO_CHAR(hire_date, 'DD-MON') = TO_CHAR(SYSDATE, 'DD-MON');
     ```
 * **Explanation:** `LEAST` is a great function for capping values. It compares the new calculated salary with the $40,000 limit and picks whichever is smaller.
@@ -3540,7 +3541,7 @@ This module addresses the complexities of moving goods. You will learn how to ha
     FOR EACH ROW
     BEGIN
         :NEW.last_update_time := SYSDATE;
-        
+
         -- If it's 'EXPRESS', delivery is in 2 days; else 5 days.
         IF :NEW.ship_mode = 'EXPRESS' THEN
             :NEW.est_delivery := SYSDATE + 2;
@@ -3563,10 +3564,10 @@ This module addresses the complexities of moving goods. You will learn how to ha
     JOIN warehouse_inventory w ON p.product_id = w.product_id
     WHERE w.zone = 'BACK'
     AND p.product_id IN (
-        SELECT product_id 
-        FROM order_items 
+        SELECT product_id
+        FROM order_items
         WHERE order_date > SYSDATE - 7
-        GROUP BY product_id 
+        GROUP BY product_id
         HAVING COUNT(*) > 100
     );
     ```
@@ -3611,7 +3612,7 @@ This module addresses the complexities of moving goods. You will learn how to ha
 * **SQL Logic:**
     ```sql
     SELECT route_id, stop_name, stop_sequence,
-           distance_from_hub - LAG(distance_from_hub, 1, 0) 
+           distance_from_hub - LAG(distance_from_hub, 1, 0)
            OVER (PARTITION BY route_id ORDER BY stop_sequence) AS leg_distance
     FROM delivery_route_stops;
     ```
@@ -3720,7 +3721,7 @@ This module deals with "High-Velocity" data. Telecom databases process millions 
         v_limit NUMBER;
         v_total NUMBER;
     BEGIN
-        SELECT data_limit_mb, current_usage_mb INTO v_limit, v_total 
+        SELECT data_limit_mb, current_usage_mb INTO v_limit, v_total
         FROM user_plans WHERE user_id = p_user_id;
 
         IF (v_total + p_usage_mb) >= v_limit THEN
@@ -3740,8 +3741,8 @@ This module deals with "High-Velocity" data. Telecom databases process millions 
 * **SQL Logic:**
     ```sql
     SELECT call_id, duration_sec,
-           CASE 
-             WHEN TO_NUMBER(TO_CHAR(start_time, 'HH24')) BETWEEN 8 AND 19 
+           CASE
+             WHEN TO_NUMBER(TO_CHAR(start_time, 'HH24')) BETWEEN 8 AND 19
              THEN (duration_sec / 60) * 0.10
              ELSE (duration_sec / 60) * 0.02
            END AS call_cost
@@ -3772,7 +3773,7 @@ This module deals with "High-Velocity" data. Telecom databases process millions 
 
 * **SQL Logic:**
     ```sql
-    SELECT tower_id, 
+    SELECT tower_id,
            (COUNT(CASE WHEN end_reason = 'DROPPED' THEN 1 END) / COUNT(*)) * 100 AS drop_rate
     FROM call_logs
     GROUP BY tower_id
@@ -3799,7 +3800,7 @@ This module deals with "High-Velocity" data. Telecom databases process millions 
 
 * **SQL Logic:**
     ```sql
-    SELECT user_id, roaming_country, 
+    SELECT user_id, roaming_country,
            SUM(data_kb) / 1024 AS data_mb,
            LISTAGG(network_provider, ', ') WITHIN GROUP (ORDER BY network_provider) AS providers_used
     FROM roaming_logs
@@ -3849,7 +3850,7 @@ This module deals with "High-Velocity" data. Telecom databases process millions 
     ```sql
     SELECT customer_id, region_name
     FROM service_regions r
-    JOIN customer_pings p 
+    JOIN customer_pings p
       ON p.lat BETWEEN r.min_lat AND r.max_lat
      AND p.lon BETWEEN r.min_lon AND r.max_lon;
     ```
@@ -3891,8 +3892,8 @@ This module deals with long-term data tracking and complex conditional logic. In
 * **SQL Logic:**
     ```sql
     UPDATE policies p
-    SET premium_amount = 
-        CASE 
+    SET premium_amount =
+        CASE
             WHEN EXISTS (SELECT 1 FROM claims c WHERE c.policy_id = p.policy_id AND c.claim_date > p.start_date)
             THEN premium_amount * 1.05
             ELSE premium_amount * 0.95
@@ -3924,7 +3925,7 @@ This module deals with long-term data tracking and complex conditional logic. In
 
 * **PL/SQL Function:**
     ```sql
-    CREATE OR REPLACE FUNCTION fn_calc_premium(p_base NUMBER, p_is_smoker CHAR, p_age NUMBER) 
+    CREATE OR REPLACE FUNCTION fn_calc_premium(p_base NUMBER, p_is_smoker CHAR, p_age NUMBER)
     RETURN NUMBER IS
         v_final NUMBER := p_base;
     BEGIN
@@ -3983,7 +3984,7 @@ This module deals with long-term data tracking and complex conditional logic. In
         -- 1. Archive current version
         INSERT INTO policy_history SELECT * FROM policies WHERE policy_id = p_policy_id;
         -- 2. Increment version and update data
-        UPDATE policies SET version_no = version_no + 1, last_modified = SYSDATE 
+        UPDATE policies SET version_no = version_no + 1, last_modified = SYSDATE
         WHERE policy_id = p_policy_id;
     END;
     ```
@@ -3996,8 +3997,8 @@ This module deals with long-term data tracking and complex conditional logic. In
 
 * **SQL Logic:**
     ```sql
-    SELECT 
-        CASE 
+    SELECT
+        CASE
             WHEN (SYSDATE - open_date) <= 30 THEN '0-30 Days'
             WHEN (SYSDATE - open_date) <= 60 THEN '31-60 Days'
             ELSE 'Over 60 Days'
@@ -4005,8 +4006,8 @@ This module deals with long-term data tracking and complex conditional logic. In
         COUNT(*) as total_claims
     FROM claims
     WHERE status = 'OPEN'
-    GROUP BY 
-        CASE 
+    GROUP BY
+        CASE
             WHEN (SYSDATE - open_date) <= 30 THEN '0-30 Days'
             WHEN (SYSDATE - open_date) <= 60 THEN '31-60 Days'
             ELSE 'Over 60 Days'
@@ -4080,7 +4081,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
         v_capacity NUMBER;
         v_booked   NUMBER;
     BEGIN
-        SELECT total_seats, booked_seats INTO v_capacity, v_booked 
+        SELECT total_seats, booked_seats INTO v_capacity, v_booked
         FROM flights WHERE flight_id = p_flight_id FOR UPDATE;
 
         IF v_booked < (v_capacity * 1.05) THEN
@@ -4103,7 +4104,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
     UPDATE rooms r
     SET current_rate = base_rate * 1.20
     WHERE hotel_id = :hid
-    AND (SELECT (COUNT(*)/MAX(total_rooms))*100 
+    AND (SELECT (COUNT(*)/MAX(total_rooms))*100
          FROM bookings WHERE hotel_id = :hid AND status = 'ACTIVE') > 80;
     ```
 
@@ -4121,7 +4122,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
     FOR EACH ROW
     WHEN (NEW.payment_status = 'PAID')
     BEGIN
-        UPDATE users 
+        UPDATE users
         SET loyalty_points = loyalty_points + FLOOR(:NEW.total_amount / 10)
         WHERE user_id = :NEW.user_id;
     END;
@@ -4135,7 +4136,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
 
 * **SQL Logic:**
     ```sql
-    SELECT room_id, check_out AS gap_start, 
+    SELECT room_id, check_out AS gap_start,
            LEAD(check_in) OVER (PARTITION BY room_id ORDER BY check_in) AS next_booking
     FROM reservations
     WHERE LEAD(check_in) OVER (PARTITION BY room_id ORDER BY check_in) - check_out = 1;
@@ -4152,7 +4153,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
     UPDATE users u
     SET member_tier = 'GOLD'
     WHERE member_tier = 'SILVER'
-    AND (SELECT SUM(miles_earned) FROM flight_history 
+    AND (SELECT SUM(miles_earned) FROM flight_history
          WHERE user_id = u.user_id AND flight_year = 2026) >= 50000;
     ```
 * **Explanation:** This logic uses a **Correlated Subquery** to aggregate performance data and update the user's metadata. This usually runs as a weekly batch process.
@@ -4164,7 +4165,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
 
 * **SQL Logic:**
     ```sql
-    SELECT 'INVALID_CONNECTION' 
+    SELECT 'INVALID_CONNECTION'
     FROM flight_segments a, flight_segments b
     WHERE a.booking_id = b.booking_id
     AND a.seq_no = 1 AND b.seq_no = 2
@@ -4208,7 +4209,7 @@ This module deals with "Time-Sensitive" inventory. In travel, once a plane takes
 
 * **SQL Logic:**
     ```sql
-    SELECT 'PROMO_NOT_ALLOWED' 
+    SELECT 'PROMO_NOT_ALLOWED'
     FROM blackout_dates
     WHERE :travel_date BETWEEN start_date AND end_date;
     ```
@@ -4280,7 +4281,7 @@ This intensive module covers two diverse industries: the physical world of the f
     DECLARE
         v_fail_rate NUMBER;
     BEGIN
-        SELECT (COUNT(CASE WHEN result = 'FAIL' THEN 1 END) / COUNT(*)) * 100 
+        SELECT (COUNT(CASE WHEN result = 'FAIL' THEN 1 END) / COUNT(*)) * 100
         INTO v_fail_rate FROM qc_results WHERE batch_id = :NEW.batch_id;
 
         IF v_fail_rate > 5 THEN
@@ -4374,7 +4375,7 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT machine_id, current_cycles 
+    SELECT machine_id, current_cycles
     FROM machines WHERE current_cycles >= 9500;
     ```
 
@@ -4402,7 +4403,7 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT status FROM subscriptions 
+    SELECT status FROM subscriptions
     WHERE user_id = :uid AND end_date > SYSDATE AND plan_type = 'PREMIUM';
     ```
 
@@ -4428,7 +4429,7 @@ This intensive module covers two diverse industries: the physical world of the f
 * **SQL Logic:**
     ```sql
     SELECT genre_name FROM (
-        SELECT genre_name, COUNT(*) 
+        SELECT genre_name, COUNT(*)
         FROM watch_history h JOIN movies m ON h.movie_id = m.id
         WHERE h.user_id = :uid
         GROUP BY genre_name ORDER BY COUNT(*) DESC
@@ -4444,7 +4445,7 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT COUNT(*) FROM content_licenses 
+    SELECT COUNT(*) FROM content_licenses
     WHERE movie_id = :mid AND country_code = :user_country;
     ```
 
@@ -4455,8 +4456,8 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT movie_id, COUNT(*) 
-    FROM watch_history 
+    SELECT movie_id, COUNT(*)
+    FROM watch_history
     WHERE watch_date > SYSDATE - 1/24
     GROUP BY movie_id ORDER BY COUNT(*) DESC
     FETCH FIRST 10 ROWS ONLY;
@@ -4481,7 +4482,7 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT COUNT(*) FROM active_sessions 
+    SELECT COUNT(*) FROM active_sessions
     WHERE user_id = :uid AND status = 'STREAMING';
     -- If result >= 3, block new stream.
     ```
@@ -4493,7 +4494,7 @@ This intensive module covers two diverse industries: the physical world of the f
 
 * **SQL Logic:**
     ```sql
-    SELECT language_code FROM media_assets 
+    SELECT language_code FROM media_assets
     WHERE movie_id = :mid AND asset_type = 'AUDIO';
     ```
 
@@ -4548,7 +4549,7 @@ This final module focuses on advanced logic, recursive structures, and the "unde
     ```sql
     SELECT prev_val + 1 AS gap_start, next_val - 1 AS gap_end
     FROM (
-      SELECT check_no AS prev_val, 
+      SELECT check_no AS prev_val,
              LEAD(check_no) OVER (ORDER BY check_no) AS next_val
       FROM transactions
     )
@@ -4616,7 +4617,7 @@ This final module focuses on advanced logic, recursive structures, and the "unde
 
 * **SQL Logic:**
     ```sql
-    SELECT JSON_VALUE(settings_json, '$.theme_color') 
+    SELECT JSON_VALUE(settings_json, '$.theme_color')
     FROM user_profiles;
     ```
 
@@ -4638,7 +4639,7 @@ This final module focuses on advanced logic, recursive structures, and the "unde
 
 * **SQL Logic:**
     ```sql
-    SELECT holding_session, waiting_session, mode_held 
+    SELECT holding_session, waiting_session, mode_held
     FROM dba_waiters;
     ```
 
@@ -4703,7 +4704,7 @@ This final module focuses on advanced logic, recursive structures, and the "unde
 
 * **SQL Logic:**
     ```sql
-    SELECT segment_name, bytes/1024/1024 as MB 
+    SELECT segment_name, bytes/1024/1024 as MB
     FROM user_segments WHERE segment_type = 'TABLE'
     ORDER BY MB DESC FETCH FIRST 5 ROWS ONLY;
     ```

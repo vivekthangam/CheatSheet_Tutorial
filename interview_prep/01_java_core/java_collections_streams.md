@@ -1,12 +1,64 @@
-# Java Collections & Streams: Enterprise Architecture & Interview Mastery Guide
+[🏠 Back to Home](../../README.md) | [☕ Core Java Internals](java_interview_master_guide.md) | [🍃 Spring Ecosystem](../02_spring_framework/spring_core_ioc_boot.md) | [🛠️ Concurrency Guide](java_threads_concurrency.md)
 
-> **Curriculum Milestone**: Module 01 - Java Core Engineering  
-> **Topic Coverage**: Collections Framework Hierarchy, Internal Hashing & Treeification, Concurrent Collections, Stream Pipeline Mechanics, Spliterators, ForkJoin Parallelism, Primitive Specialization, and Memory Layout Optimization.  
-> **Target Depth**: 50+ In-Depth Progressive Scenarios with Bytecode/JIT Analysis, Production Code Walkthroughs, Beginner Traps, and Real-World Outage Post-Mortems.
+# Java Collections & Streams Engine: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/01_java_core/java_collections_streams.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/01_java_core/java_collections_streams.md)  
+> **Topic Domain:** Java Collections Framework (JCF), HashMap Internal Bitwise Hashing & Red-Black Treeification (O(log n)), `ConcurrentHashMap` Bin-Head Synchronized Locks & `CounterCell` Striping, CopyOnWrite Copy-on-Write Invariants, Stream Pipeline Push/Pull Evaluation, Spliterator Chunking (`trySplit`), ForkJoinPool Parallel Stream Pitfalls, and Primitive Type Specialization (`IntStream`) (`J03`)  
+> **Target Framework / Runtime:** OpenJDK HotSpot JVM 17 LTS / 21 LTS / 25 LTS, `java.util`, `java.util.concurrent`, `java.util.stream`  
+> **Architecture Level:** Principal / Staff+ Enterprise Core Java Architect & Performance Specialist  
+> **Target Depth:** 50 Progressive Technical Scenarios, 10 SEV-1 Collections/Streams Production Outages, Bitwise Math Assembly Internals, and Companion Production Code Walkthroughs  
 
 ---
 
-## Architecture Blueprint: The Collections & Streams Taxonomy
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before diving into bitwise spread hashing `(h ^ (h >>> 16)) & (table.length - 1)`, TreeNode red-black balance rotations, LongAdder CounterCell cache-line false sharing padding, and Stream Sink chaining assembly pipelines, here is the essential high-level context: what the Collections & Streams framework represents, why naive data structures fail under high throughput, and where memory-conscious collections anchor high-performance architectures.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: The **Java Collections Framework (JCF)** is Java's unified architecture for representing, managing, and manipulating groups of objects in memory. It provides standardized interfaces (`List`, `Set`, `Map`, `Queue`, `Deque`), battle-tested data structure implementations (`ArrayList`, `HashMap`, `ConcurrentHashMap`, `ArrayDeque`), and the **Stream API**—a declarative, functional pipeline engine that allows filtering, mapping, and aggregating collections without mutating underlying state.
+* **Everyday Analogy**: Imagine a massive, state-of-the-art Amazon automated fulfillment logistics center:
+  - **Raw Arrays (`Object[]`)**: A rigid wooden shelf with exactly 10 slots. If an 11th package arrives, the entire warehouse must stop work, construct a brand new 20-slot shelf, manually move all 10 packages one by one, and discard the old shelf (**Array Reallocation & Memory Copy Cost**).
+  - **`HashMap` (The Robotic Shelving Grid)**: A grid of 100,000 barcode-indexed bins. When a package arrives, the robot computes its barcode hash, instantly calculates which bin it belongs to in 10 nanoseconds, and drops it in (**Amortized $O(1)$ Time Complexity**).
+    - **Treeification Defense**: If a malicious attacker sends 1,000 packages with identical barcode hashes to overflow bin #42, the bin automatically morphs into a multi-tiered robotic carousel (Red-Black Tree), capping retrieval time to $O(\log n)$ instead of linear $O(n)$ queue scans.
+  - **`ConcurrentHashMap` (Multi-Lane Industrial Fulfillment)**: 128 autonomous robots work simultaneously in different aisles. Each robot locks only the single specific bin it is touching; other robots access adjacent bins completely unhindered (**Bin-Head Lock Striping**).
+  - **The Stream API (The Automated Conveyor Pipeline)**: Packages glide down an automated conveyor. A sensor scans each box (Filter), an arm slaps a label on it (Map), and a robotic sorter packs 100 boxes into a shipping pallet (Collect). The conveyor belt only moves boxes as fast as the packing robot needs them (**Lazy Evaluation**).
+* **Architectural Tier Placement**: Forms the **In-Memory Data Structure & Core Algorithmic Tier**. Powers every application layer—from HTTP request headers and database connection pooling queues to domain entity aggregates and financial order book matching algorithms.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The Pre-Java 2 Data Structure Chaos**: In early Java (Java 1.0/1.1), developers only had raw arrays, `Vector`, and `Hashtable`. `Vector` and `Hashtable` synchronized every single method call (`synchronized`), creating catastrophic thread contention bottlenecks even in single-threaded programs.
+* **The Concrete Headaches in Enterprise Production**:
+  - 💥 **Headache 1: The `HashMap.get()` Infinite Loop 100% CPU Hang**: In Java 7 and earlier, concurrent invocations of `HashMap.put()` during hash table resizing created circular linked lists via unsafe pointer mutations. A subsequent `get()` traversed the circular list forever, pegging 100% of all server CPU cores and bringing down production clusters.
+  - 💥 **Headache 2: The HashDoS Denial-of-Service Attack**: Hackers crafted HTTP request parameters whose keys shared identical polynomial hash codes (e.g., colliding strings). A single HTTP POST with 10,000 colliding keys degraded server-side map parsing from 2ms to 45 seconds, crashing public web servers.
+  - 💥 **Headache 3: Parallel Stream `commonPool()` Global Starvation**: Calling `.parallelStream()` on an I/O-heavy collection runs computations on the shared `ForkJoinPool.commonPool()`. When an engineer blocked threads waiting for HTTP responses, all parallel streams across the entire JVM froze.
+* **The Turning Point**: Java 8 introduced Red-Black Treeification (JEP 180) to neutralize HashDoS attacks, redesigned `ConcurrentHashMap` to use CAS and bin-head synchronization, and added the declarative Stream API to eliminate error-prone imperative state mutations.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Extreme Concurrency without Global Locks) ➔ Solution 1**: `ConcurrentHashMap` utilizes lock-free volatile reads (`Unsafe.getObjectVolatile`), CAS insertions on empty bins, and narrow bin-head `synchronized` blocks. Multiple CPU cores execute millions of concurrent reads and writes simultaneously with zero lock contention.
+* **Problem 2 (Memory Overhead from Object Boxing) ➔ Solution 2**: Primitive specialized streams (`IntStream`, `LongStream`) and specialized flat array structures eliminate the 24-byte JVM object header overhead per boxed `Integer`/`Long`, slashing memory consumption by 75% in high-frequency trading computations.
+* **Problem 3 (Imperative Mutation Bugs in Business Pipelines) ➔ Solution 3**: Declarative Streams separate traversal logic from business transformations. Pure functional lambdas eliminate accidental side-effects, off-by-one loop errors, and concurrent modification exceptions (`ConcurrentModificationException`).
+* **Quantifiable Enterprise Metrics**:
+  - **10x Concurrent Throughput**: Upgrading from `Collections.synchronizedMap` to `ConcurrentHashMap` increases concurrent write throughput from 120,000 ops/sec to 1,800,000 ops/sec on a 32-core server.
+  - **70% Heap Reduction**: Using primitive streams and sizing initial collection capacities (`new ArrayList<>(expectedSize)`) prevents repetitive array copies and saves gigabytes of garbage collection churn.
+  - **Zero CPU Spikes on Collisions**: Red-Black treeification ensures worst-case map lookup remains bounded at $O(\log n)$, neutralizing HashDoS attacks completely.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Used in high-performance in-memory caching (`LinkedHashMap` LRU), real-time trading engines (lock-free rings, queues), and data aggregation microservices (Stream collectors).
+* **Developer Workflow & SRE Synergy**: SREs monitor JVM GC allocation rates and map sizing. Developers express complex multi-tier aggregations (`Collectors.groupingBy(..., Collectors.mapping(...))`) in 5 readable, type-safe lines instead of 60 lines of nested for-loops.
+* **Scalability & Evolutionary Runway**: Clean functional stream pipelines can be transitioned to multi-threaded parallel execution or distributed Apache Spark jobs with minimal architectural refactoring.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| Collection Archetype | Primary Implementation | Time Complexity (Read / Write) | Concurrency Thread Safety | Best Enterprise Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| **Dynamic Array List** | `ArrayList` | $O(1)$ index lookup / $O(1)$ amortized append | 🔴 Not Thread-Safe | Standard in-memory data transfer objects, read-heavy lists |
+| **Lock-Free Fast Read List** | `CopyOnWriteArrayList` | $O(1)$ read / $O(n)$ copy-on-write | 🟢 Thread-Safe (Snapshot iterators) | Event listener registries, rarely modified config lists |
+| **High-Scale Hash Map** | `ConcurrentHashMap` | $O(1)$ lookup / $O(1)$ insert | 🟢 Thread-Safe (Lock-striped bin heads) | High-throughput shared caches, multi-threaded session state |
+| **LRU Cache Map** | `LinkedHashMap` | $O(1)$ lookup / $O(1)$ eviction | 🔴 Not Thread-Safe | In-memory Least-Recently-Used (LRU) bounded caches |
+| **Double-Ended Queue** | `ArrayDeque` | $O(1)$ push / $O(1)$ pop | 🔴 Not Thread-Safe | Stacks and queues (faster and lower memory than `LinkedList`) |
+
+---
+
+## 2. Architecture Blueprint: The Collections & Streams Taxonomy
 
 ![Java Collections Framework & Streams 4-Tier Taxonomy Roadmap](../../assets/images/collections/collections_framework_roadmap.jpg)
 
@@ -106,6 +158,328 @@ graph TD
 ```
 
 </details>
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: High-Throughput In-Memory Analytics & Tiered LRU Engine
+
+> **Attached Domain Project:** `High-Throughput In-Memory Analytics & Tiered LRU Engine` (`com.cheatsheet.collections`)  
+> **Target Tooling:** Java 21 / 25 LTS | HotSpot JIT | Parallel Streams | ConcurrentHashMap | Primitive Pipelines  
+> **Companion Code Mirror:** [`code/01_java_core/java_collections_streams/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/01_java_core/java_collections_streams/)  
+> **Key Technologies Demonstrated:** Thread-Safe O(1) Concurrent LRU Cache (`LinkedHashMap` with `ReentrantReadWriteLock`), Lock-Free Atomic Map Reductions (`ConcurrentHashMap.computeIfAbsent` & `merge`), Custom Chunking Batch Spliterator (`FixedBatchSpliterator`), Zero-Allocation Primitive Streams (`DoubleStream` & `LongStream`), Parallel Stream Isolation via Dedicated `ForkJoinPool`.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Concurrent LRU Cache & High-Performance Stream Pipeline)
+
+The following production-grade implementation provides an enterprise-ready tiered in-memory caching engine paired with high-performance stream aggregations:
+
+```java
+package com.cheatsheet.collections.engine;
+
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.DoubleStream;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
+// ============================================================================
+// PRODUCTION CONCURRENT LRU CACHE WITH READ-WRITE LOCKING
+// ============================================================================
+public class TieredAnalyticsEngine<K, V> implements AutoCloseable {
+
+    private final int maxCapacity;
+    private final ConcurrentLRUCache<K, V> lruCache;
+    private final ConcurrentHashMap<String, Long> aggregationMetrics = new ConcurrentHashMap<>();
+    private final ForkJoinPool customStreamPool = new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+
+    public TieredAnalyticsEngine(int maxCapacity) {
+        this.maxCapacity = maxCapacity;
+        this.lruCache = new ConcurrentLRUCache<>(maxCapacity);
+    }
+
+    public static class ConcurrentLRUCache<K, V> extends LinkedHashMap<K, V> {
+        private final int capacity;
+        private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+        public ConcurrentLRUCache(int capacity) {
+            super(capacity, 0.75f, true); // true = access-order for LRU
+            this.capacity = capacity;
+        }
+
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+            return size() > capacity;
+        }
+
+        public V getSafe(K key) {
+            rwLock.writeLock().lock(); // write lock needed because access-order mutates ribbon links!
+            try {
+                return super.get(key);
+            } finally {
+                rwLock.writeLock().unlock();
+            }
+        }
+
+        public void putSafe(K key, V value) {
+            rwLock.writeLock().lock();
+            try {
+                super.put(key, value);
+            } finally {
+                rwLock.writeLock().unlock();
+            }
+        }
+
+        public int sizeSafe() {
+            rwLock.readLock().lock();
+            try {
+                return super.size();
+            } finally {
+                rwLock.readLock().unlock();
+            }
+        }
+    }
+
+    public void recordMetric(String category, long value) {
+        // Atomic lock-free counter reduction across worker threads
+        aggregationMetrics.merge(category, value, Long::sum);
+    }
+
+    public long getMetricTotal(String category) {
+        return aggregationMetrics.getOrDefault(category, 0L);
+    }
+
+    // ⚡ Zero-Allocation Primitive Financial Analytics
+    public record AnalyticsSummary(double min, double max, double average, long count) {}
+
+    public AnalyticsSummary computePrimitiveStats(double[] tickPrices) {
+        DoubleSummaryStatistics stats = DoubleStream.of(tickPrices)
+                .summaryStatistics(); // Bypasses Double wrapper boxing entirely!
+
+        return new AnalyticsSummary(stats.getMin(), stats.getMax(), stats.getAverage(), stats.getCount());
+    }
+
+    // 🚀 Custom Batching Spliterator to Prevent ForkJoin Task Over-Fragmentation
+    public static class BatchSpliterator<T> implements Spliterator<List<T>> {
+        private final Spliterator<T> source;
+        private final int batchSize;
+
+        public BatchSpliterator(Spliterator<T> source, int batchSize) {
+            this.source = source;
+            this.batchSize = batchSize;
+        }
+
+        @Override
+        public boolean tryAdvance(java.util.function.Consumer<? super List<T>> action) {
+            List<T> batch = new ArrayList<>(batchSize);
+            for (int i = 0; i < batchSize && source.tryAdvance(batch::add); i++);
+            if (batch.isEmpty()) return false;
+            action.accept(batch);
+            return true;
+        }
+
+        @Override
+        public Spliterator<List<T>> trySplit() {
+            Spliterator<T> split = source.trySplit();
+            return split == null ? null : new BatchSpliterator<>(split, batchSize);
+        }
+
+        @Override
+        public long estimateSize() {
+            long sourceSize = source.estimateSize();
+            return sourceSize == Long.MAX_VALUE ? Long.MAX_VALUE : (sourceSize + batchSize - 1) / batchSize;
+        }
+
+        @Override
+        public int characteristics() {
+            return source.characteristics() & ~(Spliterator.SIZED | Spliterator.SUBSIZED);
+        }
+    }
+
+    public <T> Stream<List<T>> batchStream(List<T> source, int batchSize) {
+        return StreamSupport.stream(new BatchSpliterator<>(source.spliterator(), batchSize), false);
+    }
+
+    public ConcurrentLRUCache<K, V> getLruCache() {
+        return lruCache;
+    }
+
+    @Override
+    public void close() {
+        customStreamPool.shutdown();
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Phase | Positive Path (Staff-Grade Standard) | Negative Path (Chaos & Failure Invariants) | Detection & Automated Recovery Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Map Lookups** | Uniform hash distribution; bucket collisions resolved in $O(\log n)$ Red-Black tree bins. | Malicious or broken `hashCode()` collapses 100,000 entries into single bucket; $O(n)$ hash DOS. | HotSpot treeifies bins at 8 entries; declare class `Comparable<K>` to enable red-black tree binning. |
+| **LRU Cache Concurrency** | Access-order `LinkedHashMap` guarded with Write Lock updates doubly-linked order safely. | Plain `LinkedHashMap` read in multi-threaded loop causes infinite pointer cycle and 100% CPU lockup. | Multi-threading mutation on doubly-linked ribbon requires exclusive lock or `ConcurrentLinkedHashMap`. |
+| **Stream Computations** | Primitive stream (`LongStream.rangeClosed`) executes in continuous registers without heap churn. | Boxed `Stream<Long>` allocates 10,000,000 `Long` objects; Young-Gen GC triggers 800ms STW pauses. | Use `JOL` (Java Object Layout) and memory profilers; replace boxed streams with primitive streams. |
+| **Parallel Processing** | Custom isolated `ForkJoinPool` executes CPU-intensive partitions without blocking other subsystems. | `parallelStream()` executes blocking HTTP/DB calls inside `ForkJoinPool.commonPool()`; cluster halts. | JVM-wide commonPool starvation; isolate stream execution inside dedicated `customPool.submit(() -> ...)`. |
+| **List Removals** | `Iterator.remove()` or `collection.removeIf()` removes elements safely during iteration. | `for (Item x : list) { list.remove(x); }` triggers runtime `ConcurrentModificationException`. | ModCount fail-fast invariants; enforce declarative `removeIf(predicate)` for thread-safe mutation. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: The Infinite CPU Loop in Non-Thread-Safe LinkedHashMap / HashMap
+* **Outage Incident**: A high-frequency authentication gateway suffered 100% CPU utilization on all 32 cores, causing container health check timeouts and cascading Kubernetes pod restarts.
+* **Root Cause**: The service used a shared `LinkedHashMap` with `accessOrder = true` as an in-memory session cache without proper write synchronization. Concurrent `get()` calls mutated the internal doubly-linked list pointers simultaneously, forming a cyclic pointer loop (`node.after = node.before`). The next lookup entered an infinite `while (node != null)` loop.
+
+```java
+// ❌ BUG: Access-order LinkedHashMap get() mutates internal ribbon links without locks!
+private final Map<String, Session> sessionCache = new LinkedHashMap<>(1000, 0.75f, true);
+
+public Session getSession(String id) {
+    return sessionCache.get(id); // Multithreaded calls create cyclic pointer loop & 100% CPU lock!
+}
+
+// ✅ REFACTORED: Guard with ReentrantReadWriteLock or utilize Caffeine Cache
+private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+public Session getSession(String id) {
+    lock.writeLock().lock(); // Must acquire write lock because accessOrder alters list structure!
+    try {
+        return sessionCache.get(id);
+    } finally {
+        lock.writeLock().unlock();
+    }
+}
+```
+
+#### Bug 2: ForkJoinPool CommonPool Starvation via Parallel Streams
+* **Outage Incident**: An invoice generation service stalled completely. Health check endpoints timed out and SLA breaches exceeded 99%.
+* **Root Cause**: A report generator processed 5,000 invoices using `invoices.parallelStream().map(this::fetchExternalTaxData)`. Because `fetchExternalTaxData` made blocking HTTP requests with a 2-second latency, all worker threads in the JVM's static `ForkJoinPool.commonPool()` became blocked, starving every other parallel stream in the service.
+
+```java
+// ❌ BUG: Blocking I/O inside parallelStream consumes shared global commonPool
+public List<TaxResult> calculateTaxes(List<Invoice> invoices) {
+    return invoices.parallelStream() // Hijacks JVM common pool!
+            .map(this::callExternalTaxApi)
+            .toList();
+}
+
+// ✅ REFACTORED: Execute in dedicated custom ForkJoinPool or Virtual Thread executor
+private final ForkJoinPool reportingPool = new ForkJoinPool(16);
+
+public List<TaxResult> calculateTaxes(List<Invoice> invoices) {
+    try {
+        return reportingPool.submit(() ->
+                invoices.parallelStream()
+                        .map(this::callExternalTaxApi)
+                        .toList()
+        ).get();
+    } catch (Exception e) {
+        throw new RuntimeException("Calculation failed", e);
+    }
+}
+```
+
+#### Bug 3: ConcurrentHashMap Non-Atomic Check-Then-Act Mutation
+* **Outage Incident**: An inventory decrement service oversold items by 12,000 units during flash sales despite using a `ConcurrentHashMap`.
+* **Root Cause**: The developer checked if the key existed and then put the updated value in two separate statements. While each individual method on `ConcurrentHashMap` is thread-safe, the compound operation (`get` followed by `put`) was not atomic.
+
+```java
+// ❌ BUG: Check-then-act is NOT atomic; race condition occurs between threads
+if (stockMap.containsKey(sku)) {
+    int current = stockMap.get(sku);
+    stockMap.put(sku, current - quantity); // Race condition causes lost updates!
+}
+
+// ✅ REFACTORED: Atomic compute() or merge() ensuring lock-free CAS atomicity
+stockMap.compute(sku, (k, currentStock) -> {
+    int current = (currentStock == null) ? 0 : currentStock;
+    if (current < quantity) {
+        throw new IllegalStateException("Insufficient inventory");
+    }
+    return current - quantity;
+});
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Hash Collision Denial-of-Service (HashDoS)
+* **Vulnerability Vector**: An attacker crafts thousands of HTTP request parameters or JSON keys with identical `hashCode()` values (e.g. string collision generators). In pre-Java 8 or classes that do not implement `Comparable`, lookups in `HashMap` degrade from $O(1)$ to $O(n)$, causing 100% CPU exhaustion with minimal bandwidth.
+
+```java
+// 🛡️ MITIGATION: Always implement Comparable on custom keys to enable Red-Black Treeification
+public final class SecureApiKey implements Comparable<SecureApiKey> {
+    private final String key;
+
+    public SecureApiKey(String key) {
+        this.key = Objects.requireNonNull(key);
+    }
+
+    @Override
+    public int compareTo(SecureApiKey other) {
+        return this.key.compareTo(other.key); // Enables HashMap to use Red-Black Tree bins (O(log n))!
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof SecureApiKey that)) return false;
+        return Objects.equals(key, that.key);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(key);
+    }
+}
+```
+
+#### Sec 2: Internal Mutable State Exposure via Unmodifiable Wrappers
+* **Vulnerability Vector**: A domain service returns an internal list wrapped in `Collections.unmodifiableList(internalList)`. While caller cannot mutate via the returned wrapper, if the service modifies the underlying list concurrently, callers iterating through the wrapper suffer from `ConcurrentModificationException` or read corrupted data.
+
+```java
+// 🚨 VULNERABILITY: Wrapper view reflects underlying mutations; thread-unsafe!
+public List<UserPermission> getPermissions() {
+    return Collections.unmodifiableList(this.internalPermissions);
+}
+
+// 🛡️ MITIGATION: Return an immutable snapshot copy (List.copyOf)
+public List<UserPermission> getPermissionsSecure() {
+    return List.copyOf(this.internalPermissions); // Truly immutable, decoupled snapshot!
+}
+```
+
+---
+
+### 5. Architectural Anti-Patterns & Refactorings (DesignLab)
+
+#### Arch 1: Boxed Streams for Massive Numeric Aggregations
+* **Anti-Pattern**: Using `Stream<Long>` to sum 20,000,000 transactions. Creates 20,000,000 wrapper objects on the heap, thrashing CPU caches and triggering frequent garbage collections.
+
+```java
+// ⚠️ ANTI-PATTERN: Boxed Long stream allocates gigabytes of heap wrapper objects
+long total = Stream.iterate(0L, i -> i + 1)
+        .limit(20_000_000)
+        .reduce(0L, Long::sum);
+
+// 🏗️ REFACTOR: Use primitive LongStream with zero heap allocations
+long total = java.util.stream.LongStream.rangeClosed(1, 20_000_000)
+        .sum(); // Executed directly in CPU registers!
+```
+
+#### Arch 2: Using LinkedList Instead of ArrayList or ArrayDeque
+* **Anti-Pattern**: Using `LinkedList` because "insertions in the middle are $O(1)$". In reality, locating the middle element requires $O(n)$ pointer hopping across scattered heap memory, incurring cache misses on every node traversal.
+
+```java
+// ⚠️ ANTI-PATTERN: LinkedList node allocations fragment heap and destroy cache locality
+List<Trade> queue = new LinkedList<>();
+
+// 🏗️ REFACTOR: ArrayDeque offers O(1) circular ring buffer with contiguous memory locality
+Deque<Trade> queue = new ArrayDeque<>(1024);
+```
 
 ---
 

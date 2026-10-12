@@ -458,7 +458,7 @@ In enterprise systems, searches must be filtered by `tenant_id`, `user_role`, or
    - **Fatal Flaw**: Bypasses the HNSW graph index. If the filtered subset contains 500,000 vectors, brute-force cosine search causes extreme latency.
 3. **Single-Stage Filtered HNSW (Iterative Graph Traversal)**:
    - Traverses the HNSW graph while checking a bitset/bloom filter of matching metadata IDs on each node.
-   - Advanced engines (Qdrant, Pinecone, Milvus) switch strategies dynamically: if the filter is highly selective (<1% match), they use inverted index lookups; if weakly selective (>20% match), they traverse HNSW with bitset masking.
+   - Advanced engines (Qdrant, Pinecone, Milvus) switch strategies dynamically: if the filter is highly selective (&lt;1% match), they use inverted index lookups; if weakly selective (>20% match), they traverse HNSW with bitset masking.
 
 **Follow-Up Trap & Winning Answer:**
 *Trap:* "Why does naive metadata filtering cause graph traversal to get trapped in local minima in HNSW?"

@@ -1,8 +1,8 @@
 # DevOps, CI/CD, Terraform & Infrastructure as Code: Enterprise Interview Guide
 
-> **Curriculum Milestone**: Module 04 — DevOps, CI/CD & Infrastructure as Code  
-> **Topic Coverage**: Terraform State Mechanics (Remote Backend, S3 + DynamoDB Locking, State Refactoring with `moved` Blocks), HCL Lifecycle Rules, Modules & Composition, Config-Driven Imports (Terraform 1.5+), CI/CD Deployment Strategies (Blue-Green, Canary, Rolling, Expand-Contract Schema Migrations), GitHub Actions & Jenkins Pipelines, OIDC Keyless Authentication, Policy as Code (Sentinel, OPA/Conftest), Terragrunt, Drift Detection, Secret Scanning & SBOMs, GitOps (ArgoCD & Flux), and High-Availability Multi-Cloud Infrastructure Automation.  
-> **Target Audience**: Senior DevOps Engineers, Platform Engineers, Cloud Architects, Staff SREs.  
+> **Curriculum Milestone**: Module 04 — DevOps, CI/CD & Infrastructure as Code
+> **Topic Coverage**: Terraform State Mechanics (Remote Backend, S3 + DynamoDB Locking, State Refactoring with `moved` Blocks), HCL Lifecycle Rules, Modules & Composition, Config-Driven Imports (Terraform 1.5+), CI/CD Deployment Strategies (Blue-Green, Canary, Rolling, Expand-Contract Schema Migrations), GitHub Actions & Jenkins Pipelines, OIDC Keyless Authentication, Policy as Code (Sentinel, OPA/Conftest), Terragrunt, Drift Detection, Secret Scanning & SBOMs, GitOps (ArgoCD & Flux), and High-Availability Multi-Cloud Infrastructure Automation.
+> **Target Audience**: Senior DevOps Engineers, Platform Engineers, Cloud Architects, Staff SREs.
 > **Target Depth**: 50 Comprehensive Scenario-Based Q&As (Tiers 1–4), 7 Fatal Beginner Anti-Patterns, 4 Real-World War-Room Outages, and Rapid-Fire Interview Matrix.
 
 ---

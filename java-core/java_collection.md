@@ -242,8 +242,7 @@ graph LR
 * **HashDoS Vulnerability**: If untrusted user inputs (e.g., HTTP POST parameters) generate identical `hashCode()` values, lookup degrades to $O(n)$. Treeification guarantees worst-case $O(\log n)$ search time, preventing CPU starvation DoS.
 * **Missing `equals()` / `hashCode()` Contract**: If `equals()` is overridden without `hashCode()`, two logically equivalent objects generate different bucket indices, causing duplicate keys and `map.get()` returning `null`.
 
-<details>
-<summary>Text Representation (ASCII Topology Diagram)</summary>
+::: details Text Representation (ASCII Topology Diagram)
 
 ```text
 Bucket Index:
@@ -253,7 +252,8 @@ Bucket Index:
 [3] ──► null
 ```
 
-</details>
+:::
+
 - **Memory Hook:** *"The workhorse of computer science. O(1) average lookup, but requires correct hashCode() and equals()."*
 
 ### 6. `LinkedHashMap<K,V>` & `LinkedHashSet<E>`
@@ -1349,7 +1349,7 @@ THE LIFECYCLE OF COLLECTION FAILURES:
   // Or:
   scores.removeIf(score -> score == 20);
   ```
-- **Rule of Thumb:** *"On List<Integer>, remove(1) removes the index, not the number 1."*
+- **Rule of Thumb:** *"On `List<Integer>`, remove(1) removes the index, not the number 1."*
 
 ---
 

@@ -2,7 +2,7 @@
 
 ![Enterprise REST API & OpenAPI 3.1 Architecture](../assets/images/protocols/rest_openapi_architecture.jpg)
 
-> **Target Audience**: Software Engineers, Backend Developers, API Platform Engineers, and System Architects.  
+> **Target Audience**: Software Engineers, Backend Developers, API Platform Engineers, and System Architects.
 > **Prerequisites**: Zero. We begin with intuitive real-world mental models and progress systematically through Roy Fielding's architectural constraints, enterprise resource modeling, RFC standards, full OpenAPI 3.1 specifications, interactive documentation engines, and automated spec-first/code-first CI/CD code generation pipelines.
 
 ---
@@ -222,7 +222,7 @@ Understanding safety and idempotency prevents data corruption and transaction du
 | **`DELETE`** | NO | **YES** | Optional / No | Yes (200) or No (204) | Destroy resource. Calling 10 times results in same state (destroyed). |
 
 > [!NOTE]
-> **Safety Definition**: An operation is **Safe** if it does not alter server state. Read-only operations (`GET`, `HEAD`, `OPTIONS`) must never modify database records.  
+> **Safety Definition**: An operation is **Safe** if it does not alter server state. Read-only operations (`GET`, `HEAD`, `OPTIONS`) must never modify database records.
 > **Idempotency Definition**: An operation is **Idempotent** if executing it $N$ times ($N \ge 1$) produces the identical server state as executing it once ($f(f(x)) = f(x)$).
 
 ---
@@ -1075,7 +1075,7 @@ Request 2 (00:00.002) ──► Fails to acquire lock! Key status is "PROCESSING
 ```typescript
 async function handleIdempotentRequest(key: string, req: Request, res: Response, execute: () => Promise<any>) {
   const redisKey = `idemp:${key}`;
-  
+
   // Atomic check-and-set lock with 30s TTL
   const lockAcquired = await redis.set(`lock:${key}`, 'LOCKED', 'NX', 'EX', 30);
   if (!lockAcquired) {
@@ -1129,9 +1129,9 @@ In systems with high write throughput (e.g. trading feeds, live social comments)
 SELECT * FROM messages WHERE created_at < '2026-04-12 14:00:00.123456' ORDER BY created_at DESC LIMIT 20;
 
 -- ENTERPRISE PATTERN: Composite Keyset with Unique Monotonic Secondary Tie-Breaker
-SELECT * FROM messages 
+SELECT * FROM messages
 WHERE (created_at, id) < ('2026-04-12 14:00:00.123456', 'msg_018e6e58')
-ORDER BY created_at DESC, id DESC 
+ORDER BY created_at DESC, id DESC
 LIMIT 20;
 ```
 The opaque cursor string encodes both `created_at` and `id` in base64: `base64("2026-04-12T14:00:00.123456Z|msg_018e6e58")`.
@@ -1287,3 +1287,4 @@ Impact: 1.2 Million iOS app crashes upon form submission
 - [ ] 29. CI/CD runs `oasdiff` breaking change detection against git `main` before PR merge.
 - [ ] 30. Client SDKs are automatically generated and published to internal package registries upon version tags.
 
+```

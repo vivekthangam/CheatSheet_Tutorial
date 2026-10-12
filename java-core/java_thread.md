@@ -166,7 +166,7 @@ To truly understand concurrency, you must first distinguish between three concep
 
 Many engineers use the words "concurrent" and "parallel" interchangeably. They are fundamentally different concepts:
 
-> 💡 **The Golden Definition (by Rob Pike, Co-designer of Go):**  
+> 💡 **The Golden Definition (by Rob Pike, Co-designer of Go):**
 > *"Concurrency is about **dealing with** lots of things at once. Parallelism is about **doing** lots of things at once."*
 
 ```text
@@ -1778,17 +1778,17 @@ Under the hood, `volatile` injects low-level CPU instruction fences to enforce t
 > [!CAUTION]
 > **Visibility $\ne$ Atomicity**:
 > `volatile` guarantees you will read the *absolute newest value* from RAM. But it does **NOT** give you mutual exclusion!
-> 
+>
 > ```java
 > public volatile int count = 0;
 > count++; // ❌ STILL DANGEROUSLY BROKEN AND NOT THREAD-SAFE!
 > ```
-> 
+>
 > Because `count++` consists of 3 distinct instructions:
 > 1. Read `count` from RAM (visible: reads 0)
 > 2. Add 1 in CPU register (ALU computes 1)
 > 3. Write `count` back to RAM (writes 1)
-> 
+>
 > If Thread A and Thread B execute `count++` simultaneously, both read `0`, both compute `1`, and both write back `1`. One update is lost! For atomic updates, you **must** use `AtomicInteger` or locks.
 
 ##### Master Use Cases for `volatile`
@@ -3468,7 +3468,7 @@ public class ScopedValueMasterclass {
 ### 3.5 Asynchronous DAG Pipelines: CompletableFuture Masterclass
 
 #### Everyday Analogy & Intuitive Mental Model
-Imagine an **E-Commerce Automated Fulfillment Center**. 
+Imagine an **E-Commerce Automated Fulfillment Center**.
 When a customer clicks "Place Order", the warehouse doesn't assign a single worker to walk through every aisle sequentially while the customer waits on the phone. Instead:
 1. **Parallel Dispatch**: One automated robot fetches the items from the warehouse racks (`supplyAsync`).
 2. **Concurrent Verification**: Concurrently, an external banking gateway validates the customer's credit score (`supplyAsync`).

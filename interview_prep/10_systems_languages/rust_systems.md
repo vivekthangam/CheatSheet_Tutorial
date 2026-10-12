@@ -596,7 +596,7 @@ A ZST is any type that carries zero runtime data and occupies **0 bytes of memor
 
 ##### 2. How the Compiler Optimizes ZST Collections
 In a standard `Vec<T>`, capacity and pointer calculations multiply by element size:
-$$\text{Heap Allocation} = \text{Capacity} \times \text{size\_of::<T>()}$$
+$$\text{Heap Allocation} = \text{Capacity} \times \text{size\_of}[T](#)$$
 For `EmptyMarker`:
 $$\text{Heap Allocation} = 1,000,000 \times 0 = \mathbf{0 \text{ bytes!}}$$
 - `Vec::with_capacity(1_000_000)` does **not call `malloc`**!

@@ -1,6 +1,6 @@
 # 🐳 Java & Spring Boot Docker & Kubernetes (K8s) Production CheatSheet & Master Guide
 
-> **Target Audience**: Staff Software Architects, Principal DevOps/Platform Engineers, Senior Java Developers, and SREs.  
+> **Target Audience**: Staff Software Architects, Principal DevOps/Platform Engineers, Senior Java Developers, and SREs.
 > **Prerequisites**: Working knowledge of Java and Spring Boot. Zero prior deep container runtime or Kubernetes internals knowledge required. We build systematically from the Linux kernel cgroups and namespaces, to JVM container memory mechanics (`MaxRAMPercentage`, OOMKilled 137), layered multi-stage Dockerfiles (Temurin, Distroless, GraalVM), and dissect zero-downtime rolling updates, health probe traps, HPA sizing, and production Kubernetes manifests.
 
 ---

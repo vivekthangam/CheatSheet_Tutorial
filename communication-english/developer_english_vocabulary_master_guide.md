@@ -15,7 +15,7 @@
 > [!NOTE]
 > **ஏன் இந்த கையேடு? (Why This Guide?):**
 > Many brilliant developers from Tamil-medium backgrounds write top-tier code but feel hesitant when encountering words like **Invert, Trivial, Ephemeral, Sanitize, Arbitrary, Truncate, Idempotent, Coerce, Canonical, Backpressure, Heuristic** in Linux manuals, API docs, PR reviews, and client meetings.
-> 
+>
 > This master guide bridges that gap completely by providing for every word:
 > 1. 💡 **Plain English Definition** (Clear, simple, and precise technical English)
 > 2. 🎯 **Where & When to Use It** (Real-world coding, PR review, terminal, and meeting scenarios)

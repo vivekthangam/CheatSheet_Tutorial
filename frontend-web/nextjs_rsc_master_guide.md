@@ -174,11 +174,11 @@ export function AddToCartButton({ productId }: { productId: string }) {
 ## 7. Top 10 Junior Interview Questions
 
 #### Q1: What does `'use client'` actually mean in Next.js?
-> **ELI5**: It places a sticker on a file saying: "This component needs to wake up and run inside the customer's browser so buttons can be clicked."  
+> **ELI5**: It places a sticker on a file saying: "This component needs to wake up and run inside the customer's browser so buttons can be clicked."
 > **Technical**: It does not mean "execute only on the client." Client components are still pre-rendered on the server into HTML during initial page load, but their JavaScript code is included in the client bundle for hydration.
 
 #### Q2: What is the React Flight Protocol?
-> **ELI5**: A special secret recipe book sent from the server that tells the browser exactly how to build the LEGO castle without sending the molds.  
+> **ELI5**: A special secret recipe book sent from the server that tells the browser exactly how to build the LEGO castle without sending the molds.
 > **Technical**: It is the binary/text streaming serialization format used by React Server Components to stream the component tree, props, and suspense boundaries to the client without sending raw JavaScript code.
 
 ---

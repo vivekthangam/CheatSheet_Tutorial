@@ -2,7 +2,7 @@
 
 # 📖 The Architect's Master Dictionary, Enterprise Tools Directory & Infrastructure Setup Lab
 
-> **Target Audience:** Software Engineers, Systems Architects, DevOps/SRE Engineers, and Security Practitioners.  
+> **Target Audience:** Software Engineers, Systems Architects, DevOps/SRE Engineers, and Security Practitioners.
 > **Prerequisites:** **Zero.** This guide breaks down every complex security, microservice, and networking concept into plain-English definitions with intuitive real-world analogies, provides an exhaustive directory of enterprise tools, and includes deep-dive, from-scratch setup guides for **Istio**, **OAuth Authorization Server**, **NGINX Load Balancer**, **HashiCorp Vault**, and **Open Policy Agent (OPA)**.
 
 ---

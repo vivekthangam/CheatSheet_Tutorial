@@ -17,7 +17,7 @@
 
 Imagine you are building a house. You don't reinvent how door hinges work, how water pipes connect, or how roof frames bear weight. Architects and plumbers have figured out the most reliable, leak-free ways to do those things over hundreds of years.
 
-**Design patterns are the standard, time-tested blueprints for solving common software architecture problems.** 
+**Design patterns are the standard, time-tested blueprints for solving common software architecture problems.**
 - They are **NOT** ready-made code libraries you download from Maven.
 - They are **conceptual templates** showing you how to organize your classes and methods so your code doesn't become a tangled, fragile mess when your project grows.
 
@@ -171,10 +171,10 @@ If your code has `new Van()` scattered across 50 different files, and tomorrow y
 5. The workflow invokes product methods through the uniform `Notification` interface.
 
 #### ⚖️ Pros and Cons
-- **Pros**: 
+- **Pros**:
   - Follows Open/Closed Principle: You can add new product types without breaking existing client code.
   - Eliminates tight coupling between client code and concrete product classes (Single Responsibility for object creation).
-- **Cons**: 
+- **Cons**:
   - Introduces more classes into your codebase (creator subclass hierarchy).
 
 #### ⚠️ Common Pitfalls & Antipatterns
@@ -323,8 +323,8 @@ public class AbstractFactoryDemo {
 ### 4. Builder Pattern
 
 #### 💡 The Plain-English Analogy
-Think of ordering a **custom sandwich at Subway**. You tell the sandwich artist: 
-"9-grain honey oat bread, add turkey, add cheddar cheese, toast it, add lettuce and olives, but **no** onions, and drizzle chipotle southwest sauce." 
+Think of ordering a **custom sandwich at Subway**. You tell the sandwich artist:
+"9-grain honey oat bread, add turkey, add cheddar cheese, toast it, add lettuce and olives, but **no** onions, and drizzle chipotle southwest sauce."
 You don't want a single giant constructor where you have to pass 20 parameters like `new Sandwich("Oat", "Turkey", "Cheddar", true, true, false, true, false, false, "Chipotle")`!
 
 #### ❓ The Problem It Solves
@@ -656,8 +656,8 @@ public class BridgeDemo {
 ### 8. Composite Pattern
 
 #### 💡 The Plain-English Analogy
-Think of a **Computer File System**. 
-A directory can contain **individual files** (e.g. `resume.pdf`, `photo.jpg`) AND **other directories** (which themselves contain files and more folders). 
+Think of a **Computer File System**.
+A directory can contain **individual files** (e.g. `resume.pdf`, `photo.jpg`) AND **other directories** (which themselves contain files and more folders).
 When you right-click on a folder and ask "What is the total size?", the computer calculates the size seamlessly, treating an individual file and a folder full of 1,000 files with the **exact same interface**.
 
 #### ❓ The Problem It Solves
@@ -768,7 +768,7 @@ If you use standard inheritance to handle every possible combination of features
   - Creates lots of small wrapping objects that can be confusing to debug in stack traces.
 
 #### 🏢 Where You See It in Real Java
-- Java I/O Streams! 
+- Java I/O Streams!
   `new BufferedReader(new InputStreamReader(new FileInputStream("file.txt")))`
   (`BufferedReader` decorates `InputStreamReader`, which decorates `FileInputStream`).
 - `java.util.Collections.unmodifiableList(list)`
@@ -830,7 +830,7 @@ public class DecoratorDemo {
 ### 10. Facade Pattern
 
 #### 💡 The Plain-English Analogy
-Think of a **Hotel Concierge**. 
+Think of a **Hotel Concierge**.
 When you stay at a luxury resort and say, "I want to arrange a romantic evening," the concierge books a dinner table, reserves theater tickets, calls a limousine, and orders champagne to your room. You don't have to dial 4 different businesses, negotiate 4 bills, and coordinate the schedule yourself—the concierge provides a **single, simple front-desk desk button**.
 
 #### ❓ The Problem It Solves
@@ -1150,7 +1150,7 @@ public class ChainOfResponsibilityDemo {
 
 #### 💡 The Plain-English Analogy
 Think of a **Restaurant Waiter and Order Ticket**.
-When you order food, the waiter doesn't drag the chef out to your table to start cooking immediately. The waiter writes your order onto a paper **Order Slip (Command)** and pins it to the kitchen queue board. 
+When you order food, the waiter doesn't drag the chef out to your table to start cooking immediately. The waiter writes your order onto a paper **Order Slip (Command)** and pins it to the kitchen queue board.
 The chef cooks the orders in sequence. If you change your mind immediately, the waiter can grab the paper and tear it up (**Undo**)!
 
 #### ❓ The Problem It Solves

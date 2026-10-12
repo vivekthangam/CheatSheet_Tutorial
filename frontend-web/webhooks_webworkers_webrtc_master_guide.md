@@ -1,6 +1,6 @@
 # 🌐 Webhooks, Web Workers & WebRTC Master Guide: Enterprise Architecture from Scratch to Advanced
 
-> **Target Audience**: Staff Software Architects, Distributed Systems Engineers, Modern Frontend Leads, and Real-Time Systems Specialists.  
+> **Target Audience**: Staff Software Architects, Distributed Systems Engineers, Modern Frontend Leads, and Real-Time Systems Specialists.
 > **Prerequisites**: Zero. We begin with foundational physical analogies (Mail Dropboxes, Background Factory Workers, Direct Walkie-Talkies) and progress systematically through HMAC-SHA256 signature verification, replay attack prevention, browser multi-threading with Structured Clone & `SharedArrayBuffer` Atomics, `OffscreenCanvas` rendering offload, SDP offer/answer signaling, NAT traversal physics (STUN/TURN/ICE), `RTCDataChannel` binary streaming, and SFU vs MCU media topologies.
 
 ---
@@ -151,18 +151,18 @@ A Webhook is an **inverted HTTP request**. Instead of the client polling the ser
 ### The Problem with Traditional APIs (Polling)
 Imagine you order a pizza online. How do you find out when the pizza arrives at your door?
 
-* **Method 1: Polling (Traditional API)**  
-  Every 30 seconds, you walk to your front door, open it, look outside, and walk back.  
-  - 12:00 PM: *"Is the pizza here?"* $\rightarrow$ No.  
-  - 12:01 PM: *"Is the pizza here?"* $\rightarrow$ No.  
-  - 12:02 PM: *"Is the pizza here?"* $\rightarrow$ No.  
-  - 12:30 PM: *"Is the pizza here?"* $\rightarrow$ Yes!  
+* **Method 1: Polling (Traditional API)**
+  Every 30 seconds, you walk to your front door, open it, look outside, and walk back.
+  - 12:00 PM: *"Is the pizza here?"* $\rightarrow$ No.
+  - 12:01 PM: *"Is the pizza here?"* $\rightarrow$ No.
+  - 12:02 PM: *"Is the pizza here?"* $\rightarrow$ No.
+  - 12:30 PM: *"Is the pizza here?"* $\rightarrow$ Yes!
   > ❌ **Problem**: You wasted 99% of your energy checking an empty porch, flooding the hallway with footsteps, and burning CPU cycles.
 
-* **Method 2: Webhook (Event-Driven Push)**  
-  When you place the order, you write a note on your door: *"Here is my doorbell (URL). When the pizza arrives, ring it once and drop the box on the porch."*  
-  - 12:00 PM to 12:29 PM: You relax on the couch. Zero wasted queries.  
-  - 12:30 PM: **DING DONG!** The delivery driver rings your doorbell and leaves the box.  
+* **Method 2: Webhook (Event-Driven Push)**
+  When you place the order, you write a note on your door: *"Here is my doorbell (URL). When the pizza arrives, ring it once and drop the box on the porch."*
+  - 12:00 PM to 12:29 PM: You relax on the couch. Zero wasted queries.
+  - 12:30 PM: **DING DONG!** The delivery driver rings your doorbell and leaves the box.
   > ✅ **Solution**: Immediate notification the exact millisecond it happens, with **zero wasted network queries**.
 
 ```
@@ -260,11 +260,11 @@ $$\text{SignedString} = T + "." + P$$
 $$\text{Signature} = \text{HMAC-SHA256}(K, \text{SignedString})$$
 
 ### Vulnerability 1: The Timing Attack Trap
-If a developer verifies signatures using naive string equality (`signature === computedSignature`), the comparison algorithm terminates on the **first mismatched byte**. An attacker can measure nanosecond timing differences to guess the secret signature byte-by-byte.  
+If a developer verifies signatures using naive string equality (`signature === computedSignature`), the comparison algorithm terminates on the **first mismatched byte**. An attacker can measure nanosecond timing differences to guess the secret signature byte-by-byte.
 **Mandatory Defense**: Always use constant-time comparison via `crypto.timingSafeEqual()`.
 
 ### Vulnerability 2: The Replay Attack Trap
-An attacker captures a valid signed webhook payload on the network and replays it 3 hours later. The signature is mathematically valid, but the duplicate execution double-credits a customer balance.  
+An attacker captures a valid signed webhook payload on the network and replays it 3 hours later. The signature is mathematically valid, but the duplicate execution double-credits a customer balance.
 **Mandatory Defense**: Enforce a strict timestamp tolerance window (e.g. 5 minutes / 300 seconds).
 
 ---
@@ -666,7 +666,7 @@ By default, calling `worker.postMessage(data)` triggers the browser's internal *
 - **Problem**: Passing a 200 MB typed array requires allocating another 200 MB of RAM and copying memory byte-for-byte, taking 40 to 100 milliseconds and stalling the main thread during serialization!
 
 ### Mode 2: Transferable Objects (Zero-Copy Pointer Handover)
-Instead of copying bytes, ownership of the memory buffer is transferred instantaneously from one thread's memory address space to the other.  
+Instead of copying bytes, ownership of the memory buffer is transferred instantaneously from one thread's memory address space to the other.
 - **Time Complexity**: $O(1)$ constant time (sub-millisecond, whether the buffer is 10 KB or 1 GB!).
 - **Invariant**: The original thread loses all access to the transferred object (`byteLength` becomes 0).
 
@@ -1404,7 +1404,7 @@ signaling.onmessage = async ({ description, candidate }) => {
 ## 7.1 Top 10 Beginner Mistakes (With Bad vs Fixed Code)
 
 ### 1. Webhooks: Parsing JSON Before Verifying Signatures
-* **Bad**: `const payload = JSON.parse(req.body); verify(JSON.stringify(payload));`  
+* **Bad**: `const payload = JSON.parse(req.body); verify(JSON.stringify(payload));`
   Re-serializing JSON changes whitespace and key order, permanently breaking signature matching!
 * **Fixed**: Always verify signatures against the **raw byte buffer** captured before JSON parsing:
   ```typescript

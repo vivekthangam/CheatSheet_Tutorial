@@ -285,8 +285,8 @@ Volumes solve the **"Ephemeral Data"** problem. If a container crashes, the data
 Networking allows containers to talk to each other safely.
 
 ### **The Types**
-1.  **Bridge (Default):** A private virtual network. 
-    * *Purpose:* Containers on the same bridge can talk via their names. 
+1.  **Bridge (Default):** A private virtual network.
+    * *Purpose:* Containers on the same bridge can talk via their names.
     * *Real World:* A "Frontend" container calls `http://backend:5000`.
 2.  **Host:** Bypasses Docker's network isolation.
     * *Purpose:* Highest performance (no overhead).
@@ -497,8 +497,8 @@ Used for high-level production environments.
 ---
 
 ### 💡 Pro-Tip for your Newbie Document:
-Explain that **order matters**. Docker builds in **Layers**. 
-* If you change a line at the top (like `FROM`), Docker has to re-run every single line below it. 
+Explain that **order matters**. Docker builds in **Layers**.
+* If you change a line at the top (like `FROM`), Docker has to re-run every single line below it.
 * If you change a line at the bottom (like `CMD`), Docker uses the "Cache" for everything above it, making the build super fast!
 
 **Would you like me to provide a "Bad vs. Good" Dockerfile example using these instructions to show a newbie how to optimize them?**
@@ -583,7 +583,7 @@ CMD ["app.js"]
 
 ### 3. Healthchecks (`HEALTHCHECK`)
 * **Purpose:** Self-healing.
-* **Problem it solves:** Sometimes a container is "Running" but the app inside is "Frozen" (Zombie state). 
+* **Problem it solves:** Sometimes a container is "Running" but the app inside is "Frozen" (Zombie state).
 * **Real World:**
     ```dockerfile
     HEALTHCHECK --interval=30s --timeout=3s \
@@ -662,12 +662,14 @@ To give a newbie a "Master Manual," we will break down every single Dockerfile i
 
 ### **RUN**
 * **Purpose:** Building the environment (Installing software).
-* **Junior:** ```dockerfile
+* **Junior:**
+```dockerfile
     RUN apt-get update
     RUN apt-get install -y git
     ``` 
     (Creates two layers, increasing image size).
-* **Senior:** ```dockerfile
+* **Senior:**
+```dockerfile
     RUN apt-get update && apt-get install -y \
         git \
         curl && \
@@ -701,7 +703,8 @@ To give a newbie a "Master Manual," we will break down every single Dockerfile i
 
 ### **ENTRYPOINT vs. CMD**
 * **Purpose:** What happens when you double-click the container?
-* **The Pro Combo:** ```dockerfile
+* **The Pro Combo:**
+```dockerfile
     ENTRYPOINT ["python"]
     CMD ["main.py"]
     ```
@@ -801,11 +804,13 @@ To create a high-level guide for a newbie, you should present these as the **"Bu
 ### **RUN** (The Builder)
 * **Purpose:** Executes commands to install software.
 * **Features:** Each `RUN` creates a new layer in the image.
-* **Bad Example:** ```dockerfile
+* **Bad Example:**
+```dockerfile
     RUN apt-get update
     RUN apt-get install -y git
     ``` (Two layers = bigger image).
-* **Good Example:** ```dockerfile
+* **Good Example:**
+```dockerfile
     RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
     ``` (One layer + cleanup = slim image).
 * **Real World:** This is where you "bake" the dependencies into the image so they are ready to use.
@@ -855,7 +860,7 @@ To create a high-level guide for a newbie, you should present these as the **"Bu
 ### **ENTRYPOINT** (The Fixed Command)
 * **Purpose:** Like `CMD`, but much harder to overwrite.
 * **Features:** Makes the container act like a specific executable tool.
-* **Example:** `ENTRYPOINT ["git"]`. 
+* **Example:** `ENTRYPOINT ["git"]`.
 * **Real World:** If you run this container, it *will* run Git. You can't easily tell it to run "Python" instead.
 
 ---
@@ -1104,8 +1109,8 @@ volumes:
 ```
 
 ### 💡 Pro-Tip for Newbies:
-If a newbie says, *"My data isn't updating!"*—it's usually because they used a **Named Volume** when they meant to use a **Bind Mount**. 
-* **Volumes** are for the *app's data* (DB records). 
+If a newbie says, *"My data isn't updating!"*—it's usually because they used a **Named Volume** when they meant to use a **Bind Mount**.
+* **Volumes** are for the *app's data* (DB records).
 * **Bind Mounts** are for the *developer's code*.
 
 **Does this clear up the Volume section, or should we move into "Docker Networking" to explain how containers "talk" to each other?**
@@ -1120,7 +1125,7 @@ how to use them in all and use in docker compsoe file give me step by step creat
 
 # gemini response
 
-For a newbie to truly grasp Docker, they need to see a project go from a simple folder on their computer to a fully containerized "Stack." 
+For a newbie to truly grasp Docker, they need to see a project go from a simple folder on their computer to a fully containerized "Stack."
 
 Here is the step-by-step creation of a project using **Dockerfile**, **Volumes**, **Networking**, and **Docker Compose**.
 
@@ -1232,7 +1237,7 @@ docker compose ps
 ```bash
 docker compose down -v
 ```
-* **What happens:** Stops containers and removes the network. 
+* **What happens:** Stops containers and removes the network.
 * **Note:** The `-v` flag is powerful. It deletes the **Volumes** too. Tell the newbie: "Only use `-v` if you want to wipe the database clean!"
 
 ---
@@ -1250,7 +1255,7 @@ docker compose down -v
 ---
 
 ## 🕵️‍♂️ The "Missing" Info for Newbies: `.dockerignore`
-Before they run their first build, tell them to create a file named `.dockerignore`. 
+Before they run their first build, tell them to create a file named `.dockerignore`.
 
 **The Problem:** Without this, Docker copies the massive `node_modules` or `__pycache__` folders from your laptop into the image, making it huge and slow.
 
@@ -1513,7 +1518,7 @@ yes
 
 # gemini response
 
-To round out your "Master Manual" for a newbie, we’ll move into the **Volume Drivers**. This is where Docker goes from being a "local tool" to a "Cloud-ready" powerhouse. 
+To round out your "Master Manual" for a newbie, we’ll move into the **Volume Drivers**. This is where Docker goes from being a "local tool" to a "Cloud-ready" powerhouse.
 
 In the real world, you don't always store data on the same server where the container is running. If that server crashes, your data could be trapped. **Volume Drivers** solve this by connecting Docker to external storage.
 
@@ -1731,7 +1736,7 @@ volumes:
 ```
 
 ### 💡 Final Tip for the Newbie Document:
-Always remind them that **Drivers are external plugins**. If they try to use an AWS driver on their local Windows laptop without the plugin installed, it will throw an error! 
+Always remind them that **Drivers are external plugins**. If they try to use an AWS driver on their local Windows laptop without the plugin installed, it will throw an error!
 
 **Is this manual ready to be shared, or do you want to add a section on "Docker Secrets" for handling sensitive Fintech API keys?**
 
@@ -1865,7 +1870,7 @@ networks:
 ```
 
 ### 💡 Final "Missing" Info for Newbies:
-In Docker, containers on the **same network** can talk to each other on **any port**, even if you don't use `EXPOSE` or `-p`. The `-p` (Publish) command is **only** for letting your laptop (the Host) talk to the container. 
+In Docker, containers on the **same network** can talk to each other on **any port**, even if you don't use `EXPOSE` or `-p`. The `-p` (Publish) command is **only** for letting your laptop (the Host) talk to the container.
 
 **Is the "Networking" section clear enough for your document, or should we move on to "Docker Secrets and Configs" for the final advanced chapter?**
 
@@ -2079,8 +2084,8 @@ networks:
 ```
 
 ### 💡 Final "Master Rule" for Newbies:
-> **"Start with Bridge."** > If the app doesn't work because it needs to see the physical network, move to **Macvlan**. 
-> If the app is too slow, move to **Host**. 
+> **"Start with Bridge."** > If the app doesn't work because it needs to see the physical network, move to **Macvlan**.
+> If the app is too slow, move to **Host**.
 > If the app needs to go to the cloud, move to **Overlay**.
 
 **Is this final piece of the puzzle enough for your "Newbie to Advanced" document?**
@@ -2180,7 +2185,7 @@ services:
 ---
 
 ## 🕵️‍♂️ The "Unknown" Info: ARG vs ENV
-This is where newbies get confused. 
+This is where newbies get confused.
 
 * **ARG (Build-time):** Only available while the image is being **built**. Once the image is finished, the variable is deleted. (Example: `npm_version`).
 * **ENV (Runtime):** Available while the container is **running**. (Example: `database_password`).
@@ -2501,7 +2506,7 @@ give me toal waysto add secret docker
 
 # gemini response
 
-To wrap up your manual for a newbie, here are the **4 ways to add secrets in Docker**, ranked from the "Quick & Dirty" way to the "Enterprise/Fintech" standard. 
+To wrap up your manual for a newbie, here are the **4 ways to add secrets in Docker**, ranked from the "Quick & Dirty" way to the "Enterprise/Fintech" standard.
 
 In a professional environment, "Secret" means anything that shouldn't be in your source code (API keys, DB passwords, SSH keys).
 
@@ -2543,7 +2548,7 @@ secrets:
 
 ## 3. Docker Swarm Secrets (The "Native Production" Way)
 **Purpose:** To securely distribute secrets across a cluster of multiple servers.
-* **Problem it Solves:** You have 10 servers. You don't want to manually copy a `.txt` password file to all 10. 
+* **Problem it Solves:** You have 10 servers. You don't want to manually copy a `.txt` password file to all 10.
 * **How it Works:** Docker encrypts the secret and stores it in its own internal database (Raft log). It only sends the secret to the specific container that needs it, and only in **memory** (it never hits the hard drive of the worker node).
 * **How to Use:**
 ```bash
@@ -3144,7 +3149,7 @@ Before they say "I know Docker Compose," they should be able to do this:
 
 
 
-This roadmap covers everything from the first "Hello World" to managing a professional Fintech stack. You've now built a complete manual! 
+This roadmap covers everything from the first "Hello World" to managing a professional Fintech stack. You've now built a complete manual!
 
 **Is there any specific "Developer Workflow" (like CI/CD integration) you'd like to add as a final bonus?**
 
@@ -3359,7 +3364,7 @@ how to use them give em all steps and fetauirs opf swarm
 
 # gemini response
 
-Since you are creating a guide for a newbie, the best way to explain **Docker Swarm** is to treat it as a "Multi-Computer Manager." 
+Since you are creating a guide for a newbie, the best way to explain **Docker Swarm** is to treat it as a "Multi-Computer Manager."
 
 In standard Docker, if your laptop dies, the container dies. In Swarm, you connect multiple "Nodes" (computers) into a single "Brain" (the Cluster). If one computer fails, the others take over.
 
@@ -3480,7 +3485,7 @@ now give cheat sheet of all features andtypes and epnaion and exmpale for each t
 
 # gemini response
 
-This is the **Ultimate Docker Master Cheat Sheet (2026 Edition)**. Since you are building this for a newbie, I have categorized every single feature, instruction, and type into logical sections. 
+This is the **Ultimate Docker Master Cheat Sheet (2026 Edition)**. Since you are building this for a newbie, I have categorized every single feature, instruction, and type into logical sections.
 
 Each topic includes the **Purpose**, **Problem Solved**, and a **Real-World Example**.
 
@@ -4677,11 +4682,11 @@ This is the **Ultimate Docker Scenario Cheat Sheet**. I have organized every maj
 
 # you asked
 
-i want 200 scenaio based question and answrs for docker so crfeate phase for each typoci and geenrtateh eq and a like below format 
+i want 200 scenaio based question and answrs for docker so crfeate phase for each typoci and geenrtateh eq and a like below format
 The "BOM" (Bill of Materials) for Spring Cloud
 Scenario: You are using 10 different Spring Cloud modules (Config, Eureka, Gateway), and their versions are a mess.
 The Logic: Keeping 10 versions in sync manually is impossible.
-The Answer: Import the spring-cloud-dependencies BOM in your <dependencyManagement> section with <type>pom</type> and <scope>import</scope>. This "locks" all Spring Cloud modules to a single, tested "Release Train" version.
+The Answer: Import the spring-cloud-dependencies BOM in your `&lt;dependencyManagement&gt;` section with `&lt;type&gt;pom&lt;/type&gt;` and `&lt;scope&gt;import&lt;/scope&gt;`. This "locks" all Spring Cloud modules to a single, tested "Release Train" version.
 thisis sampe format iwant plese use real workd scenarios
 
 ---
@@ -4696,24 +4701,24 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 *Focus: Creating secure, optimized, and fast application blueprints.*
 
 ### 1. The "Fat Image" Problem
-**Scenario:** Your Spring Boot image is 800MB because it includes the entire Maven build tool and source code.  
-**The Logic:** Production images only need the compiled `.jar` file and a Java Runtime (JRE), not the compiler.  
-**The Answer:** Use a **Multi-Stage Build**. In Stage 1 (`FROM maven`), compile the code. In Stage 2 (`FROM eclipse-temurin:17-jre`), only `COPY --from=build` the finished JAR file. This shrinks the image to ~200MB.  
+**Scenario:** Your Spring Boot image is 800MB because it includes the entire Maven build tool and source code.
+**The Logic:** Production images only need the compiled `.jar` file and a Java Runtime (JRE), not the compiler.
+**The Answer:** Use a **Multi-Stage Build**. In Stage 1 (`FROM maven`), compile the code. In Stage 2 (`FROM eclipse-temurin:17-jre`), only `COPY --from=build` the finished JAR file. This shrinks the image to ~200MB.
 
 
 ### 2. The "Slow Rebuild" Loop
-**Scenario:** Every time you change one line of Java code, Docker re-downloads all 50 dependencies from Maven Central.  
-**The Logic:** Docker builds in layers. If you copy your source code *before* downloading dependencies, the cache breaks every time you type a character.  
+**Scenario:** Every time you change one line of Java code, Docker re-downloads all 50 dependencies from Maven Central.
+**The Logic:** Docker builds in layers. If you copy your source code *before* downloading dependencies, the cache breaks every time you type a character.
 **The Answer:** Copy only the `pom.xml` (or `package.json`) first, run the install command, and *then* copy the rest of the source code. Docker will now cache the dependencies layer.
 
 ### 3. The "Root User" Security Risk
-**Scenario:** A hacker finds a vulnerability in your Python app and uses it to delete files on your physical host machine.  
-**The Logic:** By default, Docker runs as `root`. If a container is compromised, the hacker has administrative power.  
+**Scenario:** A hacker finds a vulnerability in your Python app and uses it to delete files on your physical host machine.
+**The Logic:** By default, Docker runs as `root`. If a container is compromised, the hacker has administrative power.
 **The Answer:** Use the `USER` instruction. Create a system user and switch to it: `RUN useradd -m myuser && USER myuser`.
 
 ### 4. The "Zombie Process" Shutdown
-**Scenario:** When you run `docker stop`, your app takes 10 seconds to die and eventually gets "killed" forcefully, potentially corrupting data.  
-**The Logic:** If you use the "Shell form" (`CMD npm start`), the app doesn't receive the `SIGTERM` signal; it goes to the shell instead.  
+**Scenario:** When you run `docker stop`, your app takes 10 seconds to die and eventually gets "killed" forcefully, potentially corrupting data.
+**The Logic:** If you use the "Shell form" (`CMD npm start`), the app doesn't receive the `SIGTERM` signal; it goes to the shell instead.
 **The Answer:** Use the **Exec form**: `CMD ["npm", "start"]`. This ensures the application process is PID 1 and receives shutdown signals directly.
 
 ---
@@ -4722,24 +4727,24 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 *Focus: Managing the "Hard Drive" of your containers.*
 
 ### 31. The "Vanishing Database" Disaster
-**Scenario:** You restart your PostgreSQL container to update a setting, and all your production bank transactions are gone.  
-**The Logic:** Containers are "ephemeral." Any data written inside the container's own filesystem is deleted when the container is removed.  
-**The Answer:** Use a **Named Volume**. Map a persistent space: `-v pg_data:/var/lib/postgresql/data`. Docker manages this space outside the container lifecycle.  
+**Scenario:** You restart your PostgreSQL container to update a setting, and all your production bank transactions are gone.
+**The Logic:** Containers are "ephemeral." Any data written inside the container's own filesystem is deleted when the container is removed.
+**The Answer:** Use a **Named Volume**. Map a persistent space: `-v pg_data:/var/lib/postgresql/data`. Docker manages this space outside the container lifecycle.
 
 
 ### 32. The "Hot Reload" Development Workflow
-**Scenario:** You are tired of rebuilding your React image every time you change a CSS color.  
-**The Logic:** Rebuilding takes minutes; syncing takes milliseconds.  
+**Scenario:** You are tired of rebuilding your React image every time you change a CSS color.
+**The Logic:** Rebuilding takes minutes; syncing takes milliseconds.
 **The Answer:** Use a **Bind Mount**. Map your local source folder directly into the running container: `-v $(pwd):/app`. Now, your local changes reflect instantly inside the container.
 
 ### 33. The "Sensitive Token" RAM Storage
-**Scenario:** You need to store a temporary session token that should never be written to the hard drive for security reasons.  
-**The Logic:** Hard drives can be "scraped" for deleted data. RAM is cleared on power-off.  
+**Scenario:** You need to store a temporary session token that should never be written to the hard drive for security reasons.
+**The Logic:** Hard drives can be "scraped" for deleted data. RAM is cleared on power-off.
 **The Answer:** Use a **tmpfs mount**. Use `--tmpfs /app/secrets`. This mounts a folder directly into the host's memory, ensuring the secret never touches the disk.
 
 ### 34. The "Config Lockdown" Requirement
-**Scenario:** You want to share your `nginx.conf` from your laptop with a container, but you want to ensure the container cannot change it.  
-**The Logic:** By default, mounts are Read-Write.  
+**Scenario:** You want to share your `nginx.conf` from your laptop with a container, but you want to ensure the container cannot change it.
+**The Logic:** By default, mounts are Read-Write.
 **The Answer:** Use the **Read-Only flag**: `-v ./nginx.conf:/etc/nginx/nginx.conf:ro`.
 
 ---
@@ -4748,19 +4753,19 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 *Focus: How containers find and talk to each other safely.*
 
 ### 61. The "Hardcoded IP" Nightmare
-**Scenario:** Your Backend is trying to connect to the Database at `172.17.0.2`, but the IP changes every time you restart the DB.  
-**The Logic:** Docker IPs are dynamic. You should never rely on them.  
-**The Answer:** Create a **User-Defined Bridge Network**. Run `docker network create my-net` and put both containers on it. Now, the Backend can connect using the hostname `db` (e.g., `jdbc:postgresql://db:5432`).  
+**Scenario:** Your Backend is trying to connect to the Database at `172.17.0.2`, but the IP changes every time you restart the DB.
+**The Logic:** Docker IPs are dynamic. You should never rely on them.
+**The Answer:** Create a **User-Defined Bridge Network**. Run `docker network create my-net` and put both containers on it. Now, the Backend can connect using the hostname `db` (e.g., `jdbc:postgresql://db:5432`).
 
 
 ### 62. The "Hidden Database" Security Layer
-**Scenario:** You want your API to talk to the Database, but you want to ensure the Database is completely invisible to the public internet.  
-**The Logic:** If a container isn't "Published" on a port, it's safer.  
+**Scenario:** You want your API to talk to the Database, but you want to ensure the Database is completely invisible to the public internet.
+**The Logic:** If a container isn't "Published" on a port, it's safer.
 **The Answer:** Put both on a private bridge, but only use the `-p` (publish) flag on the API. The DB will be accessible to the API internally but blocked from the outside world.
 
 ### 63. The "Maximum Performance" Trading Bot
-**Scenario:** You are building a Fintech bot that needs the absolute lowest latency (lag) possible to connect to the host's network.  
-**The Logic:** The standard Docker bridge adds a small "Virtual Hop" that slows down networking by a few milliseconds.  
+**Scenario:** You are building a Fintech bot that needs the absolute lowest latency (lag) possible to connect to the host's network.
+**The Logic:** The standard Docker bridge adds a small "Virtual Hop" that slows down networking by a few milliseconds.
 **The Answer:** Use **Host Networking**: `--network host`. This removes the network isolation and lets the container use the computer's IP directly.
 
 ---
@@ -4769,19 +4774,19 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 *Focus: Coordinating multiple containers as one project.*
 
 ### 91. The "Race Condition" Crash
-**Scenario:** You run `docker-compose up`, and the API crashes because it tried to connect to the Database before the DB was finished starting up.  
-**The Logic:** `depends_on` only waits for the container to "start," not for the software inside to be "ready."  
-**The Answer:** Use a **Healthcheck condition** in your `docker-compose.yml`. Define a healthcheck for the DB and set `depends_on: { db: { condition: service_healthy } }`.  
+**Scenario:** You run `docker-compose up`, and the API crashes because it tried to connect to the Database before the DB was finished starting up.
+**The Logic:** `depends_on` only waits for the container to "start," not for the software inside to be "ready."
+**The Answer:** Use a **Healthcheck condition** in your `docker-compose.yml`. Define a healthcheck for the DB and set `depends_on: { db: { condition: service_healthy } }`.
 
 
 ### 92. The "Environment Sprawl" Problem
-**Scenario:** You have 20 different environment variables (DB_USER, API_KEY, etc.) cluttering your YAML file.  
-**The Logic:** Hardcoding secrets in YAML makes them visible to anyone who sees the file.  
+**Scenario:** You have 20 different environment variables (DB_USER, API_KEY, etc.) cluttering your YAML file.
+**The Logic:** Hardcoding secrets in YAML makes them visible to anyone who sees the file.
 **The Answer:** Use an **.env file**. Create a file named `.env` and add your variables there. Docker Compose automatically pulls them into the YAML using `${VARIABLE_NAME}` syntax.
 
 ### 93. The "Selective Debugging" Scenario
-**Scenario:** You have a "Mailhog" service for testing emails, but you don't want it running in your Production environment.  
-**The Logic:** One YAML file should support multiple environments.  
+**Scenario:** You have a "Mailhog" service for testing emails, but you don't want it running in your Production environment.
+**The Logic:** One YAML file should support multiple environments.
 **The Answer:** Use **Profiles**. Add `profiles: ["debug"]` to the Mailhog service. It will only start if you run `docker-compose --profile debug up`.
 
 ---
@@ -4790,14 +4795,14 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 *Focus: Enterprise-grade high availability.*
 
 ### 121. The "Flash Sale" Scaling
-**Scenario:** It is 10:00 AM on Salary Day, and your Fintech app is getting 10x the normal traffic.  
-**The Logic:** One container cannot handle the load.  
-**The Answer:** Use **Scaling**. Run `docker service scale payment-api=20`. Swarm will instantly spin up 18 new copies and load-balance the traffic.  
+**Scenario:** It is 10:00 AM on Salary Day, and your Fintech app is getting 10x the normal traffic.
+**The Logic:** One container cannot handle the load.
+**The Answer:** Use **Scaling**. Run `docker service scale payment-api=20`. Swarm will instantly spin up 18 new copies and load-balance the traffic.
 
 
 ### 122. The "Zero Downtime" Update
-**Scenario:** You need to deploy Version 2.0 of your app without your customers seeing a "Service Unavailable" error.  
-**The Logic:** Stopping all containers at once causes a blackout.  
+**Scenario:** You need to deploy Version 2.0 of your app without your customers seeing a "Service Unavailable" error.
+**The Logic:** Stopping all containers at once causes a blackout.
 **The Answer:** Use a **Rolling Update**. Define an `update_config` with `parallelism: 2`. Swarm will update 2 containers at a time, keeping the rest online.
 
 ---
@@ -4805,13 +4810,13 @@ To build a professional-grade manual for your team, I have organized **200 Real-
 # Phase 6: Maintenance & Troubleshooting (Scenarios 151-200)
 
 ### 151. The "Full Disk" Emergency
-**Scenario:** Your server is out of space, and you can't even start a tiny container.  
-**The Logic:** Over time, old images, stopped containers, and unused volumes eat up your disk.  
+**Scenario:** Your server is out of space, and you can't even start a tiny container.
+**The Logic:** Over time, old images, stopped containers, and unused volumes eat up your disk.
 **The Answer:** Run the **System Prune**: `docker system prune -a --volumes`. This safely deletes everything not currently in use.
 
 ### 180. The "Frozen API" Detection
-**Scenario:** Your container status says "Running," but the app inside is stuck in an infinite loop and isn't responding.  
-**The Logic:** Docker only monitors the process, not the app's internal health.  
+**Scenario:** Your container status says "Running," but the app inside is stuck in an infinite loop and isn't responding.
+**The Logic:** Docker only monitors the process, not the app's internal health.
 **The Answer:** Implement a **Dockerfile HEALTHCHECK**. Use `HEALTHCHECK CMD curl -f http://localhost/api/status || exit 1`. Docker will change the status to "unhealthy" and restart it.
 
 ---
@@ -4976,7 +4981,7 @@ Following the logic of the previous phase, these scenarios address how to handle
 
 **24. The "Config Lockdown" Requirement**
 * **Scenario:** You want to share a `config.json` from your laptop with the container, but you want to ensure the app inside cannot accidentally modify or delete that file.
-* **The Logic:** By default, Docker mounts are Read-Write. 
+* **The Logic:** By default, Docker mounts are Read-Write.
 * **The Answer:** Use the **Read-Only flag**: `-v ./config.json:/app/config.json:ro`. Adding `:ro` prevents the container from writing to the file.
 
 **25. The "Node Modules" Conflict**
@@ -6027,7 +6032,7 @@ This final phase focuses on "Day 2 Operations." Once your Fintech app is running
 
 ---
 
-**This completes the full 200-scenario Docker Master Manual.** These scenarios cover the journey from basic Dockerfiles to high-availability Swarm clusters and advanced production troubleshooting. 
+**This completes the full 200-scenario Docker Master Manual.** These scenarios cover the journey from basic Dockerfiles to high-availability Swarm clusters and advanced production troubleshooting.
 
 **Is there a specific section from these 200 that you would like me to convert into a 1-page "Emergency Cheat Sheet"?**
 
@@ -6149,7 +6154,7 @@ When your app crashes or acts weird, use these to see inside.
 ---
 
 ### 💡 Pro-Tip for your Fintech Workflow:
-Since you have 7 years of experience, you should get comfortable with **filtering**. 
+Since you have 7 years of experience, you should get comfortable with **filtering**.
 * **Scenario:** You want to stop all containers that have the word "api" in their name.
 * **Command:** `docker stop $(docker ps -a -q --filter "name=api")`
 
@@ -6324,7 +6329,7 @@ Example: docker system prune -a --volumes
 
 # gemini response
 
-This is the **Master Docker CLI Directory**. To reach the **300-point mark**, I have broken down every sub-command into its specific functional "Logic" and "Options." 
+This is the **Master Docker CLI Directory**. To reach the **300-point mark**, I have broken down every sub-command into its specific functional "Logic" and "Options."
 
 As a **Fintech Developer**, pay close attention to the **Security** and **Orchestration** categories.
 
@@ -6819,7 +6824,7 @@ Understood. Let’s continue with the detailed, single-block format for each com
 **29. `docker rename`**
 * **Description:** Changes the name of an existing container.
 * **Logic:** Useful when you realize a container has a confusing name or a typo that impacts your scripts.
-* **Example:** `docker rename old-api-name fintech-api-v1
+* **Example:** `docker rename old-api-name fintech-api-v1`
 
 ---
 
@@ -7557,7 +7562,7 @@ This phase focuses on **Hardening and Infrastructure integrity**. In Fintech, pr
 
 **67. `docker diff`**
 * **Purpose:** Inspects changes to files or directories on a container's filesystem.
-* **Description:** Shows exactly what has changed since the container started. 
+* **Description:** Shows exactly what has changed since the container started.
 * **Logic:** Use this in a security audit to see if an application is unexpectedly writing sensitive data to the container's writable layer.
 * **Symbols:** `A` (Added), `C` (Changed), `D` (Deleted).
 * **Example:** `docker diff payment-gateway-container`
@@ -7633,7 +7638,7 @@ This phase focuses on **Hardening and Infrastructure integrity**. In Fintech, pr
 
 **80. `docker config create`**
 * **Purpose:** Creates a Swarm Config from a file or STDIN.
-* **Description:** Similar to Secrets, but for non-sensitive data like `nginx.conf` or `logging.properties`. 
+* **Description:** Similar to Secrets, but for non-sensitive data like `nginx.conf` or `logging.properties`.
 * **Logic:** Allows you to update app configuration across a cluster without rebuilding the image.
 * **Example:** `docker config create my_app_config ./config.yaml`
 
@@ -8087,7 +8092,7 @@ This phase focuses on **Container Hardening and Performance Tuning**. For a deve
 
 **143. `docker run --memory-swap`**
 * **Purpose:** Limits the total amount of RAM + Disk Swap the container can use.
-* **Description:** Controls how much the container can "spill over" onto the hard drive if it runs out of real RAM. 
+* **Description:** Controls how much the container can "spill over" onto the hard drive if it runs out of real RAM.
 * **Logic:** Setting this equal to `--memory` disables swapping for that container, ensuring maximum performance.
 * **Example:** `docker run --memory="1g" --memory-swap="1g" high-perf-db`
 
@@ -8976,7 +8981,7 @@ This final phase covers the **High-Level Administration** and "Day 2" operations
 
 **288. `docker node update --label-add`**
 * **Purpose:** Adds custom metadata (key/value pairs) to a physical server.
-* **Description:** In a Chennai data center, you might label a server as `disk=ssd` or `pci=compliant`. 
+* **Description:** In a Chennai data center, you might label a server as `disk=ssd` or `pci=compliant`.
 * **Logic:** This allows you to tell Docker to only run high-performance databases on "SSD" nodes.
 * **Example:** `docker node update --label-add storage=ssd node-01`
 
@@ -9146,7 +9151,7 @@ Here are the "Missing Pieces" often used by Senior Engineers for deep performanc
 ---
 
 ### Are we truly done?
-Technically, no. There are also **experimental commands** (like `docker debug` or `docker init`) and **Desktop-specific commands**. 
+Technically, no. There are also **experimental commands** (like `docker debug` or `docker init`) and **Desktop-specific commands**.
 
 **Since you are a Full-Stack Developer in Chennai, would you like to see how to use `docker init` to automatically generate Dockerfiles and Compose files for your existing projects?**
 
@@ -9160,7 +9165,7 @@ give me all missing commands
 
 # gemini response
 
-To truly capture **"all"** remaining commands, we must look into the **Experimental**, **Plugin-specific**, and **Internal Management** commands that are often hidden from the standard `docker --help` menu. 
+To truly capture **"all"** remaining commands, we must look into the **Experimental**, **Plugin-specific**, and **Internal Management** commands that are often hidden from the standard `docker --help` menu.
 
 As a Senior Developer in Fintech, these are the commands you use for "Day 2" operations: auto-generating configurations, deep-level filesystem debugging, and specialized Swarm orchestration.
 
@@ -9288,7 +9293,7 @@ docke exceu you coavered
 
 # gemini response
 
-You're right! While I touched on it before, we didn't do a "Deep Dive" into every single option available for `docker exec`. 
+You're right! While I touched on it before, we didn't do a "Deep Dive" into every single option available for `docker exec`.
 
 As a **Fintech Developer**, this is your most important "Live Intervention" tool. If a transaction is stuck or a database connection is hanging in production, `exec` is how you go inside to fix it.
 
@@ -9297,7 +9302,7 @@ As a **Fintech Developer**, this is your most important "Live Intervention" tool
 ### 🔍 Command 21 (Deep Dive): `docker exec`
 
 * **Purpose:** Runs a brand-new process (command) inside a container that is **already running**.
-* **Logic:** It does not restart the container; it simply "injects" a new task into the existing environment. 
+* **Logic:** It does not restart the container; it simply "injects" a new task into the existing environment.
 * **Fintech Use Case:** Jumping into a secure Payment Gateway container to run a quick `psql` query or check a `log` file without stopping the service.
 
 #### **All Available Options:**

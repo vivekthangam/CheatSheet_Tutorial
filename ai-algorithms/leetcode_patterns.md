@@ -6522,11 +6522,11 @@ For any two closed intervals $A = [s_A, e_A]$ and $B = [s_B, e_B]$, exactly one 
 6. **Disjoint After ($e_B < s_A$)**: $B$ strictly precedes $A$. Symmetric inverse of Case 1.
 
 ##### 2. The Symmetry-Breaking Greedy Canonicalization
-In unsorted collections, determining if any two intervals overlap requires $O(N^2)$ pairwise comparisons. 
+In unsorted collections, determining if any two intervals overlap requires $O(N^2)$ pairwise comparisons.
 By **sorting intervals by start time ascending** ($s_1 \le s_2 \le \dots \le s_n$), we introduce a monotonic coordinate invariant:
 $$\forall i < j, \quad s_i \le s_j$$
 This mathematical constraint completely eliminates cases where an upcoming interval starts *before* the current interval. Consequently, the 6 cases collapse into just **2 operational states**:
-* **State 1 (Overlap / Subsumption)**: $s_{\text{next}} \le e_{\text{curr}}$. 
+* **State 1 (Overlap / Subsumption)**: $s_{\text{next}} \le e_{\text{curr}}$.
   - Action: Merge by expanding the right boundary: $e_{\text{curr}} = \max(e_{\text{curr}}, e_{\text{next}})$.
 * **State 2 (Disjoint Separation)**: $s_{\text{next}} > e_{\text{curr}}$.
   - Action: Commit $I_{\text{curr}}$ to output, and advance reference: $I_{\text{curr}} \leftarrow I_{\text{next}}$.
@@ -11366,7 +11366,7 @@ public class FirstUniqueCharacterInString {
 
 #### 📊 Visual Architecture & Node Anatomy: In-Place Pointer Redirection
 
-In a standard singly linked list, each node encapsulates an arbitrary payload `val` and a direct reference pointer `next` addressing the subsequent node on the JVM heap. Unlike contiguous arrays where element retrieval leverages CPU spatial locality and cache lines, linked list traversals require chasing heap references, inducing potential L1/L2 cache misses. 
+In a standard singly linked list, each node encapsulates an arbitrary payload `val` and a direct reference pointer `next` addressing the subsequent node on the JVM heap. Unlike contiguous arrays where element retrieval leverages CPU spatial locality and cache lines, linked list traversals require chasing heap references, inducing potential L1/L2 cache misses.
 
 Creating a new linked list to reverse elements demands allocating $N$ additional heap objects ($24$ bytes per `ListNode` header and fields on a 64-bit JVM with compressed OOPs), burdening the garbage collector. The **In-Place Reversal Pattern** avoids all heap allocations by mutating existing reference pointers in-situ with $O(1)$ auxiliary memory:
 
@@ -12594,7 +12594,7 @@ public class PartitionList {
   - $0 \le \text{Node.val} \le 9$.
 * **Mathematical Invariants**:
   - A sequence of length $N$ is palindromic if and only if:
-    $$\forall i \in [0, \lfloor N / 2 \rfloor - 1]: \quad \text{val}_i = \text{val}_{N - 1 - i}$$
+    $$\forall i \in [0, \lfloor N / 2 \rfloor - 1]: \quad \text{val}[i] = \text{val}[N - 1 - i]$$
   - The 3-Phase In-Place Pipeline:
     1. **Midpoint Discovery**: Floyd's Tortoise & Hare algorithm (`fast = fast.next.next`, `slow = slow.next`) finds the first half's end in $N / 2$ hops.
     2. **Second-Half Inversion**: In-place reversal of the subsegment starting at `slow.next` (or `slow` depending on parity) in $O(1)$ space.
@@ -19973,7 +19973,7 @@ public class MedianFinder {
         // If maxHeap has more than 1 extra element over minHeap, transfer root to minHeap
         if (maxHeap.size() > minHeap.size() + 1) {
             minHeap.offer(maxHeap.poll());
-        } 
+        }
         // If minHeap has more elements than maxHeap, transfer root to maxHeap
         else if (minHeap.size() > maxHeap.size()) {
             maxHeap.offer(minHeap.poll());
@@ -27283,10 +27283,6 @@ public class MinCostTreeLeafValues {
 ---
 
 *Master LeetCode Design Patterns Reference Guide is complete with 180 comprehensive, compilable Java implementations, visual ASCII state diagrams, and exhaustive complexity trade-off analyses.*
-
-
-
-
 
 
 
