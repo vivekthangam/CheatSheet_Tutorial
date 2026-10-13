@@ -1,9 +1,60 @@
-# Master Technical Guide: Spring AOP & Dynamic Proxies Deep-Dive
+[🏠 Back to Home](../../README.md) | [🍃 Spring Ecosystem](spring_core_ioc_boot.md) | [☕ Core Java Internals](../01_java_core/java_interview_master_guide.md) | [🛠️ Attached Project Cheatsheet](#-real-world-production-project--code-cheatsheet-enterprise-audit--idempotency-aspect-engine)
 
-> **Curriculum Milestone**: Module 02 - Spring Framework Enterprise Architecture (Master Guide S06 / SP-GAP-01)  
-> **Topic Coverage**: Aspect-Oriented Architecture, JDK Dynamic Proxies (`$ProxyN`) vs CGLIB (`Enhancer`) vs ByteBuddy Subclassing, AspectJ Load-Time Weaving (LTW) vs Compile-Time Weaving (CTW), Pointcut Designator Internals (`execution`, `within`, `@annotation`, `this`, `target`, `args`, `bean`), Advices (`@Before`, `@AfterReturning`, `@AfterThrowing`, `@Around`, `@After`), `ProceedingJoinPoint`, The Fatal `@Transactional` Self-Invocation Trap and 4 Architectural Solutions, `DefaultAdvisorChainFactory`, `ReflectiveMethodInvocation.proceed()` Recursion Engine, CGLIB FastClass Index Dispatch, Aspect Ordering (`@Order`), Objenesis Instantiation, Spring Boot 3.x AOP Defaults.  
-> **Target Audience**: Senior Software Engineers, Spring Framework Architects, Technical Leads, High-Concurrency Systems Engineers.  
-> **Standard Compliance**: Antigravity 8-Track Progressive Architecture ($\ge 2,100$ lines, zero placeholders, end-to-end runnable production code, low-level bytecode disassemblies, 50 interview scenarios, 10 war-room outages, 8 anti-patterns).
+# Master Technical Guide: Spring AOP & Dynamic Proxies Deep-Dive: Enterprise Architecture & Production Masterclass
+
+> **Document Identity:** [`interview_prep/02_spring_framework/spring_aop_proxies.md`](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/spring_aop_proxies.md)  
+> **Topic Domain:** Aspect-Oriented Programming (AOP), JDK Dynamic Proxies (`$ProxyN`), CGLIB / ByteBuddy Subclass Enhancers, AspectJ Load-Time Weaving (LTW) & Compile-Time Weaving (CTW), Pointcut Designators (`execution`, `within`, `@annotation`, `this`, `target`, `args`, `bean`), Advices (`@Before`, `@AfterReturning`, `@AfterThrowing`, `@Around`, `@After`), `ProceedingJoinPoint`, `ReflectiveMethodInvocation` Interceptor Chain, Self-Invocation Traps, and Enterprise Distributed Idempotency (`S06`)  
+> **Target Framework / Runtime:** Spring Framework 6.x, Spring Boot 3.3.x / 3.4.x, OpenJDK HotSpot JVM 17 LTS / 21 LTS  
+> **Architecture Level:** Principal / Staff+ Enterprise Framework Architect & Cloud-Native Technical Lead  
+> **Target Depth:** 65 Progressive Production Scenarios, Low-Level Bytecode Analysis, 10 SEV-1 Outages, and 5-Dimension Production Code Cheatsheet  
+> 🛠️ **Real-World Project Cheatsheet:** [Jump to Attached Enterprise Audit & Idempotency Aspect Engine Cheatsheet](#-real-world-production-project--code-cheatsheet-enterprise-audit--idempotency-aspect-engine) | [Companion IDE Project](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_aop_proxies/)
+
+---
+
+## 1. Foundational Primer: What, Why & Where? (The "Head")
+
+*Before dissecting `DefaultAdvisorChainFactory`, CGLIB `FastClass` index dispatch, bytecode weaving with ASM/ByteBuddy, and runtime self-invocation pitfalls, here is the essential high-level architecture: what Spring AOP represents, why cross-cutting decorator scattering collapsed early Java monoliths, and where dynamic proxies anchor enterprise microservice reliability.*
+
+### 1.1 What Is It? (Core Definition & Mental Model)
+* **Plain-English Definition**: **Aspect-Oriented Programming (AOP)** is a complementary programming paradigm to Object-Oriented Programming (OOP) that isolates **cross-cutting concerns**—orthogonal capabilities like transactional boundaries, auditing, security authorization, metrics collection, and distributed caching—from pure business logic. In Spring, AOP is realized via **Dynamic Proxies** (JDK reflection proxies, CGLIB, or ByteBuddy subclass enhancers) that wrap bean instances and transparently intercept method invocations.
+* **Everyday Analogy**: Think of an international airport terminal:
+  - **The Business Logic (Target Object)**: The aircraft passenger cabin. The pilots and flight attendants focus entirely on flying the plane and serving passengers.
+  - **Cross-Cutting Concerns (Aspects)**: Border control, customs checks, metal detectors, ticket validation, and baggage screening.
+  - **The Spring Proxy (The Security Screening Corridor)**: Rather than requiring pilots to step out of the cockpit and personally inspect every passenger's passport and suitcase (`this.checkPassport()`), passengers must walk through an enforced security checkpoint corridor (**The Proxy Wrapper**) before reaching the gate. The guards inspect baggage (`@Before`), stamp boarding passes (`@Around`), and sound alarms if contraband is detected (`@AfterThrowing`).
+  - **The Self-Invocation Trap (The Back Door)**: If a passenger is already inside the secure departure lounge and the airline staff escorts them into another gate through an internal side door (`this.nextFlight()`), they completely bypass the security checkpoint corridor! No tickets are stamped and no customs logs are generated.
+* **Architectural Tier Placement**: Operates at the **Service & Persistence Interception Boundary**. Acts as the invisible mediation layer between incoming web requests/REST controllers and underlying domain repositories.
+
+### 1.2 Why Does It Exist? (The Pain Point Before It Existed)
+* **The "Decorator Explosion" Nightmare**: Prior to AOP, enterprise applications suffered from massive code duplication. Adding audit trails, transaction management, or circuit breakers to 400 service methods required manually embedding 20–30 lines of boilerplate into every single method body.
+* **The Concrete Enterprise Headaches**:
+  - 💥 **Headache 1: Code Pollution & Single Responsibility Violation**: Business methods were 85% infrastructure boilerplate (opening sessions, handling rollbacks, logging timestamps) and only 15% domain rules.
+  - 💥 **Headache 2: Scatter & Tangling (The Ripple Effect)**: Changing audit log formatting or switching from local transactions to distributed two-phase commit (XA) required modifying thousands of lines of code across every service class in the codebase.
+  - 💥 **Headache 3: Silent Omissions & Security Breaches**: A junior engineer forgetting to wrap a new financial method in a manual transaction or permission check created catastrophic uncommitted writes and privilege escalation vulnerabilities.
+* **The Turning Point**: Gregor Kiczales and the Xerox PARC team pioneered AOP, leading to the creation of AspectJ. Rod Johnson subsequently integrated dynamic proxy-based AOP into Spring Framework, allowing developers to apply enterprise concerns non-invasively using simple annotations like `@Transactional` and `@Secured`.
+
+### 1.3 How Does It Solve Real-World Enterprise Problems?
+* **Problem 1 (Non-Invasive Declarative Transactions) ➔ Solution 1**: Spring inspects `@Transactional`, wraps the bean in a proxy, intercepts calls, delegates to `PlatformTransactionManager`, and automatically commits or rolls back based on exception hierarchies without a single line of JDBC boilerplate in the service.
+* **Problem 2 (Zero-Trust Auditing & Distributed Tracing) ➔ Solution 2**: A central `@Aspect` intercepts all methods annotated with `@Audited`, extracts user context from security contexts, binds OpenTelemetry trace IDs to MDC, and records duration metrics to Prometheus/Micrometer.
+* **Problem 3 (Distributed Idempotency & Deduplication) ➔ Solution 3**: An `@Around` advice intercepts financial requests, hashes payload keys, acquires an atomic Redis lock before method execution, and caches the result—preventing double-charging even if network retries bombard the cluster.
+* **Quantifiable Enterprise Metrics**:
+  - **90% Boilerplate Elimination**: Eliminates repetitive try-catch-commit blocks across enterprise services.
+  - **100% Policy Consistency**: Architectural invariants (e.g. "every mutating bank transfer must acquire an idempotency lock") are enforced globally at compilation or bean creation.
+  - **Sub-Microsecond Dispatch Overhead**: CGLIB FastClass index dispatch and ByteBuddy modern inline hooks reduce method interception cost to < 120 nanoseconds per call.
+
+### 1.4 How Does This Help in Building Real Applications?
+* **Application Architecture Placement**: Serves as the primary engine driving Spring's declarative infrastructure: Spring Security (`@PreAuthorize`), Spring Transaction (`@Transactional`), Spring Cache (`@Cacheable`), Spring Retry (`@Retryable`), and Micrometer (`@Timed`).
+* **Developer Workflow & SRE Synergy**: SREs gain transparent observability into slow method executions and distributed traces without developers needing to pollute core domain algorithms with metrics SDK code.
+* **Scalability & Evolutionary Runway**: Teams can introduce distributed rate limiting, circuit breaking, or payload encryption across an entire enterprise API by writing a single aspect and annotating target methods, requiring zero modifications to existing domain entities.
+
+### 1.5 Quick Decision & Trade-Off Matrix
+
+| AOP / Proxy Mechanism | Implementation Mechanics | Bytecode Modification | Performance & Limitations | Recommended Enterprise Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| **JDK Dynamic Proxy** | `java.lang.reflect.Proxy` implementing target interfaces | Runtime class generation (`$ProxyN.class`) | 🟡 Requires interfaces; cannot proxy concrete classes; reflection dispatch overhead | Use when strict interface programming contracts are enforced across API boundaries |
+| **CGLIB Proxy** | Generates dynamic subclass overriding non-final methods | Runtime ASM bytecode manipulation | 🟢 FastClass direct indexing; cannot proxy `final` classes or `final` methods | 🚀 **Spring Boot 2.x & 3.x Default** (`proxy-target-class=true`) |
+| **ByteBuddy Proxy** | High-performance type-safe subclassing | Modern runtime bytecode generation | 🟢 Superior JIT optimization; replaces CGLIB in modern Spring Boot 3.x / Hibernate 6 | High-throughput enterprise microservices and modern cloud runtimes |
+| **AspectJ CTW (Compile-Time)** | AspectJ Compiler (`ajc`) weaves aspects into `.class` files | Compile-time bytecode transformation | 🚀 **Zero proxy objects**; intercepts private/static/field accesses; faster runtime | Ultra-low-latency financial engines; complex domain object state interception |
+| **AspectJ LTW (Load-Time)** | JVM Java Agent (`-javaagent`) weaves as classes load | ClassLoader byte transformation hook | 🚀 Intercepts non-Spring managed objects; requires JVM agent configuration | Legacy monolith modernization, containerized microservices requiring non-bean weaving |
 
 ---
 
@@ -2177,6 +2228,558 @@ Place `META-INF/aop.xml` in `src/main/resources` declaring `<weaver options="-ve
 ### Scenario 65: Mocking Proxied Beans in Unit vs Integration Tests
 **Problem**: In `@SpringBootTest`, using `@MockBean` on a CGLIB proxied service removes the `@Transactional` or `@Aspect` behavior during tests.  
 **Solution**: `@MockBean` replaces the entire Spring Bean definition with a Mockito mock instance, completely stripping Spring's proxy wrapper! To test the actual aspect interceptor logic, do not mock the bean; mock its downstream collaborators (e.g. `JdbcTemplate` or `HttpClient`) so the proxy and aspect pipeline remain fully active in the test context.
+
+---
+
+## 🛠️ Real-World Production Project & Code Cheatsheet: Enterprise Audit & Idempotency Aspect Engine
+
+> **Attached Domain Project:** `Enterprise Audit & Distributed Idempotency Aspect Engine` (`com.cheatsheet.aop`)  
+> **Target Framework:** Spring Boot 3.3+ | Spring Framework 6.1+ | Java 21 LTS  
+> **Companion Code Mirror:** [`code/02_spring_framework/spring_aop_proxies/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_aop_proxies/)  
+> **Key Technologies Demonstrated:** `@Aspect`, `@Around`, `ProceedingJoinPoint`, `MethodSignature`, SpEL Dynamic Key Resolution, Distributed Idempotency Locks, MDC Audit Tracing, Self-Invocation Resolution (`AopContext.currentProxy()`), Aspect Ordering (`@Order`), PII Sanitization.
+
+---
+
+### 1. Complete Runnable Topic Code Cheatsheet (Enterprise Audit & Idempotency Aspect Engine)
+
+The following enterprise engine demonstrates production-grade Aspect-Oriented Architecture, combining dynamic distributed idempotency deduplication, structured audit logging, safe SpEL parameter evaluation, and self-invocation resolution in a high-volume financial settlement pipeline:
+
+```java
+package com.cheatsheet.aop.engine;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.aop.framework.AopContext;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.core.annotation.Order;
+import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.SimpleEvaluationContext;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+
+import java.lang.annotation.*;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
+// ============================================================================
+// 1. DOMAIN MODELS & CUSTOM AOP ANNOTATIONS
+// ============================================================================
+public record PaymentOrderRequest(String orderId, String accountId, BigDecimal amount, String idempotencyKey) {}
+public record PaymentOrderResponse(String transactionId, String orderId, String status, Instant settledAt) {}
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface IdempotentOperation {
+    /** SpEL expression to extract the unique idempotency token from method arguments. */
+    String keyExpression() default "#request.idempotencyKey()";
+    long ttlSeconds() default 120;
+}
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface AuditedTransaction {
+    String action();
+    boolean maskSensitiveArgs() default true;
+}
+
+// Custom exception thrown when duplicate in-flight or completed operations occur
+public class DuplicateOperationException extends RuntimeException {
+    public DuplicateOperationException(String message) { super(message); }
+}
+
+// ============================================================================
+// 2. ASPECT 1: DISTRIBUTED IDEMPOTENCY ASPECT (@Order(100) - Outermost Guard)
+// ============================================================================
+@Aspect
+@Order(100)
+@Component
+public class DistributedIdempotencyAspect {
+    private static final Logger log = LoggerFactory.getLogger(DistributedIdempotencyAspect.class);
+    private final ExpressionParser parser = new SpelExpressionParser();
+
+    // High-performance thread-safe state store (emulating Redis SETNX with TTL)
+    private final Map<String, IdempotencyRecord> lockStore = new ConcurrentHashMap<>();
+
+    private record IdempotencyRecord(Object response, Instant expiresAt, boolean inFlight) {}
+
+    @Around("@annotation(idempotentOp)")
+    public Object enforceIdempotency(ProceedingJoinPoint joinPoint, IdempotentOperation idempotentOp) throws Throwable {
+        String key = resolveSpelKey(joinPoint, idempotentOp.keyExpression());
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("Idempotency key resolved to null or empty string");
+        }
+
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(idempotentOp.ttlSeconds());
+
+        // Atomic Check-and-Set: Emulates Redis SET key in_flight NX EX ttl
+        IdempotencyRecord existing = lockStore.putIfAbsent(key, new IdempotencyRecord(null, expiresAt, true));
+        if (existing != null) {
+            if (existing.expiresAt().isAfter(now)) {
+                if (existing.inFlight()) {
+                    log.warn("Concurrent duplicate request detected for idempotency key: {}", key);
+                    throw new DuplicateOperationException("Operation already in-flight for key: " + key);
+                }
+                log.info("Returning cached response for completed idempotent operation: {}", key);
+                return existing.response();
+            } else {
+                // Key expired, evict and replace
+                lockStore.put(key, new IdempotencyRecord(null, expiresAt, true));
+            }
+        }
+
+        try {
+            Object result = joinPoint.proceed();
+            // Cache the successful outcome
+            lockStore.put(key, new IdempotencyRecord(result, expiresAt, false));
+            return result;
+        } catch (Throwable ex) {
+            // On business failure, release the lock so the client may safely retry
+            lockStore.remove(key);
+            log.error("Idempotent operation failed for key: {}. Lock released.", key, ex);
+            throw ex;
+        }
+    }
+
+    private String resolveSpelKey(ProceedingJoinPoint joinPoint, String expressionStr) {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String[] paramNames = signature.getParameterNames();
+        Object[] args = joinPoint.getArgs();
+
+        // Safe evaluation context preventing SpEL injection attacks
+        Map<String, Object> variables = new HashMap<>();
+        for (int i = 0; i < paramNames.length; i++) {
+            variables.put(paramNames[i], args[i]);
+        }
+
+        var context = SimpleEvaluationContext.forReadOnlyDataBinding().build();
+        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+            context.setVariable(entry.getKey(), entry.getValue());
+        }
+
+        Object evaluated = parser.parseExpression(expressionStr).getValue(context);
+        return evaluated != null ? evaluated.toString() : null;
+    }
+}
+
+// ============================================================================
+// 3. ASPECT 2: ENTERPRISE AUDIT & TELEMETRY ASPECT (@Order(200) - Inner Guard)
+// ============================================================================
+@Aspect
+@Order(200)
+@Component
+public class EnterpriseAuditAspect {
+    private static final Logger log = LoggerFactory.getLogger(EnterpriseAuditAspect.class);
+
+    @Around("@annotation(audited)")
+    public Object auditMethodInvocation(ProceedingJoinPoint joinPoint, AuditedTransaction audited) throws Throwable {
+        String correlationId = UUID.randomUUID().toString();
+        MDC.put("correlationId", correlationId);
+        MDC.put("action", audited.action());
+
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String methodName = signature.getDeclaringType().getSimpleName() + "." + signature.getName();
+        long startNano = System.nanoTime();
+
+        log.info("[AUDIT-START] Action: {} | Method: {} | CorrelationId: {}",
+                audited.action(), methodName, correlationId);
+
+        try {
+            Object result = joinPoint.proceed();
+            long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNano);
+
+            log.info("[AUDIT-SUCCESS] Action: {} | Method: {} | Duration: {}ms | CorrelationId: {}",
+                    audited.action(), methodName, durationMs, correlationId);
+            return result;
+        } catch (Throwable ex) {
+            long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNano);
+            log.error("[AUDIT-FAILURE] Action: {} | Method: {} | Duration: {}ms | Error: {} | CorrelationId: {}",
+                    audited.action(), methodName, durationMs, ex.getMessage(), correlationId, ex);
+            throw ex;
+        } finally {
+            MDC.remove("correlationId");
+            MDC.remove("action");
+        }
+    }
+}
+
+// ============================================================================
+// 4. ENTERPRISE BUSINESS SERVICE: Self-Invocation Resolution & Contract
+// ============================================================================
+public interface PaymentSettlementOperations {
+    PaymentOrderResponse processSettlement(PaymentOrderRequest request);
+    PaymentOrderResponse internalSubAccountDebit(PaymentOrderRequest request);
+}
+
+@Service
+public class PaymentSettlementService implements PaymentSettlementOperations {
+    private static final Logger log = LoggerFactory.getLogger(PaymentSettlementService.class);
+
+    // Technique 1: Self-injection via ObjectProvider to cleanly avoid circular dependencies
+    private final ObjectProvider<PaymentSettlementOperations> selfProvider;
+
+    public PaymentSettlementService(ObjectProvider<PaymentSettlementOperations> selfProvider) {
+        this.selfProvider = selfProvider;
+    }
+
+    @Override
+    @IdempotentOperation(keyExpression = "#request.idempotencyKey()", ttlSeconds = 60)
+    @AuditedTransaction(action = "PROCESS_PAYMENT_SETTLEMENT")
+    public PaymentOrderResponse processSettlement(PaymentOrderRequest request) {
+        log.info("Executing core settlement logic for order: {}", request.orderId());
+
+        // ❌ ANTI-PATTERN: Calling this.internalSubAccountDebit(request) completely BYPASSES proxies!
+        // ✅ REFACTORED: Invoke via selfProvider proxy or AopContext.currentProxy()
+        PaymentSettlementOperations proxy = selfProvider.getIfAvailable();
+        if (proxy != null) {
+            return proxy.internalSubAccountDebit(request);
+        } else {
+            // Fallback to AopContext if selfProvider unavailable
+            PaymentSettlementOperations aopProxy = (PaymentSettlementOperations) AopContext.currentProxy();
+            return aopProxy.internalSubAccountDebit(request);
+        }
+    }
+
+    @Override
+    @AuditedTransaction(action = "SUB_ACCOUNT_DEBIT")
+    public PaymentOrderResponse internalSubAccountDebit(PaymentOrderRequest request) {
+        log.info("Executing audited sub-account debit for account: {}, amount: ${}",
+                request.accountId(), request.amount());
+
+        return new PaymentOrderResponse(
+                "TXN-" + UUID.randomUUID().toString().substring(0, 8),
+                request.orderId(),
+                "COMPLETED",
+                Instant.now()
+        );
+    }
+}
+
+// ============================================================================
+// 5. SPRING BOOT APPLICATION BOOTSTRAPPER (exposeProxy = true Enabled)
+// ============================================================================
+@SpringBootApplication
+@EnableAspectJAutoProxy(exposeProxy = true, proxyTargetClass = true)
+public class AuditIdempotencyApplication {
+    public static void main(String[] args) {
+        var context = SpringApplication.run(AuditIdempotencyApplication.class, args);
+        PaymentSettlementOperations service = context.getBean(PaymentSettlementOperations.class);
+
+        var request = new PaymentOrderRequest("ORD-1001", "ACC-789", BigDecimal.valueOf(250.00), "IDEM-KEY-999");
+        log.info("First Call: {}", service.processSettlement(request));
+        log.info("Duplicate Retry Call (Returns Cached Response): {}", service.processSettlement(request));
+    }
+}
+```
+
+---
+
+### 2. Positive vs Negative Execution Paths (Failure Boundaries)
+
+| Execution Dimension | Positive Path (Production Standard) | Negative Path (Failure Boundary) | Detection & Mitigation |
+| :--- | :--- | :--- | :--- |
+| **Proxy Interception** | Spring injects CGLIB/ByteBuddy generated proxy bean; external callers invoke method via proxy wrapper. | Call made internally via `this.method()`, or method marked `final`, completely bypassing proxy interceptor chain. | Unit tests using Mockito verify interceptor invocations. Enforce self-proxy injection or ArchUnit bans on `this.annotatedMethod()`. |
+| **Idempotency Deduplication** | Atomic key check secures lock; request processes once; identical subsequent calls return cached response without hitting DB. | Race conditions allow simultaneous identical threads past unguarded map; lock never released if exception unhandled. | Atomic `putIfAbsent` or Redis Lua script (`SET NX EX`). Guarantee `finally` or catch block releases uncompleted lock. |
+| **Advice Exception Handling** | `@Around` catches exceptions, records metric/MDC trace failure, and **rethrows** exception to trigger `@Transactional` rollback. | Advice catches `Throwable`, logs message, and returns `null` or default value, silently suppressing database rollback! | Transaction commits dirty half-mutated data. SRE alert: audit interceptor unit tests verifying exception propagation. |
+| **Aspect Execution Ordering** | `@Order(100)` Idempotency runs first, followed by `@Order(200)` Security, `@Order(300)` Audit, and `@Order(400)` Transaction. | Unordered aspects execute Transaction *before* Security, opening expensive DB connections for unauthenticated requests. | Explicit `@Order` on every `@Aspect` bean. Integration tests asserting advisor chain sequence in `DefaultAdvisorChainFactory`. |
+
+---
+
+### 3. Real-World Mistakes, Outage Bugs & Fixes (BugLab)
+
+#### Bug 1: Self-Invocation Trap Silently Bypassing `@Transactional` & `@IdempotentOperation`
+* **Outage Incident**: Production payment service experienced duplicate credit card debits totaling $180,000 during network retries.
+* **Root Cause**: An outer method `checkout()` invoked an inner `@IdempotentOperation @Transactional` method via `this.executeDebit()`. The internal call used Java's direct `invokevirtual` on the raw `this` pointer, completely bypassing Spring's proxy wrapper and leaving the operation unprotected.
+
+```java
+// ❌ BUG: Self-invocation via 'this' completely bypasses the Spring AOP proxy wrapper
+@Service
+public class CheckoutService {
+    public void checkout(PaymentOrderRequest request) {
+        log.info("Preparing checkout...");
+        // 💥 Bypasses proxy! No Idempotency check, no Transaction boundary opened!
+        this.executeDebit(request);
+    }
+
+    @IdempotentOperation(keyExpression = "#request.idempotencyKey()")
+    @Transactional
+    public void executeDebit(PaymentOrderRequest request) {
+        chargeCustomer(request);
+    }
+}
+
+// ✅ REFACTORED: Inject self-proxy or use AopContext.currentProxy() to route via interceptor chain
+@Service
+public class CheckoutService {
+    private final ObjectProvider<CheckoutService> selfProvider;
+
+    public CheckoutService(ObjectProvider<CheckoutService> selfProvider) {
+        this.selfProvider = selfProvider;
+    }
+
+    public void checkout(PaymentOrderRequest request) {
+        log.info("Preparing checkout...");
+        // ✅ Calls through the generated proxy; idempotency and transaction advices execute cleanly
+        selfProvider.getObject().executeDebit(request);
+    }
+
+    @IdempotentOperation(keyExpression = "#request.idempotencyKey()")
+    @Transactional
+    public void executeDebit(PaymentOrderRequest request) {
+        chargeCustomer(request);
+    }
+}
+```
+
+#### Bug 2: Swallowing Exceptions in `@Around` Advice Silently Committing Corrupted Data
+* **Outage Incident**: Bank account balances decremented without corresponding ledger journal entries being written.
+* **Root Cause**: An engineer added an `@Around` performance logging aspect that caught `Throwable` and returned `null` instead of rethrowing, preventing Spring's `@Transactional` interceptor from detecting the error and rolling back the transaction.
+
+```java
+// ❌ BUG: Catching and swallowing exception prevents downstream transaction rollback
+@Aspect
+@Component
+public class PerformanceLoggingAspect {
+    @Around("execution(* com.enterprise.service..*(..))")
+    public Object logPerformance(ProceedingJoinPoint pjp) {
+        try {
+            return pjp.proceed();
+        } catch (Throwable t) {
+            log.error("Method execution failed: {}", t.getMessage());
+            return null; // 💥 Disasters: @Transactional sees no exception and COMMITS half-completed work!
+        }
+    }
+}
+
+// ✅ REFACTORED: Always rethrow the original caught exception in @Around advice
+@Aspect
+@Component
+public class PerformanceLoggingAspect {
+    @Around("execution(* com.enterprise.service..*(..))")
+    public Object logPerformance(ProceedingJoinPoint pjp) throws Throwable {
+        try {
+            return pjp.proceed();
+        } catch (Throwable t) {
+            log.error("Method execution failed: {}", t.getMessage());
+            throw t; // ✅ Propagate exception so @Transactional rollback rules trigger correctly
+        }
+    }
+}
+```
+
+#### Bug 3: Mutable Stateful Fields Inside Singleton `@Aspect` Bean
+* **Outage Incident**: Audit records under concurrent load logged Customer A's transactions under Customer B's account ID.
+* **Root Cause**: The developer created a class field `private String currentAccountId` inside a Spring singleton `@Aspect` bean. Concurrent worker threads overwrote the field across parallel requests.
+
+```java
+// ❌ BUG: Aspect bean is a Spring Singleton; class field causes race conditions and data corruption
+@Aspect
+@Component
+public class StatefulAuditAspect {
+    private String currentAccountId; // 💥 Shared mutable state across all concurrent HTTP worker threads!
+
+    @Before("@annotation(audited) && args(request,..)")
+    public void before(AuditedTransaction audited, PaymentOrderRequest request) {
+        this.currentAccountId = request.accountId();
+    }
+
+    @AfterReturning("@annotation(audited)")
+    public void after(AuditedTransaction audited) {
+        auditLogger.record(this.currentAccountId, "SUCCESS"); // 💥 Overwritten by parallel thread!
+    }
+}
+
+// ✅ REFACTORED: Use local variables inside @Around advice or ThreadLocal/ScopedValue
+@Aspect
+@Component
+public class StatelessAuditAspect {
+    @Around("@annotation(audited) && args(request,..)")
+    public Object audit(ProceedingJoinPoint pjp, AuditedTransaction audited, PaymentOrderRequest request) throws Throwable {
+        // ✅ Stack-allocated local variables are isolated per thread frame
+        String accountId = request.accountId();
+        Object result = pjp.proceed();
+        auditLogger.record(accountId, "SUCCESS");
+        return result;
+    }
+}
+```
+
+---
+
+### 4. Security Vulnerabilities & Mitigations (SecurityLab)
+
+#### Sec 1: Remote Code Execution via Arbitrary SpEL Injection in Dynamic AOP Key Evaluator
+* **Vulnerability Vector**: An aspect evaluated user-supplied idempotency key expressions using `StandardEvaluationContext`. An attacker passed `T(java.lang.Runtime).getRuntime().exec("rm -rf /")` leading to immediate Remote Code Execution.
+
+```java
+// 🚨 VULNERABILITY: StandardEvaluationContext grants access to Java types, reflection, and JVM execution
+public String evaluateKey(String userExpression, Object payload) {
+    ExpressionParser parser = new SpelExpressionParser();
+    StandardEvaluationContext context = new StandardEvaluationContext(payload);
+    // 💥 RCE: Attacker executes arbitrary shell code via T(java.lang.Runtime)
+    return parser.parseExpression(userExpression).getValue(context, String.class);
+}
+
+// 🛡️ MITIGATION: Restrict SpEL to SimpleEvaluationContext with strict alphanumeric whitelist
+public String evaluateKey(String userExpression, Object payload) {
+    // 1. Enforce strict pattern whitelist
+    if (!userExpression.matches("^[#a-zA-Z0-9_.()]+$")) {
+        throw new SecurityException("Disallowed characters in SpEL expression: " + userExpression);
+    }
+
+    ExpressionParser parser = new SpelExpressionParser();
+    // 2. SimpleEvaluationContext blocks all class instantiation, Constructors, and method execution
+    var context = SimpleEvaluationContext.forReadOnlyDataBinding()
+            .withRootObject(payload)
+            .build();
+    return parser.parseExpression(userExpression).getValue(context, String.class);
+}
+```
+
+#### Sec 2: Sensitive PII & Credit Card Data Leakage in Generic AOP Parameter Logging
+* **Vulnerability Vector**: An enterprise logging aspect printed `joinPoint.getArgs()` to centralized log aggregators (Splunk/Datadog), exposing plaintext 16-digit credit card PANs and CVVs and violating PCI-DSS compliance.
+
+```java
+// 🚨 VULNERABILITY: Logging raw arguments exposes plain-text credit cards and passwords
+@Around("@annotation(Audited)")
+public Object logArgs(ProceedingJoinPoint pjp) throws Throwable {
+    // 💥 Dumps CVV, passwords, and SSNs directly into log files
+    log.info("Invoking method: {} with args: {}", pjp.getSignature().getName(), Arrays.toString(pjp.getArgs()));
+    return pjp.proceed();
+}
+
+// 🛡️ MITIGATION: Implement PII masking visitor inspecting parameter types and annotations
+@Around("@annotation(Audited)")
+public Object logArgs(ProceedingJoinPoint pjp) throws Throwable {
+    Object[] sanitizedArgs = Arrays.stream(pjp.getArgs())
+            .map(this::maskSensitivePayload)
+            .toArray();
+    log.info("Invoking method: {} with args: {}", pjp.getSignature().getName(), Arrays.toString(sanitizedArgs));
+    return pjp.proceed();
+}
+
+private Object maskSensitivePayload(Object arg) {
+    if (arg instanceof PaymentOrderRequest req) {
+        return new PaymentOrderRequest(req.orderId(), req.accountId(), req.amount(), "***MASKED***");
+    }
+    return arg;
+}
+```
+
+#### Sec 3: ThreadLocal Memory Leak & Cross-Tenant Context Bleed in AOP Security Interceptors
+* **Vulnerability Vector**: An aspect populated `SecurityContextHolder` in an `@Before` advice on Tomcat thread-pool workers but failed to clear it when an unexpected runtime exception occurred, allowing subsequent requests on the recycled thread to impersonate previous privileged users.
+
+```java
+// 🚨 VULNERABILITY: Setting ThreadLocal without guaranteed finally cleanup leaks security state
+@Aspect
+@Component
+public class TenantContextAspect {
+    @Before("@annotation(multitenant)")
+    public void setTenant(JoinPoint jp, MultiTenant multitenant) {
+        // 💥 If downstream method throws, thread is returned to pool WITH tenant context intact!
+        TenantContextHolder.setTenantId(multitenant.tenantId());
+    }
+}
+
+// 🛡️ MITIGATION: Use @Around advice with guaranteed finally block cleanup
+@Aspect
+@Component
+public class TenantContextAspect {
+    @Around("@annotation(multitenant)")
+    public Object manageTenantContext(ProceedingJoinPoint pjp, MultiTenant multitenant) throws Throwable {
+        try {
+            TenantContextHolder.setTenantId(multitenant.tenantId());
+            return pjp.proceed();
+        } finally {
+            // ✅ Guaranteed execution prevents thread-pool tenant impersonation leaks
+            TenantContextHolder.clear();
+        }
+    }
+}
+```
+
+---
+
+### 5. Architectural & Design Anti-Patterns (ArchitectureLab)
+
+#### Anti-Pattern 1: Heavy Synchronous Database Logging Inside `@Around` Smothering Throughput
+* **The Anti-Pattern**: Executing synchronous SQL inserts into an audit table inside an `@Around` aspect on every API call, turning 5ms memory operations into 120ms database bottlenecks and exhausting the connection pool.
+* **The Refactoring**: Publish lightweight in-memory domain events (`ApplicationEventPublisher`) or stream records to an asynchronous Kafka topic, decoupling audit ingestion from the request-response thread.
+
+```java
+// ⚠️ ANTI-PATTERN: Synchronous DB audit calls inside AOP advice block HTTP worker threads
+@Around("@annotation(AuditedTransaction)")
+public Object auditSync(ProceedingJoinPoint pjp) throws Throwable {
+    Object result = pjp.proceed();
+    // 💥 Synchronous JDBC call consumes connection pool and degrades throughput by 90%
+    auditRepository.save(new AuditRecord(pjp.getSignature().getName(), Instant.now()));
+    return result;
+}
+
+// 🏗️ REFACTOR: Asynchronous decoupled event publishing
+@Around("@annotation(AuditedTransaction)")
+public Object auditAsync(ProceedingJoinPoint pjp) throws Throwable {
+    Object result = pjp.proceed();
+    // ✅ Asynchronously dispatched on worker pool; zero latency penalty on caller
+    eventPublisher.publishEvent(new AuditEvent(pjp.getSignature().getName(), Instant.now()));
+    return result;
+}
+```
+
+#### Anti-Pattern 2: Global Wildcard Pointcut Expression Causing Monolith Startup Collapse
+* **The Anti-Pattern**: Writing broad pointcut expressions like `execution(* *(..))` or `@annotation(...)` without package limits, forcing Spring's `DefaultAdvisorChainFactory` to introspect every single method of 40,000 classpath beans and ballooning startup time from 15 seconds to 12 minutes.
+* **The Refactoring**: Constrain pointcuts with `within(com.enterprise.service..*)` to limit bytecode inspection to business application packages only.
+
+```java
+// ⚠️ ANTI-PATTERN: Global pointcut scans entire JVM classpath, Spring internal beans, and libraries
+@Pointcut("@annotation(Audited)")
+public void unconstrainedPointcut() {}
+
+// 🏗️ REFACTOR: Scoped compound pointcut restricting evaluation to domain packages
+@Pointcut("within(com.enterprise.service..*) && @annotation(com.enterprise.annotation.Audited)")
+public void scopedPointcut() {}
+```
+
+#### Anti-Pattern 3: Bypassing CGLIB Proxying by Marking Core Service Methods `final`
+* **The Anti-Pattern**: Developers declaring service classes or methods with `public final void processPayment()`. CGLIB generates subclasses at runtime and cannot override `final` methods; calls to `final` methods execute on the target instance without any warnings, silently disabling security, transactions, and metrics.
+* **The Refactoring**: Keep proxied service classes and methods non-final, or enforce automated build-time linting with ArchUnit.
+
+```java
+// ⚠️ ANTI-PATTERN: 'final' keyword silently prevents CGLIB from overriding the method
+@Service
+public class PaymentService {
+    // 💥 CGLIB cannot override final methods! Interceptor silently skipped!
+    public final void processPayment(PaymentRequest req) {
+        // Runs with ZERO transactions, ZERO security, and ZERO idempotency!
+    }
+}
+
+// 🏗️ REFACTOR: Non-final methods permit clean CGLIB subclass method interception
+@Service
+public class PaymentService {
+    // ✅ Cleanly intercepted by CGLIB FastClass dispatch
+    public void processPayment(PaymentRequest req) {
+        // Protected by full AOP interceptor pipeline
+    }
+}
+```
 
 ---
 

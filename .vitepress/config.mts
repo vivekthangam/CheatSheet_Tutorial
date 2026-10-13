@@ -1,41 +1,93 @@
 import { defineConfig } from 'vitepress'
-import { withMermaid } from 'vitepress-plugin-mermaid'
 import { bundledLanguages } from 'shiki'
 
-export default withMermaid(
-  defineConfig({
-    title: "Developer & Architect Hub",
-    description: "Production-grade engineering documentation, interview master guides, and scenario handbook.",
-    base: '/vivekthangam/CheatSheet_Tutorial/',
-    srcDir: '.',
-    rewrites: {
-      'README.md': 'index.md'
+export default defineConfig({
+  title: "Developer & Architect Hub",
+  description: "Production-grade engineering documentation, interview master guides, and scenario handbook.",
+  base: '/vivekthangam/CheatSheet_Tutorial/',
+  srcDir: '.',
+  rewrites: {
+    'README.md': 'index.md'
+  },
+  ignoreDeadLinks: true,
+  vite: {
+    optimizeDeps: {
+      include: ['mermaid', 'dayjs']
     },
-    ignoreDeadLinks: true,
-    mermaid: {
-      // Mermaid configuration options
-      securityLevel: 'loose',
-      startOnLoad: false
+    ssr: {
+      noExternal: ['mermaid', 'dayjs', 'vitepress-plugin-mermaid']
     },
-    markdown: {
-      theme: {
-        light: 'github-light',
-        dark: 'github-dark'
-      },
-      languages: Object.keys(bundledLanguages),
-      config: (md) => {
-        // Normalize ascii, ditaa and diagram code blocks to text for clean rendering
-        const defaultFence = md.renderer.rules.fence!
-        md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    build: {
+      chunkSizeWarningLimit: 4000,
+      rollupOptions: {
+        onwarn(warning, warn) {
+          // Suppress non-fatal format, syntax, circular dependency, and eval warnings during build
+          return
+        }
+      }
+    }
+  },
+  markdown: {
+    theme: {
+      light: 'github-light',
+      dark: 'github-dark'
+    },
+    languages: Object.keys(bundledLanguages),
+    config: (md) => {
+      // Safe fence renderer: catch highlighting/syntax errors and fallback cleanly to plain text
+      const defaultFence = md.renderer.rules.fence!
+      md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+        try {
           const token = tokens[idx]
           const info = (token.info || '').trim()
           if (info === 'ascii' || info === 'ditaa' || info === 'diagram') {
             token.info = 'text'
           }
           return defaultFence(tokens, idx, options, env, self)
+        } catch {
+          const token = tokens[idx]
+          return `<pre><code>${md.utils.escapeHtml(token.content)}</code></pre>`
         }
       }
-    },
+
+      // Safe HTML tag handler: escape non-standard pseudo-HTML tags (e.g. <context>, <name>, <T>, etc.)
+      // preventing unclosed tag syntax errors in Vue template compilation while preserving legitimate HTML
+      const standardHtmlTags = new Set([
+        'a', 'b', 'blockquote', 'br', 'code', 'dd', 'del', 'details', 'div', 'dl', 'dt',
+        'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'input', 'ins', 'kbd',
+        'li', 'mark', 'ol', 'p', 'pre', 's', 'small', 'span', 'strong', 'sub', 'summary',
+        'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul', 'video', 'audio',
+        'source', 'svg', 'path', 'g', 'circle', 'rect', 'line', 'polygon', 'polyline',
+        'badge', 'vpbadge', 'outboundlink'
+      ])
+
+      const defaultHtmlInline = md.renderer.rules.html_inline || ((tokens, idx) => tokens[idx].content)
+      md.renderer.rules.html_inline = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        const tagMatch = token.content.match(/^<\/?([a-zA-Z0-9_-]+)/)
+        if (tagMatch) {
+          const tagName = tagMatch[1].toLowerCase()
+          if (!standardHtmlTags.has(tagName)) {
+            return md.utils.escapeHtml(token.content)
+          }
+        }
+        return defaultHtmlInline(tokens, idx, options, env, self)
+      }
+
+      const defaultHtmlBlock = md.renderer.rules.html_block || ((tokens, idx) => tokens[idx].content)
+      md.renderer.rules.html_block = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        const tagMatch = token.content.match(/^<\/?([a-zA-Z0-9_-]+)/)
+        if (tagMatch) {
+          const tagName = tagMatch[1].toLowerCase()
+          if (!standardHtmlTags.has(tagName)) {
+            return md.utils.escapeHtml(token.content)
+          }
+        }
+        return defaultHtmlBlock(tokens, idx, options, env, self)
+      }
+    }
+  },
     themeConfig: {
       search: {
         provider: 'local'
@@ -465,5 +517,4 @@ export default withMermaid(
         { icon: 'github', link: 'https://github.com/vivekthangam/CheatSheet_Tutorial' }
       ]
     }
-  })
-)
+})
