@@ -103,7 +103,7 @@
 
 To understand why proxies exist and how they operate, imagine an exclusive private executive lounge inside an international airport:
 
-```
+```text
 [Normal Direct Call: Bypasses Security Corridor]
 Visitor ─────────────────────────────────────────────────────────────► [Executive Lounge: Private Office]
                                                                         (No passport check, no baggage scan,

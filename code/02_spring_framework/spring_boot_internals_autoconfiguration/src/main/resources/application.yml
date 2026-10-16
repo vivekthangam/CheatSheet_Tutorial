@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: spring-boot-internals-autoconfiguration
+
+# Actuator Endpoints Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,conditions,beans,env
+  endpoint:
+    conditions:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.cheatsheet.boot: DEBUG
+    org.springframework.boot.autoconfigure: INFO
+
+# Custom Starter Properties Configuration
+cheatsheet:
+  audit:
+    enabled: true
+    retention-days: 60
+    async: false
+    table-name: APP_AUDIT_LOGS
+  ratelimit:
+    enabled: true
+    requests-per-second: 50
+    burst-capacity: 100
+    exempt-keys:
+      - "internal-admin"
+      - "health-check"

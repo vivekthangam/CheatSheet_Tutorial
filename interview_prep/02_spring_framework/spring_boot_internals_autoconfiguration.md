@@ -1,5 +1,52 @@
+[Home](file:///d:/project/github/1/CheatSheet_Tutorial/README.md) > [Spring Framework & Spring Boot Master Interview Index](file:///d:/project/github/1/CheatSheet_Tutorial/interview_prep/02_spring_framework/README.md) > **Spring Boot Internals & AutoConfiguration Master Guide**
+
 # Spring Boot Internals & AutoConfiguration Master Guide
 ### Enterprise-Grade Architecture, Engine Bootstrap Mechanics & Production Runbook
+
+> **Document Identity:** `SPRING-BOOT-INTERNALS-001`  
+> **Target Framework:** Spring Boot 3.3+ | Spring Framework 6.1+ | Java 21 LTS  
+> **Cheatsheet Anchor:** [Jump to Production Multi-Tenant Cloud Starter Cheatsheet](#-real-world-production-project--code-cheatsheet-custom-multi-tenant-cloud-starter)  
+> **Source Repository Companion Code:** [`code/02_spring_framework/spring_boot_internals_autoconfiguration/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_boot_internals_autoconfiguration/)
+
+---
+
+## Section 1: Foundational Primer: What, Why & Where?
+
+### 1.1 What is Spring Boot AutoConfiguration & Bootstrap Engine?
+Spring Boot is an **intelligent conditional orchestrator** built on top of the Spring Framework IoC container. It is **not** a code generator and does not introduce a separate runtime engine. Instead, it provides:
+1. **The Bootstrap Lifecycle (`SpringApplication.run`)**: A deterministic, multi-stage state machine that initializes bootstrap logging, reads environment configuration, builds the `ApplicationContext`, constructs the embedded web server, and triggers lifecycle notifications.
+2. **Modular SPI Auto-Discovery (`AutoConfiguration.imports`)**: A declarative Service Provider Interface mechanism that loads candidate infrastructure configurations after user beans are cataloged.
+3. **Bytecode-Safe Conditional Filtering (`SpringBootCondition`)**: An ASM-driven condition engine (`@ConditionalOnClass`, `@ConditionalOnMissingBean`, `@ConditionalOnProperty`) that inspects classpaths and bean factories without prematurely bloating JVM Metaspace.
+
+### 1.2 Why Does It Matter at Staff/Principal Level?
+At an enterprise scale (hundreds of microservices, distributed teams, high-throughput cloud platforms):
+- **Platform Engineering & Standardization**: Principal engineers write custom enterprise starters (security, logging, distributed tracing, database routing) shared across dozens of service teams. Misconfigured starters cause startup deadlocks, classpath collisions, or subtle production outages.
+- **Startup Latency & Cloud Cold Starts**: In serverless (AWS Lambda, Google Cloud Run) and autoscaling Kubernetes environments, understanding what gets loaded, condition evaluation overhead, and AOT compilation dictates whether cold starts take 800ms or 15 seconds.
+- **Troubleshooting Invisible Failures**: When a bean fails to auto-configure, or conversely when an unwanted default bean silently overrides a production bean, engineers must navigate the `ConditionEvaluationReport` and Phase ordering rather than guessing.
+
+### 1.3 Where Does It Fit in the Architecture?
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       ENTERPRISE APPLICATION RUNTIME                        │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │ User Business Services & Configurations (@Service, @Repository, etc.) │  │
+│  └──────────────────────────────────┬────────────────────────────────────┘  │
+│                                     │ User Beans Register First             │
+│                                     ▼                                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │ AutoConfigurationImportSelector (DeferredImportSelector)              │  │
+│  │  ├── Reads META-INF/spring/org.springframework.boot.autoconfigure...  │  │
+│  │  ├── Filters candidate configurations via OnClass / OnBean Conditions │  │
+│  │  └── Topologically sorts configs (@AutoConfigureAfter / Order)       │  │
+│  └──────────────────────────────────┬────────────────────────────────────┘  │
+│                                     │ Backs off if user beans present       │
+│                                     ▼                                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │ Core Spring IoC Container & Embedded Engine (Tomcat / Netty / Jetty)  │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -2086,9 +2133,439 @@ management:
 ```
 During compilation, the annotation processor generates `META-INF/spring-configuration-metadata.json`, providing instant IDE autocomplete and validation for all custom properties!
 
+
 ---
 
-## 🛠️ Production Verification & Architecture Checklist
+## 🛠️ Real-World Production Project & Code Cheatsheet: Custom Multi-Tenant Cloud Starter
+
+In modern enterprise cloud architectures (SaaS platforms, financial services, healthcare platforms), multi-tenancy is standard practice. Rather than requiring every microservice team to write boilerplate tenant routing, security filters, and telemetry, platform engineering teams publish an enterprise starter: `cloud-tenant-routing-spring-boot-starter`.
+
+This production cheatsheet demonstrates the complete, battle-tested implementation of this starter across all five engineering dimensions.
+
+Companion code repository: [`code/02_spring_framework/spring_boot_internals_autoconfiguration/`](file:///d:/project/github/1/CheatSheet_Tutorial/code/02_spring_framework/spring_boot_internals_autoconfiguration/)
+
+```
+                                      ARCHITECTURE BLUEPRINT
+                                      
+  Incoming HTTP Request
+          │
+          ▼
+  ┌───────────────────────────────┐
+  │      TenantContextFilter      │  Extracts 'X-Tenant-ID' Header & validates pattern
+  └───────────────┬───────────────┘  Sets TenantContextHolder (ThreadLocal / ScopedValue)
+                  │
+                  ▼
+  ┌───────────────────────────────┐
+  │   MultiTenantRoutingEngine    │  Inspects Current Tenant
+  └───────────────┬───────────────┘
+                  ├───► Tenant 'alpha'   ──► Target DataSource [alpha_db]
+                  ├───► Tenant 'beta'    ──► Target DataSource [beta_db]
+                  └───► Default/Fallback ──► Primary DataSource [default_db]
+                  │
+                  ▼
+  ┌───────────────────────────────┐
+  │      TenantMetricsBinder      │  Registers Micrometer tags: {tenant="alpha"}
+  └───────────────────────────────┘
+```
+
+---
+
+### Dimension 1: Complete Production Code Implementation
+
+#### 1. Configuration Metadata & Properties (`TenantProperties.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Validated
+@ConfigurationProperties(prefix = "enterprise.tenant")
+public class TenantProperties {
+
+    /** Whether enterprise multi-tenant auto-configuration is enabled. */
+    private boolean enabled = true;
+
+    /** Default fallback tenant key when no explicit header is present. */
+    @NotBlank
+    @Pattern(regexp = "^[a-zA-Z0-9_-]{3,30}$", message = "Tenant ID must be alphanumeric (3-30 chars)")
+    private String defaultTenant = "primary";
+
+    /** HTTP header used to propagate tenant identifier. */
+    private String headerName = "X-Tenant-ID";
+
+    /** Enforce strict mode: reject requests without valid tenant header with 400 Bad Request. */
+    private boolean strictMode = false;
+
+    /** Per-tenant connection pool configurations. */
+    private Map<String, String> dataSources = new HashMap<>();
+
+    // Getters and Setters
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getDefaultTenant() { return defaultTenant; }
+    public void setDefaultTenant(String defaultTenant) { this.defaultTenant = defaultTenant; }
+    public String getHeaderName() { return headerName; }
+    public void setHeaderName(String headerName) { this.headerName = headerName; }
+    public boolean isStrictMode() { return strictMode; }
+    public void setStrictMode(boolean strictMode) { this.strictMode = strictMode; }
+    public Map<String, String> getDataSources() { return dataSources; }
+    public void setDataSources(Map<String, String> dataSources) { this.dataSources = dataSources; }
+}
+```
+
+#### 2. Thread-Safe Context Holder & MDC Integration (`TenantContextHolder.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import org.slf4j.MDC;
+
+/**
+ * Thread-local tenant context holder with SLF4J MDC synchronization.
+ */
+public final class TenantContextHolder {
+
+    private static final String MDC_TENANT_KEY = "tenantId";
+    private static final ThreadLocal<String> CURRENT_TENANT = new InheritableThreadLocal<>();
+
+    private TenantContextHolder() {}
+
+    public static void setTenantId(String tenantId) {
+        if (tenantId != null && !tenantId.isBlank()) {
+            CURRENT_TENANT.set(tenantId);
+            MDC.put(MDC_TENANT_KEY, tenantId);
+        } else {
+            clear();
+        }
+    }
+
+    public static String getTenantId() {
+        return CURRENT_TENANT.get();
+    }
+
+    public static void clear() {
+        CURRENT_TENANT.remove();
+        MDC.remove(MDC_TENANT_KEY);
+    }
+}
+```
+
+#### 3. Defensive Servlet Filter (`TenantContextFilter.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.regex.Pattern;
+
+public class TenantContextFilter implements Filter {
+
+    private static final Logger log = LoggerFactory.getLogger(TenantContextFilter.class);
+    private static final Pattern SAFE_TENANT_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,30}$");
+
+    private final TenantProperties properties;
+
+    public TenantContextFilter(TenantProperties properties) {
+        this.properties = properties;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+
+        HttpServletRequest httpRequest = (HttpServletRequest) request;
+        HttpServletResponse httpResponse = (HttpServletResponse) response;
+
+        String rawTenant = httpRequest.getHeader(properties.getHeaderName());
+
+        try {
+            if (rawTenant != null && !rawTenant.isBlank()) {
+                // Defensive sanitization: Prevent Header Injection and SQL injection vectors
+                if (!SAFE_TENANT_PATTERN.matcher(rawTenant).matches()) {
+                    log.warn("Blocked request with illegal tenant ID format: {}", rawTenant);
+                    httpResponse.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid tenant format");
+                    return;
+                }
+                TenantContextHolder.setTenantId(rawTenant.trim());
+            } else {
+                if (properties.isStrictMode()) {
+                    log.warn("Strict mode: Rejecting request without required header '{}'", properties.getHeaderName());
+                    httpResponse.sendError(HttpServletResponse.SC_BAD_REQUEST, "Missing required tenant header");
+                    return;
+                }
+                TenantContextHolder.setTenantId(properties.getDefaultTenant());
+            }
+
+            // Expose confirmed tenant in response header for tracing
+            httpResponse.setHeader("X-Resolved-Tenant", TenantContextHolder.getTenantId());
+            chain.doFilter(request, response);
+
+        } finally {
+            // CRITICAL: Always clean up to prevent thread pollution in pooled container threads!
+            TenantContextHolder.clear();
+        }
+    }
+}
+```
+
+#### 4. Dynamic Multi-Tenant Routing DataSource (`MultiTenantDataSourceRouter.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
+
+import javax.sql.DataSource;
+import java.util.Map;
+
+public class MultiTenantDataSourceRouter extends AbstractRoutingDataSource {
+
+    private static final Logger log = LoggerFactory.getLogger(MultiTenantDataSourceRouter.class);
+
+    public MultiTenantDataSourceRouter(DataSource defaultDataSource, Map<Object, Object> targetDataSources) {
+        super.setDefaultTargetDataSource(defaultDataSource);
+        super.setTargetDataSources(targetDataSources);
+        super.afterPropertiesSet();
+    }
+
+    @Override
+    protected Object determineCurrentLookupKey() {
+        String tenant = TenantContextHolder.getTenantId();
+        log.debug("Routing database connection to tenant key: {}", tenant);
+        return tenant;
+    }
+}
+```
+
+#### 5. Micrometer Observability Tenant Metrics Binder (`TenantMetricsBinder.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.config.MeterFilter;
+import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
+
+import java.util.List;
+
+public class TenantMetricsBinder implements MeterRegistryCustomizer<MeterRegistry> {
+
+    @Override
+    public void customize(MeterRegistry registry) {
+        registry.config().meterFilter(new MeterFilter() {
+            @Override
+            public io.micrometer.core.instrument.Meter.Id map(io.micrometer.core.instrument.Meter.Id id) {
+                String tenant = TenantContextHolder.getTenantId();
+                if (tenant != null) {
+                    return id.withTag(Tag.of("tenant", tenant));
+                }
+                return id;
+            }
+        });
+    }
+}
+```
+
+#### 6. Spring Boot 3 Modular AutoConfiguration (`TenantRoutingAutoConfiguration.java`)
+```java
+package com.cheatsheet.boot.starter.tenant;
+
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+
+import javax.sql.DataSource;
+
+@AutoConfiguration(before = DataSourceAutoConfiguration.class)
+@ConditionalOnProperty(prefix = "enterprise.tenant", name = "enabled", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(TenantProperties.class)
+public class TenantRoutingAutoConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(TenantRoutingAutoConfiguration.class);
+
+    public TenantRoutingAutoConfiguration() {
+        log.info("Initialized Enterprise Multi-Tenant Routing Auto-Configuration");
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    public FilterRegistrationBean<TenantContextFilter> tenantContextFilterRegistration(TenantProperties properties) {
+        TenantContextFilter filter = new TenantContextFilter(properties);
+        FilterRegistrationBean<TenantContextFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setName("tenantContextFilter");
+        // Must execute before security filters to ensure authentication has tenant context
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 50);
+        return registration;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnClass(MeterRegistry.class)
+    public TenantMetricsBinder tenantMetricsBinder() {
+        return new TenantMetricsBinder();
+    }
+}
+```
+
+#### 7. SPI Descriptor (`AutoConfiguration.imports`)
+Located at `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
+```properties
+com.cheatsheet.boot.starter.tenant.TenantRoutingAutoConfiguration
+```
+
+---
+
+### Dimension 2: Positive vs Negative Paths
+
+| Scenario | Trigger / Input | Engine Execution Path | Expected Outcome |
+|---|---|---|---|
+| **Positive Path 1: Valid Header Provided** | `GET /api/orders` with `X-Tenant-ID: corp_alpha` | `TenantContextFilter` validates regex `^[a-zA-Z0-9_-]{3,30}$` -> Sets `TenantContextHolder` -> Sets SLF4J MDC `tenantId=corp_alpha` -> Adds `X-Resolved-Tenant: corp_alpha`. | Request executes in tenant context, DB queries route to `corp_alpha` DB, MDC logs show tenant. |
+| **Positive Path 2: Permissive Fallback** | `GET /api/public/ping` (No tenant header, `strictMode=false`) | `TenantContextFilter` detects null header -> checks `strictMode` -> sets default tenant (`primary`). | Request succeeds normally using default tenant DB pool. |
+| **Negative Path 1: Missing Required Header** | `GET /api/orders` (No header, `strictMode=true`) | Filter detects missing header in strict mode -> immediately returns HTTP 400 Bad Request without proceeding to controller. | Client receives `400 Bad Request` with body `"Missing required tenant header"`. Zero DB overhead. |
+| **Negative Path 2: Malicious Tenant ID Injection** | `GET /api/orders` with `X-Tenant-ID: alpha;DROP TABLE users;--` | Regex check `^[a-zA-Z0-9_-]{3,30}$` fails -> Logs warning -> Returns HTTP 400. | SQL injection blocked at HTTP gate before reaching JDBC connection pool or schema router. |
+| **Negative Path 3: Starter Disabled via Property** | `enterprise.tenant.enabled=false` | `@ConditionalOnProperty` evaluates to false -> `TenantRoutingAutoConfiguration` completely skipped. | Zero beans instantiated, zero filter overhead, zero memory footprint. |
+
+---
+
+### Dimension 3: Real-World Mistakes & Production Bugs
+
+#### Bug 1: ThreadLocal Pollution Across Pooled Tomcat Threads
+```java
+// ❌ BUG: If an unhandled exception or filter forward occurs, clear() is skipped!
+public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws Exception {
+    TenantContextHolder.setTenantId(extractTenant(req));
+    chain.doFilter(req, res);
+    TenantContextHolder.clear(); // ⚠️ Skipped if downstream service throws RuntimeException!
+}
+
+// ✅ REFACTORED: Always clean up in a mandatory finally block
+public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws Exception {
+    try {
+        TenantContextHolder.setTenantId(extractTenant(req));
+        chain.doFilter(req, res);
+    } finally {
+        TenantContextHolder.clear(); // 🛡️ Guaranteed execution under all exit conditions!
+    }
+}
+```
+
+#### Bug 2: Premature Class Loading in Custom Condition (Metaspace Exhaustion)
+```java
+// ❌ BUG: Uses Class.forName() inside Condition, loading classes into Metaspace before condition matches!
+public class OnTenantFeatureCondition implements Condition {
+    @Override
+    public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+        try {
+            Class<?> clazz = Class.forName("com.company.EnterpriseKafkaDriver"); // Triggers JVM classload!
+            return clazz != null;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+}
+
+// ✅ REFACTORED: Use SpringBootCondition with ClassUtils.isPresent or ASM MetadataReader
+public class OnTenantFeatureCondition extends SpringBootCondition {
+    @Override
+    public ConditionOutcome getMatchOutcome(ConditionContext context, AnnotatedTypeMetadata metadata) {
+        boolean present = ClassUtils.isPresent("com.company.EnterpriseKafkaDriver", context.getClassLoader());
+        return present 
+            ? ConditionOutcome.match("EnterpriseKafkaDriver found on classpath")
+            : ConditionOutcome.noMatch("EnterpriseKafkaDriver absent");
+    }
+}
+```
+
+---
+
+### Dimension 4: Security Vulnerabilities & Mitigations
+
+#### Vulnerability 1: SQL Injection via Dynamic Tenant Schema Switching
+```java
+// 🚨 VULNERABILITY: Raw tenant ID directly concatenated into SQL statement (CWE-89)
+public void switchSchema(Connection conn, String tenantId) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+        stmt.execute("SET SCHEMA '" + tenantId + "'"); // SQL Injection if tenantId = "public'; DROP TABLE users;--"
+    }
+}
+
+// 🛡️ MITIGATION: Whitelist validation against catalog of authorized tenant schemas
+public void switchSchema(Connection conn, String tenantId) throws SQLException {
+    if (!properties.getDataSources().containsKey(tenantId)) {
+        throw new SecurityException("Unauthorized or unregistered tenant schema: " + tenantId);
+    }
+    try (PreparedStatement pstmt = conn.prepareStatement("SET SCHEMA ?")) {
+        pstmt.setString(1, tenantId);
+        pstmt.execute();
+    }
+}
+```
+
+#### Vulnerability 2: Tenant Leakage Across Async Execution Threads (`@Async`)
+```java
+// 🚨 VULNERABILITY: Standard ThreadLocal is NOT copied to worker threads in @Async or ThreadPoolTaskExecutor!
+@Async
+public CompletableFuture<Report> generateTenantReport() {
+    String tenant = TenantContextHolder.getTenantId(); // Returns NULL or wrong tenant from previous thread run!
+    return CompletableFuture.completedFuture(reportService.generate(tenant));
+}
+
+// 🛡️ MITIGATION: Configure a ContextPropagatingTaskDecorator on the ThreadPoolTaskExecutor
+@Bean
+public TaskDecorator tenantContextTaskDecorator() {
+    return runnable -> {
+        String currentTenant = TenantContextHolder.getTenantId();
+        return () -> {
+            try {
+                TenantContextHolder.setTenantId(currentTenant);
+                runnable.run();
+            } finally {
+                TenantContextHolder.clear();
+            }
+        };
+    };
+}
+```
+
+---
+
+### Dimension 5: Architectural & Design Anti-Patterns
+
+| Anti-Pattern | Why It Fails in Enterprise | Architectural Refactoring |
+|---|---|---|
+| **Using `@ComponentScan` in Auto-Configurations** | Forces downstream consumer applications to scan the starter's package, potentially overriding downstream user beans or loading unintended test configurations. | **Always use explicit `@Bean` declarations** or `@Import` specific component classes. Never use `@ComponentScan` inside an auto-configuration library! |
+| **Missing `@ConditionalOnMissingBean` on Core Beans** | Prevents service teams from providing custom business implementations (e.g., custom OAuth2 tenant resolver). Causes `NoUniqueBeanDefinitionException`. | Annotate all auto-configured beans with `@ConditionalOnMissingBean` so application developers can cleanly override with their own `@Bean`. |
+| **Legacy `spring.factories` in Spring Boot 3+** | Spring Boot 3 removed support for `EnableAutoConfiguration` entries in `META-INF/spring.factories`. Configurations are silently ignored! | Place configurations in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. |
+| **Eager Bean Instantiation in `BeanFactoryPostProcessor`** | Injecting beans directly into BFPPs forces early instantiation before bean post-processors and proxy interceptors are ready. | Implement `EnvironmentAware` or inject `ApplicationContext` lazily via `ObjectProvider<T>`. |
+
+---
+
 
 - [x] **SPI Descriptors Updated**: Confirmed auto-configurations are registered in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` for Spring Boot 3+.
 - [x] **Fallback Protection**: Verified every auto-configured bean has an explicit `@ConditionalOnMissingBean` to allow downstream developer overrides.
